@@ -51,7 +51,8 @@ public class InboundApiController {
         }
         this.allowedIps = Collections.unmodifiableSet(set);
         if (set.isEmpty()) {
-            log.warn("app.amg-ips is empty — inbound webhook IP allow-list is DISABLED");
+            log.error("app.amg-ips is empty — all inbound webhook calls will be REJECTED. "
+                    + "Set AMG_IPS env var to a CSV of permitted source IPs (include 127.0.0.1 for local IMAP fetcher).");
         } else {
             log.info("Inbound webhook IP allow-list: {}", set);
         }
@@ -60,9 +61,11 @@ public class InboundApiController {
     @PostMapping(value = "/receive-raw", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> receiveRaw(@Valid @RequestBody InboundMailDto dto,
                                                           HttpServletRequest request) {
+        // Fail-closed: an empty allow-list (misconfiguration) now rejects all calls. The previous
+        // behaviour silently permitted everything when AMG_IPS was unset — too risky in prod.
         String clientIp = ClientIpResolver.resolve(request);
-        if (!allowedIps.isEmpty() && !allowedIps.contains(clientIp)) {
-            log.warn("Rejected inbound from non-AMG IP {} (allow-list: {})", clientIp, allowedIps);
+        if (!allowedIps.contains(clientIp)) {
+            log.warn("Rejected inbound from non-AMG IP {} (allow-list size={})", clientIp, allowedIps.size());
             Map<String, Object> body = new HashMap<>();
             body.put("accepted", false);
             body.put("reason", "IP_NOT_ALLOWED");
