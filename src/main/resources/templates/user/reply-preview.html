@@ -24,7 +24,7 @@
     <strong>管理者プレビュー</strong>
     <span>ユーザーID <code th:text="${user.id}" style="background:#fff;padding:0 4px;border-radius:3px;"></code></span>
     <span th:if="${user.displayName}" th:text="'(' + ${user.displayName} + ')'"></span>
-    <span class="text-amber-700" style="opacity:.85;">置き換えタグはこのユーザーの値で差し替えています。 / 「メールを送信する」ボタンはプレビュー上では動作しません。</span>
+    <span class="text-amber-700" style="opacity:.85;">置き換えタグはこのユーザーの値で差し替えています。 / 「送信する」ボタンはプレビュー上では動作しません。</span>
     <a class="ml-auto" href="javascript:history.back()" style="margin-left:auto;color:#2563eb;text-decoration:underline;">戻る</a>
 </div>
 
@@ -48,23 +48,17 @@
             th:attr="srcdoc=${memoText} ?: '&lt;p style=&quot;padding:24px;color:#94a3b8;&quot;&gt;専用返信画面HTMLが未設定です。&lt;/p&gt;'"></iframe>
 
     <div class="reply-banner">
-        <h1>返信する</h1>
+        <h1>入力欄</h1>
     </div>
 
     <form class="reply-form" onsubmit="event.preventDefault(); alert('プレビュー時は送信できません。');">
 
         <div class="field">
-            <label for="subject">タイトル</label>
-            <input type="text" id="subject" name="subject" value="" maxlength="200"/>
-        </div>
-
-        <div class="field">
-            <label for="body">本文</label>
-            <textarea id="body" name="body" rows="10" maxlength="10000"></textarea>
+            <textarea id="body" name="body" rows="9" maxlength="10000"></textarea>
         </div>
 
         <div class="actions">
-            <button type="submit">メールを送信する</button>
+            <button type="submit">送信する</button>
         </div>
     </form>
 
