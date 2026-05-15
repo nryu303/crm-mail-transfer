@@ -27,20 +27,11 @@
             sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
             th:attr="srcdoc=${headerHtml}"></iframe>
 
-    <div class="reply-banner">
-        <h1>返信する</h1>
-    </div>
-
     <form class="reply-form" th:action="@{'/reply/' + ${token} + '/send'}" method="post" th:object="${form}">
 
         <div class="field">
-            <label for="subject">タイトル</label>
-            <input type="text" id="subject" name="subject" th:value="*{subject}" maxlength="200"/>
-        </div>
-
-        <div class="field">
-            <label for="body">本文</label>
-            <textarea id="body" name="body" rows="10" maxlength="10000" th:text="*{body}"></textarea>
+            <label for="body">▼入力欄</label>
+            <textarea id="body" name="body" rows="18" maxlength="10000" th:text="*{body}"></textarea>
         </div>
 
         <div th:if="${#fields.hasErrors('*')}" class="field-errors">
@@ -48,7 +39,7 @@
         </div>
 
         <div class="actions">
-            <button type="submit">メールを送信する</button>
+            <button type="submit">送信する</button>
         </div>
     </form>
 
