@@ -166,12 +166,17 @@ def run_account(user, password):
             print(f"ERROR[{user}]: IMAP login error: {e}", file=sys.stderr)
             return 0, 0
 
+        # Per-account telemetry — always emitted on success so the journal can
+        # distinguish "logged in, no new mail" from "exited before login attempt".
+        # H4 (5/16) relies on this to alert on real outages without false positives.
         conn.select(MAILBOX)
         typ, data = conn.uid("search", None, "UNSEEN")
         if typ != "OK" or not data[0]:
+            print(f"INFO[{user}]: logged in, 0 unseen")
             return 0, 0
         uid_list = data[0].split()
         new_uids = [u for u in uid_list if u.decode() not in seen_uids]
+        print(f"INFO[{user}]: logged in, {len(uid_list)} unseen, {len(new_uids)} new")
         if not new_uids:
             return 0, 0
 
