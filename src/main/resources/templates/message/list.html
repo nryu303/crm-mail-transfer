@@ -83,7 +83,6 @@
                 <th class="px-3 py-2 text-left" style="width: 60px;">No</th>
                 <th class="px-3 py-2 text-left" style="width: 90px;">種別</th>
                 <th class="px-3 py-2 text-left">メールアドレス</th>
-                <th class="px-3 py-2 text-left">FROM</th>
                 <th class="px-3 py-2 text-left">表示名</th>
                 <th class="px-3 py-2 text-left">広告コード</th>
                 <th class="px-3 py-2 text-left">フォルダ</th>
@@ -96,7 +95,7 @@
             </thead>
             <tbody class="divide-y divide-slate-100">
             <tr th:if="${messages.totalElements == 0}">
-                <td colspan="13" class="px-3 py-6 text-center text-slate-400">該当するメッセージはありません</td>
+                <td colspan="12" class="px-3 py-6 text-center text-slate-400">該当するメッセージはありません</td>
             </tr>
             <tr th:each="m,it : ${messages.content}" class="hover:bg-slate-50">
                 <td class="px-3 py-2"><input type="checkbox" class="msg-row-item" name="ids" th:value="${m.id}"/></td>
@@ -115,7 +114,6 @@
                        th:href="@{'/manager/users/' + ${m.userId}}" target="_blank"
                        th:text="${userEmails != null and userEmails.get(m.userId) != null} ? ${userEmails.get(m.userId)} : ('No.' + ${m.userId})"></a>
                 </td>
-                <td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap" th:text="${m.fromAddress}"></td>
                 <td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap"
                     th:text="${userDisplayNames != null and userDisplayNames.get(m.userId) != null} ? ${userDisplayNames.get(m.userId)} : '-'"></td>
                 <td class="px-3 py-2 text-xs text-slate-500"

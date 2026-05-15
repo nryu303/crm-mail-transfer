@@ -110,7 +110,8 @@
                        th:href="@{'/manager/users/' + ${m.userId}}" target="_blank"
                        th:text="${userEmails != null and userEmails.get(m.userId) != null} ? ${userEmails.get(m.userId)} : '-'">-</a>
                 </td>
-                <td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap" th:text="${m.fromAddress}"></td>
+                <td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap"
+                    th:text="${displayFrom != null and displayFrom.get(m.id) != null} ? ${displayFrom.get(m.id)} : ${m.fromAddress}"></td>
                 <td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap"
                     th:text="${userDisplayNames != null and userDisplayNames.get(m.userId) != null and userDisplayNames.get(m.userId) != ''} ? ${userDisplayNames.get(m.userId)} : '-'"></td>
                 <td class="px-3 py-2 text-xs text-slate-500"

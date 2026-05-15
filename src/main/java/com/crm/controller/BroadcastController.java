@@ -98,14 +98,31 @@ public class BroadcastController {
                 if (u.getFolder() != null) userFolders.put(u.getId(), u.getFolder());
             }
         }
-        // FROM column shows the raw m.fromAddress (carrier pool address for OUT, user's email
-        // for IN). Operator request: see which carrier address (e.g. tst8bm5xu3@i.softbank.jp)
-        // was used to send — the recipient-facing domain override is not what they need here.
+        // FROM column shows what the CRM actually emitted as the From: header (with the
+        // from.base_domain override applied). The downstream AMG/relay decides which
+        // physical carrier address to ship from at send-time — that selection is not
+        // visible to us, so we cannot show it. Operator decision (2026-05-15): display
+        // the override-applied value instead, since that's what the recipient saw.
+        // Inbound messages are not rewritten — their fromAddress is the user's real email.
+        String fromBaseDomain = settingService.getFromBaseDomain();
+        java.util.Map<Long, String> displayFrom = new java.util.HashMap<>();
+        for (com.crm.entity.Message m : messages.getContent()) {
+            String fa = m.getFromAddress();
+            if (com.crm.entity.Message.DIR_OUT.equals(m.getDirection())
+                    && fromBaseDomain != null && !fromBaseDomain.trim().isEmpty()
+                    && fa != null && fa.indexOf('@') > 0) {
+                String localPart = fa.substring(0, fa.indexOf('@'));
+                displayFrom.put(m.getId(), localPart + "@" + fromBaseDomain.trim());
+            } else {
+                displayFrom.put(m.getId(), fa);
+            }
+        }
         model.addAttribute("messages", messages);
         model.addAttribute("userEmails", userEmails);
         model.addAttribute("userDisplayNames", userDisplayNames);
         model.addAttribute("userAdCodes", userAdCodes);
         model.addAttribute("userFolders", userFolders);
+        model.addAttribute("displayFrom", displayFrom);
         model.addAttribute("addr", addrTrim == null ? "" : addrTrim);
         return "message/broadcast-list";
     }
