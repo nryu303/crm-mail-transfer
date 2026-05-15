@@ -27,10 +27,6 @@
             sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
             th:attr="srcdoc=${headerHtml}"></iframe>
 
-    <div class="reply-banner">
-        <h1>返信する</h1>
-    </div>
-
     <form class="reply-form" th:action="@{'/reply/' + ${token} + '/send'}" method="post" th:object="${form}">
 
         <div class="field">

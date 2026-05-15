@@ -54,12 +54,14 @@ public class CrmUser {
     @Column(name = "LAST_LOGIN_AT")
     private LocalDateTime lastLoginAt;
 
-    /** Per-user reply-page HTML (rendered as HTML on the public reply page). */
-    @Column(name = "MEMO", columnDefinition = "TEXT")
+    /** Per-user reply-page HTML (rendered as HTML on the public reply page).
+     *  LONGTEXT (4GB) so operators can paste full landing-page HTML with
+     *  base64-embedded images — TEXT (64KB) was being exceeded. */
+    @Column(name = "MEMO", columnDefinition = "LONGTEXT")
     private String memo;
 
     /** Admin-only internal memo (never shown to the user). */
-    @Column(name = "INTERNAL_MEMO", columnDefinition = "TEXT")
+    @Column(name = "INTERNAL_MEMO", columnDefinition = "LONGTEXT")
     private String internalMemo;
 
     @Column(name = "TAG1_KEY")   private String tag1Key;

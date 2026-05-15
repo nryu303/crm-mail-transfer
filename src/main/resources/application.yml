@@ -5,6 +5,12 @@ server:
   # behind the same nginx, do NOT relax this bind. Default is overridable via env
   # SERVER_ADDRESS for local-only test scenarios.
   address: ${SERVER_ADDRESS:127.0.0.1}
+  tomcat:
+    # Form POSTs can include base64-embedded images in the reply-page HTML memo
+    # (operators paste full landing-page HTML with inline data: images).
+    # Default 2MB is too small. Keep in sync with spring.servlet.multipart.max-*.
+    max-http-form-post-size: 10MB
+    max-swallow-size: 10MB
   servlet:
     session:
       timeout: 86400
