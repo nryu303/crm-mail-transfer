@@ -1,0 +1,135 @@
+/* Public reply page — matches client screenshot (muted gray palette, mobile-first) */
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "MS Mincho", serif;
+    background: #ededed;
+    color: #1f1f1f;
+    -webkit-text-size-adjust: 100%;
+}
+
+.reply-shell {
+    max-width: 720px;
+    margin: 0 auto;
+    background: #efefef;
+    min-height: 100vh;
+}
+
+.reply-header {
+    padding: 16px;
+    background: #fff;
+    border-bottom: 1px solid #d7d7d7;
+}
+
+.reply-banner {
+    background: #b7b1b1;
+    color: #fff;
+    text-align: center;
+    padding: 12px 16px;
+}
+
+.reply-banner h1 {
+    font-size: 20px;
+    font-weight: 400;
+    margin: 0;
+    letter-spacing: 0.05em;
+}
+
+.reply-form {
+    padding: 14px 18px 20px;
+}
+
+.reply-form .field {
+    margin-bottom: 12px;
+}
+
+.reply-form label {
+    display: block;
+    font-size: 14px;
+    margin-bottom: 4px;
+    color: #222;
+}
+
+.reply-form input[type="text"],
+.reply-form textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #c2c2c2;
+    background: #fff;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #1f1f1f;
+    outline: none;
+}
+
+.reply-form input[type="text"]:focus,
+.reply-form textarea:focus {
+    border-color: #8a8a8a;
+    box-shadow: 0 0 0 2px rgba(138, 138, 138, 0.15);
+}
+
+.reply-form textarea {
+    min-height: 110px;
+    resize: vertical;
+    line-height: 1.5;
+}
+
+.reply-form .field-errors {
+    color: #b22222;
+    font-size: 13px;
+    margin-bottom: 10px;
+}
+
+.reply-form .actions {
+    text-align: center;
+    margin-top: 14px;
+}
+
+.reply-form button {
+    width: 70%;
+    max-width: 360px;
+    padding: 10px 16px;
+    background: #8a8a8a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: inherit;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+}
+
+.reply-form button:hover,
+.reply-form button:active {
+    background: #6e6e6e;
+}
+
+.reply-footer {
+    padding: 16px;
+    text-align: center;
+    color: #666;
+    font-size: 13px;
+}
+
+.sent-message {
+    text-align: center;
+    font-size: 18px;
+    padding: 40px 16px;
+    margin: 0;
+}
+
+@media (max-width: 480px) {
+    .reply-banner h1 {
+        font-size: 18px;
+    }
+    .reply-form button {
+        width: 90%;
+        font-size: 15px;
+    }
+}

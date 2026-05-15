@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>返信する</title>
+    <link rel="stylesheet" th:href="@{/css/reply.css}"/>
+    <style th:if="${customCss}" th:utext="${customCss}"></style>
+    <style>
+        /* The user-supplied header HTML can be a complete document (DOCTYPE/html/head/body
+           with its own styles, web fonts, scripts). Inline injection via <div th:utext>
+           strips the outer head/styles, so we host it in an iframe via srcdoc — same
+           technique as the admin reply-preview page.
+           The iframe height is fixed at 500px and any longer header content scrolls
+           internally; this keeps the reply form just one viewport down regardless of
+           how long the admin's header HTML is. */
+        .reply-header-frame {
+            display: block; width: 100%; height: 500px;
+            border: 0; background: #fff;
+        }
+    </style>
+</head>
+<body>
+<div class="reply-shell">
+
+    <iframe th:if="${headerHtml}" class="reply-header-frame"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+            th:attr="srcdoc=${headerHtml}"></iframe>
+
+    <div class="reply-banner">
+        <h1>返信する</h1>
+    </div>
+
+    <form class="reply-form" th:action="@{'/reply/' + ${token} + '/send'}" method="post" th:object="${form}">
+
+        <div class="field">
+            <label for="subject">タイトル</label>
+            <input type="text" id="subject" name="subject" th:value="*{subject}" maxlength="200"/>
+        </div>
+
+        <div class="field">
+            <label for="body">本文</label>
+            <textarea id="body" name="body" rows="10" maxlength="10000" th:text="*{body}"></textarea>
+        </div>
+
+        <div th:if="${#fields.hasErrors('*')}" class="field-errors">
+            <p th:each="err : ${#fields.errors('*')}" th:text="${err}"></p>
+        </div>
+
+        <div class="actions">
+            <button type="submit">メールを送信する</button>
+        </div>
+    </form>
+
+    <div th:if="${footerHtml}" class="reply-footer" th:utext="${footerHtml}"></div>
+</div>
+
+</body>
+</html>

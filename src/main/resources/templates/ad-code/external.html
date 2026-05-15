@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="robots" content="noindex,nofollow"/>
+    <title th:text="${adCode.name} + ' — 集計レポート'">代理店レポート</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f8fafc; color: #1e293b; }
+        .wrap { max-width: 980px; margin: 0 auto; padding: 24px 20px 60px; }
+        .header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+        .header h1 { font-size: 1.5rem; margin: 0; font-weight: 700; }
+        .header .code { font-family: 'Menlo', 'Consolas', monospace; font-size: .85rem; color: #64748b; background: #fff;
+                        padding: 2px 8px; border-radius: 4px; border: 1px solid #e2e8f0; }
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0 24px; }
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;
+                box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+        .card .label { font-size: .72rem; color: #64748b; text-transform: uppercase; letter-spacing: .04em; }
+        .card .value { font-size: 1.6rem; font-weight: 700; margin-top: 4px; }
+        .card .value.money { color: #047857; }
+        section { margin-top: 24px; }
+        section h2 { font-size: 1rem; font-weight: 600; color: #475569; margin: 0 0 8px; }
+        .toolbar { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px;
+                   display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+        .toolbar form { display: flex; gap: 6px; align-items: center; }
+        .toolbar input { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: .82rem; }
+        .toolbar button { padding: 4px 12px; background: #2563eb; color: #fff; border: 0; border-radius: 4px;
+                          font-size: .82rem; cursor: pointer; }
+        .toolbar button:hover { background: #1d4ed8; }
+        table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e2e8f0;
+                border-radius: 8px; overflow: hidden; font-size: .9rem; }
+        thead { background: #f1f5f9; }
+        th { text-align: left; padding: 8px 12px; font-size: .75rem; font-weight: 600; color: #64748b;
+             text-transform: uppercase; letter-spacing: .04em; }
+        td { padding: 8px 12px; border-top: 1px solid #f1f5f9; }
+        tr:hover td { background: #f8fafc; }
+        td.money { color: #047857; font-weight: 600; }
+        td.zero { color: #94a3b8; }
+        .footer { margin-top: 32px; text-align: center; color: #94a3b8; font-size: .72rem; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="header">
+        <h1 th:text="${adCode.name}"></h1>
+        <span class="code" th:text="'コード: ' + ${adCode.code}"></span>
+    </div>
+
+    <div class="summary">
+        <div class="card">
+            <div class="label">対象期間 (月別)</div>
+            <div class="value" style="font-size:1.1rem;" th:text="${targetYear} + '年'"></div>
+        </div>
+        <div class="card">
+            <div class="label">対象期間 (日別)</div>
+            <div class="value" style="font-size:1.1rem;" th:text="${#temporals.format(targetMonth, 'yyyy年 M月')}"></div>
+        </div>
+        <div class="card">
+            <div class="label">合計登録人数 (月)</div>
+            <div class="value">
+                <span th:text="${#aggregates.sum(daily.![signupCount])}">0</span> 人
+            </div>
+        </div>
+        <div class="card">
+            <div class="label">合計入金額 (月)</div>
+            <div class="value money">
+                ¥ <span th:text="${#numbers.formatInteger(#aggregates.sum(daily.![paidTotal]), 1, 'COMMA')}">0</span>
+            </div>
+        </div>
+    </div>
+
+    <section>
+        <h2>月別 集計</h2>
+        <div class="toolbar">
+            <form method="get">
+                <input type="hidden" name="ym" th:value="${#temporals.format(targetMonth, 'yyyy-MM')}"/>
+                <label style="font-size:.82rem; color:#64748b;">年:</label>
+                <input type="number" name="y" min="2020" max="2099" th:value="${targetYear}"/>
+                <button type="submit">表示</button>
+            </form>
+        </div>
+        <table>
+            <thead>
+            <tr>
+                <th style="width:140px;">月</th>
+                <th style="width:140px;">登録人数</th>
+                <th>入金額</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="m : ${monthly}">
+                <td th:text="${m.year} + '年 ' + ${m.month} + '月'"></td>
+                <td th:classappend="${m.signupCount == 0} ? 'zero'"
+                    th:text="${m.signupCount} + ' 人'"></td>
+                <td class="money" th:classappend="${m.paidTotal.signum() == 0} ? 'zero'">
+                    ¥ <span th:text="${#numbers.formatInteger(m.paidTotal, 1, 'COMMA')}"></span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h2>日別 集計</h2>
+        <div class="toolbar">
+            <form method="get">
+                <input type="hidden" name="y" th:value="${targetYear}"/>
+                <label style="font-size:.82rem; color:#64748b;">月:</label>
+                <input type="month" name="ym" th:value="${#temporals.format(targetMonth, 'yyyy-MM')}"/>
+                <button type="submit">表示</button>
+            </form>
+        </div>
+        <table>
+            <thead>
+            <tr>
+                <th style="width:140px;">日付</th>
+                <th style="width:140px;">登録人数</th>
+                <th>入金額</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="d : ${daily}">
+                <td th:text="${#temporals.format(d.date, 'M月d日 (E)')}"></td>
+                <td th:classappend="${d.signupCount == 0} ? 'zero'"
+                    th:text="${d.signupCount} + ' 人'"></td>
+                <td class="money" th:classappend="${d.paidTotal.signum() == 0} ? 'zero'">
+                    ¥ <span th:text="${#numbers.formatInteger(d.paidTotal, 1, 'COMMA')}"></span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <div class="footer">
+        集計データは登録時刻 / 入金確認時刻ベースです。
+    </div>
+</div>
+</body>
+</html>

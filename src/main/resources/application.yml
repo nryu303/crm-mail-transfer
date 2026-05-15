@@ -1,0 +1,98 @@
+server:
+  port: 50000
+  # Bind loopback only — nginx terminates TLS and proxies to 127.0.0.1:50000.
+  # If anything else needs to reach the app (e.g. a separate CI runner), put it
+  # behind the same nginx, do NOT relax this bind. Default is overridable via env
+  # SERVER_ADDRESS for local-only test scenarios.
+  address: ${SERVER_ADDRESS:127.0.0.1}
+  servlet:
+    session:
+      timeout: 86400
+      tracking-modes: cookie   # never append ;jsessionid= to URLs (security + proxy compat)
+      cookie:
+        http-only: true
+        same-site: strict
+        # Default is false so dev-HTTP works. In production set env SESSION_COOKIE_SECURE=true
+        # alongside TLS termination at nginx so the browser stops sending the cookie over HTTP.
+        secure: ${SESSION_COOKIE_SECURE:false}
+  error:
+    include-stacktrace: never
+    include-message: never
+  forward-headers-strategy: framework  # honour X-Forwarded-* from nginx
+
+spring:
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/crm?useSSL=false&characterEncoding=utf8&serverTimezone=Asia/Tokyo&allowPublicKeyRetrieval=true
+    username: crm_user
+    password: ${DB_PASSWORD:crm_user_dev_2026}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: none
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        jdbc:
+          time_zone: Asia/Tokyo
+    show-sql: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+      continue-on-error: false
+  thymeleaf:
+    cache: true
+    encoding: UTF-8
+    mode: HTML
+  messages:
+    basename: messages
+    encoding: UTF-8
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+logging:
+  level:
+    com.crm: INFO
+    org.springframework: INFO
+
+app:
+  # No default — startup fails if AES_ENCRYPTION_KEY is unset or a known dev value.
+  # See AesEncryptionUtil for the rejection list.
+  aes-key: ${AES_ENCRYPTION_KEY:}
+  outbound:
+    adapter: ${OUTBOUND_ADAPTER:stub}
+    smtp:
+      connect-timeout-ms: 10000
+      read-timeout-ms: 30000
+  relay-server:
+    url: ${RELAY_URL:http://160.251.199.135/api/send}
+    connect-timeout-ms: 5000
+    read-timeout-ms: 15000
+    # The relay's POST /api/mail/received expects a basename of a file we've already
+    # written into mail.source.dir on the relay host. We push the file via SSH first,
+    # then notify the relay with the basename only.
+    ssh-host: ${RELAY_SSH_HOST:}
+    ssh-user: ${RELAY_SSH_USER:root}
+    ssh-password: ${RELAY_SSH_PASSWORD:}
+    mail-source-dir: ${RELAY_MAIL_SOURCE_DIR:/tmp/mailsource}
+    ssh-timeout-sec: 15
+  # Comma-separated AMG egress IPs. Kept as a CSV string so @Value binding picks it up
+  # (YAML lists don't bind to @Value in Spring Boot). Override via env AMG_IPS=ip1,ip2,…
+  amg-ips: ${AMG_IPS:160.251.233.64,160.251.180.110,160.16.231.39,157.7.89.36}
+  reply-page:
+    base-url: ${REPLY_BASE_URL:http://localhost:50000}
+    token-expiry-days: 30
+  scheduler:
+    queued-poll-rate-ms: 30000
+    queued-poll-initial-delay-ms: 15000

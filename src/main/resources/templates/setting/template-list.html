@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>定型文</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">定型文</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2" th:href="@{/manager/settings}">設定に戻る</a>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm" th:href="@{/manager/settings/message-templates/new}"
+           th:classappend="${canCreate ? '' : 'opacity-50 pointer-events-none'}">新規追加</a>
+    </div>
+
+    <p class="text-sm text-slate-500 mb-4">
+        個別送信および一斉送信の画面で、ここに登録した定型文を呼び出して件名・本文に差し込めます。
+        登録できる件数は最大<span th:text="${maxTemplates}">10</span>件です (現在<span th:text="${templates.size()}">0</span>件)。
+    </p>
+
+    <form method="get" th:action="@{/manager/settings/message-templates}"
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-4 mb-4 flex items-end gap-3">
+        <div style="max-width: 380px; flex: 1;">
+            <label class="block text-xs text-slate-500 mb-1">検索（名前・件名・本文）</label>
+            <input type="text" name="q" class="tw-input" th:value="${q}" placeholder="キーワード"/>
+        </div>
+        <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded">検索</button>
+        <a class="inline-flex items-center px-3 py-2 border border-slate-300 bg-white text-slate-600 text-sm rounded hover:bg-slate-50"
+           th:href="@{/manager/settings/message-templates}">クリア</a>
+    </form>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left" style="width: 60px;">ID</th>
+                <th class="px-3 py-2 text-left">名前</th>
+                <th class="px-3 py-2 text-left">件名</th>
+                <th class="px-3 py-2 text-left">本文プレビュー</th>
+                <th class="px-3 py-2 text-right" style="width: 170px;">操作</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${templates.empty}">
+                <td colspan="5" class="px-3 py-6 text-center text-slate-400">定型文はまだ登録されていません</td>
+            </tr>
+            <tr th:each="t,it : ${templates}" class="hover:bg-slate-50">
+                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                <td class="px-3 py-2 text-slate-700" th:text="${t.name}"></td>
+                <td class="px-3 py-2 text-xs text-slate-600 truncate" style="max-width: 260px;" th:text="${t.subject}"></td>
+                <td class="px-3 py-2 text-xs text-slate-500 truncate" style="max-width: 320px;" th:text="${t.body}"></td>
+                <td class="px-3 py-2 text-right">
+                    <a class="inline-flex items-center px-3 py-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded"
+                       th:href="@{'/manager/settings/message-templates/' + ${t.id} + '/edit'}">編集</a>
+                    <form method="post" th:action="@{'/manager/settings/message-templates/' + ${t.id} + '/delete'}"
+                          class="inline-block ml-1"
+                          onsubmit="return confirm('この定型文を削除します。よろしいですか?');">
+                        <button type="submit" class="inline-flex items-center px-3 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 rounded">削除</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

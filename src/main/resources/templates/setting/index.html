@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>設定</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <h1 class="text-2xl font-semibold text-slate-800 mb-4">設定</h1>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/relay-servers}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">リレーサーバー設定</h2>
+            <p class="text-sm text-slate-500 mb-3">送信に使用するリレーサーバーの接続情報 (名前・IP・ポート) を管理します。</p>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">登録数: <span th:text="${relayCount}">0</span></span>
+        </a>
+
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/message-templates}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">定型文</h2>
+            <p class="text-sm text-slate-500 mb-3">個別送信、一斉送信、返信画面で再利用する件名・本文をあらかじめ登録できます (最大<span th:text="${maxTemplates}">10</span>件)。</p>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
+                登録数: <span th:text="${templateCount}">0</span> / <span th:text="${maxTemplates}">10</span>
+            </span>
+        </a>
+
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/reply-page}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">返信画面設定</h2>
+            <p class="text-sm text-slate-500">返信ページの共通ヘッダー・フッター・CSSをTinyMCEで編集します。</p>
+        </a>
+
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/folders}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">フォルダ設定</h2>
+            <p class="text-sm text-slate-500">ユーザーのグルーピングに使うフォルダ名・個数を管理します。</p>
+        </a>
+
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/domain}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">ドメイン設定</h2>
+            <p class="text-sm text-slate-500">返信URLと送信元ドメインを設定します。ワイルドカードドメイン + ランダム文字列に対応。</p>
+        </a>
+
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/sender-names}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">送信者名設定</h2>
+            <p class="text-sm text-slate-500">
+                送信メールの From ヘッダの表示名を制御します。固定・30件リストからランダム・ランダム英数字生成のフィルタリング対策。
+            </p>
+        </a>
+
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-amber-300 hover:border-amber-500" th:href="@{/manager/settings/admin-password}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">管理者パスワード変更</h2>
+            <p class="text-sm text-slate-500">
+                現在ログインしている管理者アカウントのパスワードを変更します。初期パスワード (admin123) のままでは運用しないでください。
+            </p>
+        </a>
+
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/audit-log}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">操作ログ</h2>
+            <p class="text-sm text-slate-500">ログイン、管理者パスワード変更、データ更新などの操作履歴を確認できます。</p>
+        </a>
+    </div>
+</section>
+</body>
+</html>

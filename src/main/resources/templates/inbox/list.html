@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>受信管理</title>
+    <style>
+        .list-page-footer {
+            flex-shrink:0; background:#fff; border-top:1px solid #e2e8f0;
+            padding:9px 20px; display:flex; align-items:center; justify-content:flex-end; gap:12px;
+            box-shadow:0 -1px 4px rgba(0,0,0,.05); margin-top:12px;
+        }
+        .list-page-footer .selected-count { font-size:.78rem; color:#64748b; }
+        .list-page-footer .btn-bulk-delete {
+            font-family:inherit; font-size:.82rem; font-weight:700;
+            padding:7px 16px; border-radius:6px; border:none; color:#fff; cursor:pointer; white-space:nowrap;
+            background:#dc2626; box-shadow:0 1px 3px rgba(220,38,38,.25);
+        }
+        .list-page-footer .btn-bulk-delete:hover:not(:disabled) { background:#b91c1c; }
+        .list-page-footer .btn-bulk-delete:disabled { background:#94a3b8; cursor:not-allowed; box-shadow:none; }
+
+        /* Vertical-stacked count column — labels left, values right, fixed width so layout
+         * doesn't shift when numbers grow into 3-4 digits. */
+        .count-grid {
+            display:grid; grid-template-columns: 1fr 56px;
+            row-gap:3px; column-gap:8px; width:140px; align-items:center;
+        }
+        .count-grid .lbl { font-size:.68rem; color:#64748b; text-align:left; }
+        .count-grid .val {
+            display:inline-block; font-size:.72rem; font-weight:700;
+            padding:1px 0; border-radius:4px; text-align:center;
+        }
+        .count-grid .val.unread  { background:#fee2e2; color:#b91c1c; }
+        .count-grid .val.unread.zero { background:#f1f5f9; color:#94a3b8; }
+        .count-grid .val.web     { background:#d1fae5; color:#047857; }
+        .count-grid .val.mail    { background:#e2e8f0; color:#475569; }
+        .count-grid .val.out     { background:#dbeafe; color:#1d4ed8; }
+    </style>
+</head>
+<body>
+<section layout:fragment="content">
+
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">受信管理</h1>
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-500">未読合計</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-sm font-semibold"
+                  th:classappend="${totalUnread > 0} ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'"
+                  th:text="${totalUnread}">0</span>
+        </div>
+    </div>
+
+    <!-- Filter toggle -->
+    <div class="flex items-center gap-2 mb-4 text-sm">
+        <a th:href="@{/manager/inbox}"
+           class="px-3 py-1.5 rounded border"
+           th:classappend="${!unreadOnly} ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'">
+            すべて
+        </a>
+        <a th:href="@{/manager/inbox(unread='1')}"
+           class="px-3 py-1.5 rounded border"
+           th:classappend="${unreadOnly} ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300 hover:border-slate-400'">
+            未読のみ
+        </a>
+    </div>
+
+    <form id="inboxBulkForm" method="post">
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-4 py-2 text-left" style="width: 36px;"><input type="checkbox" id="inboxCheckAll" title="全選択"/></th>
+                <th class="px-4 py-2 text-left" style="width: 60px;">No</th>
+                <th class="px-4 py-2 text-left" style="width: 240px;">表示名</th>
+                <th class="px-4 py-2 text-left" style="width: 160px;">件数内訳</th>
+                <th class="px-4 py-2 text-left">最新メッセージ</th>
+                <th class="px-4 py-2 text-left" style="width: 160px;">最終返信日時</th>
+                <th class="px-4 py-2 text-right" style="width: 120px;">操作</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${rows.empty}">
+                <td colspan="7" class="px-4 py-10 text-center text-slate-400">
+                    <span th:if="${unreadOnly}">未読のメッセージはありません</span>
+                    <span th:unless="${unreadOnly}">受信メッセージはまだありません</span>
+                </td>
+            </tr>
+            <tr th:each="r,it : ${rows}"
+                th:classappend="${r.unreadCount > 0} ? 'bg-blue-50/40' : ''">
+                <td class="px-4 py-2"><input type="checkbox" class="inbox-row-item" name="userIds" th:value="${r.userId}"/></td>
+                <td class="px-4 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                <td class="px-4 py-2">
+                    <a class="text-blue-700 hover:underline font-semibold"
+                       th:href="@{'/manager/users/' + ${r.userId}}" target="_blank"
+                       th:text="${r.displayName}">name</a>
+                    <div class="text-xs text-slate-400 truncate" th:text="${r.email}" style="max-width: 220px;"></div>
+                </td>
+                <td class="px-4 py-2">
+                    <div class="count-grid">
+                        <span class="lbl">未読</span>
+                        <span class="val unread" th:classappend="${r.unreadCount == 0} ? 'zero'"
+                              th:text="${r.unreadCount}">0</span>
+                        <span class="lbl">Web返信</span>
+                        <span class="val web" th:text="${r.webReplyCount}">0</span>
+                        <span class="lbl">メール返信</span>
+                        <span class="val mail" th:text="${r.mailReplyCount}">0</span>
+                        <span class="lbl">送信数</span>
+                        <span class="val out" th:text="${r.outCount}">0</span>
+                    </div>
+                </td>
+                <td class="px-4 py-2 min-w-0">
+                    <div class="font-medium text-slate-800 truncate" th:text="${r.latestSubject} ?: '(件名なし)'" style="max-width: 520px;"></div>
+                    <div class="text-xs text-slate-500 truncate" th:text="${r.latestPreview}" style="max-width: 520px;"></div>
+                </td>
+                <td class="px-4 py-2 text-slate-600 text-xs whitespace-nowrap"
+                    th:text="${r.latestAt != null} ? ${#temporals.format(r.latestAt, 'yyyy-MM-dd HH:mm')} : '-'">
+                    -
+                </td>
+                <td class="px-4 py-2 text-right">
+                    <a class="inline-flex items-center px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                       th:href="@{'/manager/users/' + ${r.userId} + '/thread'}" target="_blank">
+                        返信
+                    </a>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Bulk reply panel: collapsed by default, expands when user clicks 「選択返信」 -->
+    <div id="inboxReplyPanel" style="display:none; margin-top:12px; background:#fff; border:1px solid #e2e8f0;
+                                       border-radius:8px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,.04);">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <strong style="font-size:.9rem;">選択ユーザーへ一括返信</strong>
+            <span id="inboxReplyCount" class="text-xs text-slate-500"></span>
+            <span class="ml-auto text-xs text-slate-400">置き換えタグ: %name% / %email% / %amount% など</span>
+        </div>
+        <input type="text" name="subject" placeholder="件名 (例: %name% 様 ご連絡)"
+               class="tw-input mb-2" style="font-size:.85rem;"/>
+        <textarea name="body" rows="4" placeholder="本文 (例: %name% 様 こんにちは...)"
+                  class="tw-input" style="font-size:.85rem;"></textarea>
+    </div>
+
+    <div class="list-page-footer">
+        <span class="selected-count" id="inboxSelectedCount"></span>
+        <button type="button" class="btn-bulk-reply" id="btnInboxReplyToggle" disabled
+                style="font-family:inherit; font-size:.82rem; font-weight:700;
+                       padding:7px 16px; border-radius:6px; border:none; color:#fff; cursor:pointer; white-space:nowrap;
+                       background:#2563eb; box-shadow:0 1px 3px rgba(37,99,235,.25);">選択返信</button>
+        <!-- 送信 button appears when 選択返信 is pressed; the toggle itself hides on click. -->
+        <button type="submit" class="btn-bulk-reply" id="btnInboxReplySend" disabled
+                formaction="/manager/inbox/bulk-reply"
+                onclick="return confirmBulkReplyInbox();"
+                style="display:none; font-family:inherit; font-size:.82rem; font-weight:700;
+                       padding:7px 16px; border-radius:6px; border:none; color:#fff; cursor:pointer; white-space:nowrap;
+                       background:#16a34a; box-shadow:0 1px 3px rgba(22,163,74,.25);">送信</button>
+        <button type="submit" class="btn-bulk-delete" id="btnInboxDelete" disabled
+                formaction="/manager/inbox/bulk-delete"
+                onclick="return confirmBulkDeleteInbox();">削除</button>
+    </div>
+    </form>
+
+<script>
+(function () {
+    var checkAll = document.getElementById('inboxCheckAll');
+    var btnDelete = document.getElementById('btnInboxDelete');
+    var btnReplyToggle = document.getElementById('btnInboxReplyToggle');
+    var btnReplySend = document.getElementById('btnInboxReplySend');
+    var replyPanel = document.getElementById('inboxReplyPanel');
+    var replyCount = document.getElementById('inboxReplyCount');
+    var countLabel = document.getElementById('inboxSelectedCount');
+    function rows() { return document.querySelectorAll('.inbox-row-item'); }
+    function refresh() {
+        var checked = [].filter.call(rows(), function (c) { return c.checked; });
+        var has = checked.length > 0;
+        countLabel.textContent = has ? (checked.length + ' 件選択中') : '';
+        btnDelete.disabled = !has;
+        btnReplyToggle.disabled = !has;
+        btnReplySend.disabled = !has;
+        if (replyCount) replyCount.textContent = has ? '(' + checked.length + ' 名)' : '';
+        if (checkAll) {
+            checkAll.indeterminate = has && checked.length < rows().length;
+            checkAll.checked = rows().length > 0 && checked.length === rows().length;
+        }
+    }
+    if (checkAll) checkAll.addEventListener('change', function () {
+        [].forEach.call(rows(), function (c) { c.checked = checkAll.checked; });
+        refresh();
+    });
+    document.addEventListener('change', function (e) {
+        if (e.target.classList && e.target.classList.contains('inbox-row-item')) refresh();
+    });
+    if (btnReplyToggle) btnReplyToggle.addEventListener('click', function () {
+        // Opening the reply panel: hide the toggle (operator request — keep only 送信 & 削除).
+        // The panel cannot be re-collapsed once opened; the form submission or page reload
+        // resets state.
+        replyPanel.style.display = 'block';
+        btnReplySend.style.display = 'inline-flex';
+        btnReplyToggle.style.display = 'none';
+    });
+    window.confirmBulkDeleteInbox = function () {
+        var n = [].filter.call(rows(), function (c) { return c.checked; }).length;
+        if (n === 0) return false;
+        if (!confirm('選択した ' + n + ' 名のユーザーの受信メッセージをすべて削除します。よろしいですか?')) return false;
+        if (!confirm('本当に削除してよろしいですか? この操作は取り消せません。')) return false;
+        var pw = prompt('管理者パスワードを入力してください');
+        if (!pw) return false;
+        var f = document.getElementById('inboxBulkForm');
+        var h = f.querySelector('input[name="confirmPassword"]');
+        if (!h) { h = document.createElement('input'); h.type='hidden'; h.name='confirmPassword'; f.appendChild(h); }
+        h.value = pw;
+        return true;
+    };
+    window.confirmBulkReplyInbox = function () {
+        var n = [].filter.call(rows(), function (c) { return c.checked; }).length;
+        if (n === 0) { alert('返信先が選択されていません'); return false; }
+        var body = (replyPanel.querySelector('textarea[name="body"]') || {}).value || '';
+        if (!body.trim()) { alert('返信本文を入力してください'); return false; }
+        return confirm('選択した ' + n + ' 名へ同じ内容を一括返信します。よろしいですか?');
+    };
+})();
+</script>
+</section>
+</body>
+</html>

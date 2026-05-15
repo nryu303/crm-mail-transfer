@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="robots" content="noindex,nofollow"/>
+    <title>広告コード別一覧</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+               background: #f3faf3; color: #1a1a1a; font-size: .85rem; }
+        .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+        .header-bar { background: #fff; border: 1px solid #d4e6d4; border-radius: 4px;
+                      padding: 12px 18px; font-size: 1rem; font-weight: 600; }
+        .month-nav { text-align: center; margin: 18px 0 6px; }
+        .month-nav .month { font-size: 1rem; font-weight: 600; }
+        .month-nav .links { margin-top: 6px; font-size: .85rem; }
+        .month-nav a { color: #1d4ed8; text-decoration: none; }
+        .month-nav a:hover { text-decoration: underline; }
+        .month-nav .sep { color: #94a3b8; margin: 0 8px; }
+        .controls { display: flex; align-items: center; gap: 8px; margin: 14px 0 8px; }
+        .controls select, .controls button {
+            font-size: .85rem; padding: 3px 8px; border: 1px solid #cbd5e1;
+            background: #fff; border-radius: 3px; cursor: pointer;
+        }
+        .legend { text-align: center; margin: 14px 0 6px; font-weight: 600; }
+        .legend .m { color: #1d4ed8; }
+        .legend .f { color: #dc2626; margin-left: 18px; }
+        table { width: 100%; border-collapse: collapse; background: #fff;
+                border: 1px solid #c4dec4; }
+        thead .group-header { background: #d4ecd4; text-align: center; padding: 8px;
+                              font-weight: 600; border-bottom: 1px solid #b3d4b3; }
+        thead .col-header th { background: #f1f5f9; padding: 7px 8px;
+                               border-bottom: 1px solid #c4dec4; border-right: 1px solid #e2e8f0;
+                               font-size: .82rem; font-weight: 600; color: #1e293b; text-align: center; }
+        thead .col-header th.male { color: #1d4ed8; }
+        thead .col-header th.female { color: #dc2626; }
+        tbody td { padding: 6px 8px; border-bottom: 1px solid #e9efe9; border-right: 1px solid #e9efe9;
+                   text-align: right; }
+        tbody td.code { text-align: left; font-weight: 500; }
+        tbody td.detail { text-align: center; }
+        tbody td.detail a { color: #1d4ed8; text-decoration: none; }
+        tbody td.detail a:hover { text-decoration: underline; }
+        tbody tr.total td { background: #f1f5f9; font-weight: 600; border-top: 2px solid #94a3b8; }
+        tbody td.male { color: #1d4ed8; }
+        tbody td.female { color: #dc2626; }
+        .csv-btn { margin-top: 10px; padding: 6px 14px; background: #fff; border: 1px solid #94a3b8;
+                   border-radius: 3px; font-size: .85rem; cursor: pointer; color: #1e293b;
+                   text-decoration: none; display: inline-block; }
+        .csv-btn:hover { background: #f1f5f9; }
+        .filter-area { margin-top: 32px; }
+        .filter-area p { margin-bottom: 6px; color: #4b5563; }
+        .filter-area textarea { width: 100%; min-height: 110px; max-width: 460px;
+                                font-family: inherit; font-size: .85rem; padding: 6px 8px;
+                                border: 1px solid #cbd5e1; border-radius: 3px; }
+        .filter-area button { margin-left: 8px; padding: 6px 14px; background: #fff;
+                              border: 1px solid #94a3b8; border-radius: 3px; cursor: pointer; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <!-- Header. Group name appears in parentheses, e.g. "広告コード別一覧 (競馬)".
+         Without ?g= we show plain "広告コード別一覧" for the all-groups cross-view. -->
+    <div class="header-bar"
+         th:text="${groupName != null ? '広告コード別一覧 (' + groupName + ')' : '広告コード別一覧'}"></div>
+
+    <div class="month-nav">
+        <div class="month" th:text="${#temporals.format(targetMonth, 'yyyy年MM月')}"></div>
+        <div class="links">
+            <a th:href="@{/media/index(g=${groupSlug},ym=${#temporals.format(prevMonth, 'yyyy-MM')},codes=${codesFilter})}">&lt;&lt; 前月</a>
+            <span class="sep">|</span>
+            <a th:href="@{/media/index(g=${groupSlug},ym=${#temporals.format(nextMonth, 'yyyy-MM')},codes=${codesFilter})}">翌月 &gt;&gt;</a>
+        </div>
+    </div>
+
+    <div class="legend">
+        <span class="m">■ 男性</span>
+        <span class="f">■ 女性</span>
+    </div>
+
+    <table>
+        <thead>
+        <tr><th colspan="8" class="group-header" th:text="'集計グループ (' + ${#lists.size(rows)} + '件 / ' + ${totalRows} + '件)'"></th></tr>
+        <tr class="col-header">
+            <th style="width:160px;">代理店コード</th>
+            <th class="male">登録</th>
+            <th class="female">登録</th>
+            <th>合計登録</th>
+            <th class="male">入金</th>
+            <th class="female">入金</th>
+            <th>入金合計</th>
+            <th style="width:74px;"></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:if="${rows.empty}">
+            <td colspan="8" style="text-align:center; color:#94a3b8; padding:24px;">該当するデータはありません</td>
+        </tr>
+        <tr th:each="r : ${rows}">
+            <td class="code" th:text="${r.code}"></td>
+            <td class="male" th:text="${r.signupMale}"></td>
+            <td class="female" th:text="${r.signupFemale}"></td>
+            <td th:text="${r.signupTotal}"></td>
+            <td class="male" th:text="${#numbers.formatInteger(r.paidMale, 1, 'COMMA')} + '円'"></td>
+            <td class="female" th:text="${#numbers.formatInteger(r.paidFemale, 1, 'COMMA')} + '円'"></td>
+            <td th:text="${#numbers.formatInteger(r.paidTotal, 1, 'COMMA')} + '円'"></td>
+            <td class="detail">
+                <a th:href="@{'/media/index/' + ${r.code}(g=${groupSlug},ym=${#temporals.format(targetMonth, 'yyyy-MM')})}">詳細&gt;&gt;</a>
+            </td>
+        </tr>
+        <tr class="total" th:if="${!rows.empty}">
+            <td>合計</td>
+            <td class="male" th:text="${#aggregates.sum(rows.![signupMale])}"></td>
+            <td class="female" th:text="${#aggregates.sum(rows.![signupFemale])}"></td>
+            <td th:text="${#aggregates.sum(rows.![signupTotal])}"></td>
+            <td class="male" th:text="${#numbers.formatInteger(#aggregates.sum(rows.![paidMale]), 1, 'COMMA')} + '円'"></td>
+            <td class="female" th:text="${#numbers.formatInteger(#aggregates.sum(rows.![paidFemale]), 1, 'COMMA')} + '円'"></td>
+            <td th:text="${#numbers.formatInteger(#aggregates.sum(rows.![paidTotal]), 1, 'COMMA')} + '円'"></td>
+            <td></td>
+        </tr>
+        </tbody>
+    </table>
+
+    <a class="csv-btn"
+       th:href="@{/media/index/csv(ym=${#temporals.format(targetMonth, 'yyyy-MM')},codes=${codesFilter})}">
+        CSVダウンロード
+    </a>
+
+    <div class="filter-area">
+        <p>下のテキストエリアに代理店コードを改行区切りで入力することにより、入力された代理店コードのみ表示が可能です。</p>
+        <form method="get" th:action="@{/media/index}">
+            <label style="display:block; font-weight:600; margin-bottom:4px;">代理店コード</label>
+            <textarea name="codes" th:text="${codesFilter}"></textarea>
+            <input type="hidden" name="g" th:value="${groupSlug}"/>
+            <input type="hidden" name="ym" th:value="${#temporals.format(targetMonth, 'yyyy-MM')}"/>
+            <br/>
+            <button type="submit">絞り込み</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

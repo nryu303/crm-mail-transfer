@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title th:text="${editing} ? '定型文編集' : '定型文追加'">定型文</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1"
+            th:text="${editing} ? '定型文編集' : '定型文追加'"></h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
+           th:href="@{/manager/settings/message-templates}">一覧に戻る</a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <!-- ===== Left: edit form (2/3 width) ===== -->
+        <form method="post"
+              th:action="${editing} ? @{'/manager/settings/message-templates/' + ${templateId}} : @{/manager/settings/message-templates}"
+              th:object="${form}"
+              class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-slate-100 p-6">
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-slate-700 mb-1">名前 <span class="text-red-500">*</span></label>
+                <input type="text" class="tw-input" th:field="*{name}"
+                       placeholder="例: 請求案内"
+                       th:classappend="${#fields.hasErrors('name')} ? 'border-red-400'"/>
+                <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></p>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-slate-700 mb-1">タイトル (件名)</label>
+                <input type="text" id="subject" class="tw-input" th:field="*{subject}"
+                       placeholder="例: %name% 様 ご請求のご案内"/>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-slate-700 mb-1">本文</label>
+                <textarea id="body" class="tw-input" rows="10" th:field="*{body}"
+                          placeholder="例:&#10;%name% 様&#10;&#10;いつもご利用ありがとうございます。&#10;本日のご請求は %amount% です。"></textarea>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-slate-700 mb-1">表示順 (省略可)</label>
+                <input type="number" class="tw-input" th:field="*{displayOrder}"
+                       style="max-width: 180px;" placeholder="0"/>
+                <p class="mt-1 text-xs text-slate-500">数字が小さいほど上に表示されます。</p>
+            </div>
+
+            <div class="flex items-center gap-2 pt-3 border-t border-slate-100">
+                <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm"
+                        th:text="${editing} ? '更新する' : '追加する'"></button>
+                <a class="inline-flex items-center px-4 py-2 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
+                   th:href="@{/manager/settings/message-templates}">キャンセル</a>
+            </div>
+        </form>
+
+        <!-- ===== Right: tag reference (1/3 width) ===== -->
+        <aside class="space-y-3">
+            <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4">
+                <h2 class="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2 mb-3">
+                    デフォルトの置き換えタグ <span class="text-xs text-slate-400 font-normal">(クリックで本文に挿入)</span>
+                </h2>
+                <div class="space-y-2 text-sm">
+                    <div th:each="t : ${builtinTags}" class="flex items-center gap-2">
+                        <code class="px-2 py-1 rounded bg-slate-100 text-slate-700 cursor-pointer hover:bg-blue-100 hover:text-blue-700"
+                              th:text="${t.token}" th:attr="data-token=${t.token}"
+                              style="min-width:110px;text-align:center;"></code>
+                        <span class="text-xs text-slate-500" th:text="${t.description}"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4">
+                <h2 class="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2 mb-3">
+                    置き換えタグ（メッセージ送信時にユーザーごとに差し替え）
+                </h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex items-center gap-2">
+                        <code class="px-2 py-1 rounded bg-slate-100 text-slate-700 cursor-pointer hover:bg-blue-100 hover:text-blue-700"
+                              data-token="%amount%" style="min-width:110px;text-align:center;">%amount%</code>
+                        <span class="text-xs text-slate-500">金額</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <code class="px-2 py-1 rounded bg-slate-100 text-slate-700 cursor-pointer hover:bg-blue-100 hover:text-blue-700"
+                              data-token="%product%" style="min-width:110px;text-align:center;">%product%</code>
+                        <span class="text-xs text-slate-500">商品</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <code class="px-2 py-1 rounded bg-slate-100 text-slate-700 cursor-pointer hover:bg-blue-100 hover:text-blue-700"
+                              data-token="%full_address%" style="min-width:110px;text-align:center;">%full_address%</code>
+                        <span class="text-xs text-slate-500">住所</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <code class="px-2 py-1 rounded bg-slate-100 text-slate-700 cursor-pointer hover:bg-blue-100 hover:text-blue-700"
+                              data-token="%reply_url%" style="min-width:110px;text-align:center;">%reply_url%</code>
+                        <span class="text-xs text-slate-500">返信URL（送信時に自動生成）</span>
+                    </div>
+                </div>
+                <p class="text-xs text-slate-400 mt-3">
+                    値はユーザー詳細画面で個別に設定します。<br>
+                    一斉送信時は受信者ごとに自動で置き換えられます。
+                </p>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+    // Click-to-insert at body cursor (or end). Targets the textarea#body.
+    function insertTagToBody(token) {
+        var ta = document.getElementById('body');
+        if (!ta) return;
+        var pos = ta.selectionStart || ta.value.length;
+        ta.value = ta.value.slice(0, pos) + token + ta.value.slice(ta.selectionEnd || pos);
+        ta.focus();
+        ta.selectionStart = ta.selectionEnd = pos + token.length;
+    }
+    document.querySelectorAll('code[data-token]').forEach(function (el) {
+        el.addEventListener('click', function () { insertTagToBody(el.getAttribute('data-token')); });
+    });
+    </script>
+</section>
+</body>
+</html>

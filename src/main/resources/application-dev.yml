@@ -1,0 +1,15 @@
+spring:
+  thymeleaf:
+    cache: false
+  jpa:
+    show-sql: false
+
+app:
+  scheduler:
+    queued-poll-rate-ms: 5000
+    queued-poll-initial-delay-ms: 5000
+
+logging:
+  level:
+    com.crm: DEBUG
+    org.hibernate.SQL: DEBUG

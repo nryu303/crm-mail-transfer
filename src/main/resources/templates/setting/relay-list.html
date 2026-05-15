@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>リレーサーバー設定</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">リレーサーバー設定</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2" th:href="@{/manager/settings}">設定に戻る</a>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm" th:href="@{/manager/settings/relay-servers/new}">新規追加</a>
+    </div>
+
+    <div class="max-w-3xl rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 mb-4">
+        <p class="font-semibold mb-1">送信経路の決定ルール</p>
+        <ul class="list-disc list-inside space-y-1">
+            <li>「<strong>有効</strong>」にできるリレーは <strong>常に1件のみ</strong> です
+                (別の行を有効にすると、それまで有効だった行は自動で無効になります)</li>
+            <li>有効な行が <strong>1件</strong> ある場合 → その行経由で送信
+                <ul class="list-disc list-inside ml-5 mt-1 text-xs">
+                    <li>有効リレーのIPが <code th:text="${activeRelayHost}"></code> (HTTP-bridge転送機) と一致 → SSH+HTTP API 方式</li>
+                    <li>それ以外のIP (例: AMG <code>157.7.89.36</code>) → 直接 SMTP で配送</li>
+                </ul>
+            </li>
+            <li><strong>すべて無効</strong> の場合 → 本サーバの postfix から直接配信 (avu74g.jp ドメインで MX ルックアップ)</li>
+        </ul>
+    </div>
+
+    <!-- 送信インターバル (rate / min) — グローバル設定。
+         一斉送信フォーム側の "rate / min" 入力は撤去され、ここで設定した値が
+         全ての新規一斉送信に既定値として使われます。 -->
+    <form method="post" th:action="@{/manager/settings/relay-servers/rate}"
+          class="max-w-3xl rounded-md border border-slate-200 bg-white px-4 py-3 mb-4 flex items-center gap-3">
+        <label class="text-sm font-semibold text-slate-700">送信インターバル設定 (rate / min)</label>
+        <input type="number" name="ratePerMinute" min="1" max="600"
+               th:value="${broadcastRatePerMinute}"
+               class="border border-slate-300 rounded px-2 py-1 text-sm w-24" required/>
+        <span class="text-xs text-slate-500">1〜600 通/分</span>
+        <button type="submit" class="ml-auto inline-flex items-center px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm">保存</button>
+    </form>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left" style="width: 60px;">No</th>
+                <th class="px-3 py-2 text-left">名前</th>
+                <th class="px-3 py-2 text-left">IPアドレス</th>
+                <th class="px-3 py-2 text-left" style="width: 110px;">ポート</th>
+                <th class="px-3 py-2 text-left" style="width: 130px;">有効</th>
+                <th class="px-3 py-2 text-left">メモ</th>
+                <th class="px-3 py-2 text-right" style="width: 180px;">操作</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${relays.empty}">
+                <td colspan="7" class="px-3 py-6 text-center text-slate-400">
+                    リレーサーバーは登録されていません — 本サーバの postfix から直接配信します
+                </td>
+            </tr>
+            <tr th:each="r,it : ${relays}" class="hover:bg-slate-50">
+                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                <td class="px-3 py-2 text-slate-700" th:text="${r.name}"></td>
+                <td class="px-3 py-2"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${r.ipAddress}"></code></td>
+                <td class="px-3 py-2"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${r.port}"></code></td>
+                <td class="px-3 py-2">
+                    <span th:if="${r.isActive}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">有効・使用中</span>
+                    <span th:unless="${r.isActive}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-600">無効</span>
+                </td>
+                <td class="px-3 py-2 text-xs text-slate-500" th:text="${r.memo}"></td>
+                <td class="px-3 py-2 text-right">
+                    <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
+                       th:href="@{'/manager/settings/relay-servers/' + ${r.id} + '/edit'}">編集</a>
+                    <form method="post" th:action="@{'/manager/settings/relay-servers/' + ${r.id} + '/delete'}"
+                          class="inline-block ml-1"
+                          onsubmit="return confirm('このリレーサーバーを削除します。よろしいですか?');">
+                        <button type="submit" class="inline-flex items-center px-3 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 rounded">削除</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

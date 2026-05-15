@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>返信画面プレビュー</title>
+    <link rel="stylesheet" th:href="@{/css/reply.css}"/>
+    <style>
+        /* Mirror the user-facing reply page (templates/reply/page.html): the iframe is
+           fixed at 500px, with internal scroll for tall header HTML; the reply form sits
+           directly underneath. The only addition for admins is the slim banner at the top
+           and the tag-resolution table at the bottom. */
+        .reply-header-frame {
+            display: block; width: 100%; height: 500px;
+            border: 0; background: #fff;
+        }
+        .preview-banner { position: sticky; top: 0; z-index: 30; }
+    </style>
+</head>
+<body>
+
+<div class="preview-banner bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-900 flex items-center gap-3"
+     style="font-family:sans-serif;">
+    <strong>管理者プレビュー</strong>
+    <span>ユーザーID <code th:text="${user.id}" style="background:#fff;padding:0 4px;border-radius:3px;"></code></span>
+    <span th:if="${user.displayName}" th:text="'(' + ${user.displayName} + ')'"></span>
+    <span class="text-amber-700" style="opacity:.85;">置き換えタグはこのユーザーの値で差し替えています。 / 「メールを送信する」ボタンはプレビュー上では動作しません。</span>
+    <a class="ml-auto" href="javascript:history.back()" style="margin-left:auto;color:#2563eb;text-decoration:underline;">戻る</a>
+</div>
+
+<div th:if="${usingDefaultHtml}" class="bg-sky-50 border-b border-sky-200 px-4 py-2 text-xs text-sky-800"
+     style="font-family:sans-serif;">
+    このユーザーには専用返信画面HTMLが未設定です。<strong>設定ページのデフォルト返信画面HTML</strong>を表示しています。
+    <a th:href="@{/manager/settings/reply-page}" style="color:#2563eb;text-decoration:underline;margin-left:8px;">設定ページへ</a>
+</div>
+<div th:if="${repaired}" class="bg-red-50 border-b border-red-200 px-4 py-2 text-xs text-red-800"
+     style="font-family:sans-serif;">
+    メモのHTMLに <code style="background:#fff;padding:0 4px;border-radius:3px;">&lt;/style&gt;</code> または
+    <code style="background:#fff;padding:0 4px;border-radius:3px;">&lt;script&gt;</code> の不足が検出されたため、プレビューでは自動修復しています。
+    実際のユーザー画面でも正しく表示されるよう、専用返信画面HTMLの保存内容をご確認のうえ修正ください。
+</div>
+
+<!-- Same DOM structure as templates/reply/page.html so reply.css applies identically. -->
+<div class="reply-shell">
+
+    <iframe class="reply-header-frame"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
+            th:attr="srcdoc=${memoText} ?: '&lt;p style=&quot;padding:24px;color:#94a3b8;&quot;&gt;専用返信画面HTMLが未設定です。&lt;/p&gt;'"></iframe>
+
+    <div class="reply-banner">
+        <h1>返信する</h1>
+    </div>
+
+    <form class="reply-form" onsubmit="event.preventDefault(); alert('プレビュー時は送信できません。');">
+
+        <div class="field">
+            <label for="subject">タイトル</label>
+            <input type="text" id="subject" name="subject" value="" maxlength="200"/>
+        </div>
+
+        <div class="field">
+            <label for="body">本文</label>
+            <textarea id="body" name="body" rows="10" maxlength="10000"></textarea>
+        </div>
+
+        <div class="actions">
+            <button type="submit">メールを送信する</button>
+        </div>
+    </form>
+
+</div>
+
+<div class="preview-tags" style="background:#f8fafc;max-width:768px;margin:0 auto;padding:24px;font-family:sans-serif;">
+    <h2 style="font-size:14px;font-weight:600;color:#334155;margin-bottom:12px;">タグ解決状況</h2>
+    <table style="width:100%;font-size:14px;border:1px solid #e2e8f0;background:#fff;border-radius:6px;border-collapse:collapse;overflow:hidden;">
+        <thead style="background:#f8fafc;font-size:12px;color:#64748b;text-transform:uppercase;">
+            <tr>
+                <th style="padding:8px 12px;text-align:left;width:176px;">タグ</th>
+                <th style="padding:8px 12px;text-align:left;">現在の値</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr th:each="b : ${bindings}" style="border-top:1px solid #f1f5f9;">
+                <td style="padding:8px 12px;"><code style="background:#f1f5f9;padding:2px 8px;border-radius:3px;" th:text="${b.key}"></code></td>
+                <td style="padding:8px 12px;" th:text="${b.value}"></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+</body>
+</html>

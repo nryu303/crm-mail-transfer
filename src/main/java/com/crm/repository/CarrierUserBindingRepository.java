@@ -1,0 +1,52 @@
+package com.crm.repository;
+
+import com.crm.entity.CarrierUserBinding;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface CarrierUserBindingRepository extends JpaRepository<CarrierUserBinding, Long> {
+
+    boolean existsByPoolIdAndUserId(Long poolId, Long userId);
+
+    Optional<CarrierUserBinding> findByPoolIdAndUserId(Long poolId, Long userId);
+
+    List<CarrierUserBinding> findByUserIdOrderByIdAsc(Long userId);
+
+    List<CarrierUserBinding> findByPoolIdOrderByIdAsc(Long poolId);
+
+    long countByUserId(Long userId);
+
+    long countByPoolId(Long poolId);
+
+    @Modifying
+    @Query("DELETE FROM CarrierUserBinding b WHERE b.userId = :userId")
+    int deleteAllByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("DELETE FROM CarrierUserBinding b WHERE b.poolId = :poolId")
+    int deleteAllByPoolId(@Param("poolId") Long poolId);
+
+    /** Pool IDs that have zero bindings. */
+    @Query("SELECT p.id FROM CarrierAddressPool p " +
+           "WHERE p.isActive = true AND " +
+           "NOT EXISTS (SELECT 1 FROM CarrierUserBinding b WHERE b.poolId = p.id)")
+    List<Long> findActivePoolsWithNoBindings();
+
+    @Query("SELECT COUNT(p) FROM CarrierAddressPool p " +
+           "WHERE p.isActive = true AND " +
+           "NOT EXISTS (SELECT 1 FROM CarrierUserBinding b WHERE b.poolId = p.id)")
+    long countActivePoolsWithNoBindings();
+
+    /** Bindings that were created on or before the cutoff (used by the auto-expire scheduler). */
+    @Modifying
+    @Query("DELETE FROM CarrierUserBinding b WHERE b.createdAt <= :cutoff")
+    int deleteOlderThan(@Param("cutoff") java.time.LocalDateTime cutoff);
+
+    @Query("SELECT COUNT(b) FROM CarrierUserBinding b WHERE b.createdAt <= :cutoff")
+    long countOlderThan(@Param("cutoff") java.time.LocalDateTime cutoff);
+}

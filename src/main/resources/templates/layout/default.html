@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="_csrf" th:content="${_csrf}"/>
+    <title layout:title-pattern="$CONTENT_TITLE | CRM">CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" th:href="@{/css/admin.css}"/>
+</head>
+<body class="bg-slate-50 text-slate-800">
+<div class="min-h-screen flex">
+    <!-- Sticky sidebar: pinned to viewport so the nav stays visible while the main content
+         scrolls. The fixed width of 224px (=w-56) is mirrored on <main>'s ml-56 below. -->
+    <aside class="w-56 bg-slate-900 text-white flex-shrink-0 p-4 flex flex-col fixed inset-y-0 left-0 overflow-y-auto z-20">
+        <div class="text-xl font-bold tracking-wide mb-1">CRM</div>
+        <div class="text-xs text-slate-400 mb-6" th:if="${session.adminUserName}" th:text="${session.adminUserName}"></div>
+        <nav class="flex flex-col gap-1 text-sm">
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/dashboard}">ダッシュボード</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/users}">ユーザー管理</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/inbox}">受信管理</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/messages}">個別メッセージ管理</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/messages/broadcast}">一斉送信返信履歴</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/carrier-pool}">キャリア登録割り当て</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/ad-codes}">広告設定</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/settings}">設定</a>
+        </nav>
+    </aside>
+
+    <main class="flex-1 ml-56 p-6 overflow-x-auto">
+        <div th:if="${flashSuccess}" class="mb-4 rounded-md bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800" th:text="${flashSuccess}"></div>
+        <div th:if="${flashError}" class="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800" th:text="${flashError}"></div>
+        <section layout:fragment="content">
+            <p>placeholder</p>
+        </section>
+    </main>
+</div>
+<script>
+// Auto-inject the CSRF token into every state-changing form and fetch() call.
+(function () {
+    const meta = document.querySelector('meta[name="_csrf"]');
+    const token = meta ? meta.getAttribute('content') : '';
+    if (!token) return;
+
+    // 1) Add a hidden _csrf input to every POST/PUT/DELETE form.
+    function wireForms(root) {
+        (root || document).querySelectorAll('form').forEach(function (f) {
+            const method = (f.getAttribute('method') || 'get').toLowerCase();
+            if (method === 'get') return;
+            if (f.querySelector('input[name="_csrf"]')) return;
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = '_csrf';
+            hidden.value = token;
+            f.appendChild(hidden);
+        });
+    }
+    wireForms();
+    // Handle forms rendered dynamically after initial load.
+    new MutationObserver(function (muts) {
+        muts.forEach(function (m) { m.addedNodes.forEach(function (n) {
+            if (n.nodeType === 1) wireForms(n);
+        }); });
+    }).observe(document.body, { childList: true, subtree: true });
+
+    // 2) Patch fetch so JSON POSTs carry the X-CSRF-Token header automatically.
+    const origFetch = window.fetch;
+    window.fetch = function (input, init) {
+        init = init || {};
+        const method = (init.method || (typeof input === 'string' ? 'GET' : (input.method || 'GET'))).toUpperCase();
+        if (method !== 'GET' && method !== 'HEAD') {
+            const headers = new Headers(init.headers || (typeof input === 'object' ? input.headers : undefined) || {});
+            if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', token);
+            init.headers = headers;
+        }
+        return origFetch.call(this, input, init);
+    };
+})();
+</script>
+</body>
+</html>

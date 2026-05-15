@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title th:text="${editId != null ? 'キャリアアドレス編集' : 'キャリアアドレス追加'}">キャリアアドレス</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1"
+            th:text="${editId != null ? 'キャリアアドレス編集' : 'キャリアアドレス追加'}">キャリアアドレス</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/carrier-pool}">一覧に戻る</a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="lg:col-span-2">
+    <form method="post"
+          th:action="@{${editId != null ? '/manager/carrier-pool/' + editId : '/manager/carrier-pool'}}"
+          th:object="${form}"
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6">
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">キャリアアドレス <span class="text-red-500">*</span></label>
+            <input type="email" class="tw-input" th:field="*{address}"
+                   placeholder="例: aus5mp3z@i.softbank.jp"
+                   th:classappend="${#fields.hasErrors('address')} ? 'border-red-400'"/>
+            <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('address')}" th:errors="*{address}"></p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">キャリアコード <span class="text-red-500">*</span></label>
+                <select class="tw-input" th:field="*{carrierCode}">
+                    <option value="">選択してください</option>
+                    <option th:each="c : ${carrierCodes}" th:value="${c}" th:text="${c}"></option>
+                </select>
+                <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('carrierCode')}" th:errors="*{carrierCode}"></p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">キャリアドメイン <span class="text-red-500">*</span></label>
+                <input type="text" class="tw-input" th:field="*{carrierDomain}"
+                       placeholder="例: i.softbank.jp"/>
+                <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('carrierDomain')}" th:errors="*{carrierDomain}"></p>
+            </div>
+        </div>
+
+        <hr class="my-4 border-slate-200"/>
+        <h2 class="text-base font-semibold text-slate-800 mb-3">SMTP接続情報</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-slate-700 mb-1">SMTPホスト <span class="text-red-500">*</span></label>
+                <input type="text" class="tw-input" th:field="*{smtpHost}"/>
+                <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('smtpHost')}" th:errors="*{smtpHost}"></p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">ポート <span class="text-red-500">*</span></label>
+                <input type="number" class="tw-input" th:field="*{smtpPort}"/>
+                <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('smtpPort')}" th:errors="*{smtpPort}"></p>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">SMTPユーザー名 <span class="text-red-500">*</span></label>
+            <input type="text" class="tw-input" th:field="*{smtpUsername}"/>
+            <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('smtpUsername')}" th:errors="*{smtpUsername}"></p>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">
+                SMTPパスワード <span class="text-red-500" th:if="${editId == null}">*</span>
+            </label>
+            <input type="password" class="tw-input" th:field="*{smtpPassword}" autocomplete="new-password"/>
+            <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('smtpPassword')}" th:errors="*{smtpPassword}"></p>
+            <p class="mt-1 text-xs text-slate-500"
+               th:text="${editId != null ? '変更する場合のみ入力してください。空欄なら既存のパスワードを保持します。' : 'AES-256で暗号化して保存します'}">AES-256で暗号化して保存します</p>
+        </div>
+
+        <div class="mb-4" th:if="${editId != null}">
+            <label class="inline-flex items-center text-sm font-medium text-slate-700">
+                <input type="checkbox" class="mr-2" th:field="*{isActive}"/>
+                有効 (IS_ACTIVE)
+            </label>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm"
+                    th:text="${editId != null ? '更新する' : '追加する'}">追加する</button>
+            <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/carrier-pool}">キャンセル</a>
+        </div>
+    </form>
+    </div>
+
+    <!-- ===== Right-side SMTP reference panel ===== -->
+    <aside class="bg-white rounded-lg shadow-sm border border-slate-100 p-5 text-sm">
+        <h2 class="text-base font-semibold text-slate-800 border-b border-slate-100 pb-2 mb-3">各キャリア SMTP 接続情報</h2>
+        <div class="space-y-4">
+            <div>
+                <div class="font-semibold text-slate-700 mb-1">■ NTT docomo <span class="text-xs text-slate-500">(docomo.ne.jp)</span></div>
+                <dl class="text-xs text-slate-600 grid grid-cols-[90px_1fr] gap-y-1 gap-x-2">
+                    <dt>SMTP</dt><dd><code>smtp.spmode.ne.jp</code></dd>
+                    <dt>ポート</dt><dd>465 (SSL) / 587 (STARTTLS)</dd>
+                    <dt>認証</dt><dd>SMTP AUTH（要）</dd>
+                    <dt>SSL/TLS</dt><dd>必須</dd>
+                </dl>
+            </div>
+            <div>
+                <div class="font-semibold text-slate-700 mb-1">■ au <span class="text-xs text-slate-500">(ezweb.ne.jp / au.com)</span></div>
+                <dl class="text-xs text-slate-600 grid grid-cols-[90px_1fr] gap-y-1 gap-x-2">
+                    <dt>SMTP</dt><dd><code>smtp.au.com</code></dd>
+                    <dt>ポート</dt><dd>465 (SSL) / 587 (STARTTLS)</dd>
+                    <dt>認証</dt><dd>SMTP AUTH（要）</dd>
+                    <dt>SSL/TLS</dt><dd>必須</dd>
+                </dl>
+            </div>
+            <div>
+                <div class="font-semibold text-slate-700 mb-1">■ SoftBank <span class="text-xs text-slate-500">(i.softbank.jp / softbank.ne.jp)</span></div>
+                <dl class="text-xs text-slate-600 grid grid-cols-[90px_1fr] gap-y-1 gap-x-2">
+                    <dt>SMTP</dt><dd><code>smtp.softbank.ne.jp</code></dd>
+                    <dt>ポート</dt><dd>465 (SSL) / 587 (STARTTLS)</dd>
+                    <dt>認証</dt><dd>SMTP AUTH（要）</dd>
+                    <dt>SSL/TLS</dt><dd>必須</dd>
+                </dl>
+            </div>
+        </div>
+    </aside>
+
+    </div>
+</section>
+</body>
+</html>

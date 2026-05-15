@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>ダッシュボード</title>
+    <style>
+        .dash { --accent:#2563eb; --accent-bg:#eff4ff; --ok:#16a34a; --ng:#dc2626;
+            --border:#e2e6ed; --header-bg:#f8fafc; --hover:#f1f5fd; --sel:#dbeafe;
+            --muted:#64748b; --text:#1e293b;
+            color: var(--text); font-size: 13px;
+        }
+        .dash .card { background:#fff; border:1px solid var(--border); border-radius:10px;
+            box-shadow:0 1px 5px rgba(0,0,0,.07); overflow:hidden; }
+        .dash .card-top { display:flex; align-items:center; gap:8px; padding:8px 12px;
+            border-bottom:1px solid var(--border); background:var(--header-bg); flex-wrap:wrap; }
+        .dash .card-title { font-size:.82rem; font-weight:700; display:flex; align-items:center;
+            gap:6px; white-space:nowrap; margin-right:4px; }
+        .dash .card-title::before { content:''; width:3px; height:.82rem; background:var(--accent);
+            border-radius:2px; display:inline-block; }
+        .dash select, .dash input[type="date"], .dash input[type="month"] {
+            font-size:.78rem; font-weight:500; padding:4px 8px; border-radius:5px;
+            border:1px solid var(--border); background:#fff; color:var(--text); outline:none; cursor:pointer; }
+        .dash select:focus, .dash input[type="date"]:focus, .dash input[type="month"]:focus {
+            border-color: var(--accent); }
+        .dash .btn-show { font-size:.78rem; font-weight:700; padding:4px 14px; border-radius:5px;
+            border:none; background:var(--accent); color:#fff; cursor:pointer; }
+        .dash .btn-show:hover { background:#1d4ed8; }
+        .dash .chips { display:flex; gap:6px; margin-left:auto; flex-wrap:wrap; }
+        .dash .scope-tabs { display:inline-flex; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+        .dash .scope-tabs a {
+            display:inline-block; padding:4px 14px; font-size:.78rem; font-weight:600;
+            color:var(--muted); background:#fff; text-decoration:none; cursor:pointer;
+            border-right:1px solid var(--border);
+        }
+        .dash .scope-tabs a:last-child { border-right:none; }
+        .dash .scope-tabs a:hover { background:var(--hover); }
+        .dash .scope-tabs a.active { background:var(--accent); color:#fff; }
+        .dash .inline-form { display:inline-flex; align-items:center; gap:8px; }
+
+        /* ===== Shared memo ===== */
+        .dash .memo-count { font-size:.72rem; font-weight:600; color:var(--muted); background:var(--border); border-radius:10px; padding:2px 8px; }
+        .dash .add-form { display:none; padding:12px 14px; border-bottom:1px solid var(--border); background:var(--accent-bg); flex-direction:column; gap:8px; }
+        .dash .add-form.open { display:flex; }
+        .dash .add-form input[type="text"], .dash .add-form textarea,
+        .dash .memo-edit-box input[type="text"], .dash .memo-edit-box textarea {
+            font-family:'Noto Sans JP',sans-serif; font-size:.82rem;
+            padding:6px 10px; border-radius:5px; border:1px solid var(--border);
+            outline:none; background:#fff;
+        }
+        .dash .add-form textarea, .dash .memo-edit-box textarea { resize:vertical; min-height:70px; }
+        .dash .add-form input:focus, .dash .add-form textarea:focus,
+        .dash .memo-edit-box input:focus, .dash .memo-edit-box textarea:focus { border-color:var(--accent); }
+        .dash .form-btns, .dash .edit-btns { display:flex; gap:7px; }
+        .dash .btn-cancel-add, .dash .btn-cancel {
+            font-size:.78rem; font-weight:600; padding:5px 12px; border-radius:5px;
+            border:1px solid var(--border); background:#fff; color:var(--muted); cursor:pointer;
+        }
+        .dash .btn-cancel-add:hover, .dash .btn-cancel:hover { background:var(--hover); }
+        .dash .btn-save {
+            font-size:.78rem; font-weight:700; padding:5px 14px; border-radius:5px;
+            border:none; background:var(--ok); color:#fff; cursor:pointer;
+        }
+        .dash .btn-save:hover { background:#15803d; }
+        .dash .memo-list { padding:10px 14px; display:flex; flex-direction:column; gap:8px; }
+        .dash .memo-empty { font-size:.8rem; color:var(--muted); text-align:center; padding:24px 0; }
+        .dash .memo-item {
+            border:1px solid var(--border); border-radius:7px; background:var(--header-bg);
+            padding:10px 12px; display:flex; flex-direction:column; gap:6px; transition:box-shadow .15s;
+        }
+        .dash .memo-item:hover { box-shadow:0 2px 8px rgba(37,99,235,.09); }
+        .dash .memo-item-header { display:flex; align-items:flex-start; gap:8px; }
+        .dash .memo-item-title { font-size:.85rem; font-weight:700; color:var(--text); flex:1; word-break:break-all; line-height:1.4; }
+        .dash .memo-item-date { font-size:.66rem; color:var(--muted); white-space:nowrap; margin-top:2px; }
+        .dash .memo-item-actions { display:flex; gap:4px; flex-shrink:0; }
+        .dash .btn-edit, .dash .btn-del {
+            font-size:.72rem; font-weight:600; padding:3px 10px; border-radius:4px;
+            border:1px solid var(--border); cursor:pointer; background:#fff;
+        }
+        .dash .btn-edit { color:var(--accent); }
+        .dash .btn-edit:hover { background:var(--accent-bg); border-color:var(--accent); }
+        .dash .btn-del { color:var(--ng); }
+        .dash .btn-del:hover { background:#fef2f2; border-color:var(--ng); }
+        .dash .memo-item-content { font-size:.82rem; color:var(--text); line-height:1.7; white-space:pre-wrap; word-break:break-all; }
+        .dash .memo-edit-box { display:none; flex-direction:column; gap:7px; margin-top:4px; }
+        .dash .memo-edit-box.open { display:flex; }
+        .dash .chip { display:flex; align-items:center; gap:5px; background:var(--header-bg);
+            border:1px solid var(--border); border-radius:5px; padding:3px 10px; white-space:nowrap; }
+        .dash .chip .cl { font-size:.68rem; font-weight:600; color:var(--muted); }
+        .dash .chip .cv { font-family:ui-monospace,Menlo,monospace; font-size:.82rem; font-weight:700; }
+        .dash .chip.money .cv { color: var(--accent); }
+        .dash .chip.send .cv  { color: var(--ok); }
+        .dash .chip.ng   .cv  { color: var(--ng); }
+
+        .dash .tbl-scroll { overflow-x:auto; }
+        .dash table.d { border-collapse:collapse; width:max-content; min-width:100%; }
+        .dash table.d thead tr { background: var(--header-bg); }
+        .dash table.d th { font-size:.68rem; font-weight:700; color:var(--muted);
+            padding:6px 10px; text-align:center; border-bottom:2px solid var(--border);
+            white-space:nowrap; min-width:82px; }
+        .dash table.d th.lbl, .dash table.d td.lbl {
+            position:sticky; left:0; z-index:3; border-right:1px solid var(--border);
+            text-align:left; padding:6px 12px; min-width:76px; max-width:76px; width:76px; white-space:nowrap; }
+        .dash table.d th.lbl { background: var(--header-bg); font-size:.7rem; }
+        .dash table.d td.lbl { background:#fff; font-weight:700; color:var(--muted); font-size:.75rem; }
+        .dash table.d td { text-align:center; padding:6px 8px;
+            font-family:ui-monospace,Menlo,monospace; font-size:.78rem;
+            border-bottom:1px solid var(--border); white-space:nowrap; }
+        .dash table.d tr:last-child td { border-bottom:none; }
+        .dash table.d tbody tr:hover td { background: var(--hover); }
+        .dash table.d tbody tr:hover td.lbl { background: var(--accent-bg); }
+
+        /* User-name link in header */
+        .dash th.user-col a { color: var(--text); text-decoration:none; font-weight:700; font-size:.72rem; }
+        .dash th.user-col a:hover { color: var(--accent); text-decoration: underline; }
+
+        /* 入金額 row */
+        .dash tr.nyukin-total td { background: var(--accent-bg) !important; font-weight:700; color: var(--accent); }
+        .dash tr.nyukin-total td.lbl { color: var(--accent); }
+        .dash td.money { color: var(--accent); font-weight:600; cursor: pointer; }
+        .dash td.money.zero { color:#cbd5e1; cursor:default; }
+        .dash td.money:not(.zero):hover { background: var(--sel) !important; }
+        .dash td.money.active { background: var(--sel) !important; }
+
+        /* send / ng rows */
+        .dash td.send-v { color: var(--ok); font-weight:600; }
+        .dash td.ng-v   { color: var(--ng); font-weight:600; }
+        .dash td.zero   { color:#cbd5e1; }
+
+        /* Detail panel */
+        .dash .detail { display:none; border-top:1px solid var(--border); padding:10px 12px; background: var(--accent-bg); }
+        .dash .detail.show { display:block; }
+        .dash .detail-title { font-size:.75rem; font-weight:700; color: var(--accent); margin-bottom:8px; }
+        .dash .ptbl { border-collapse:collapse; background:#fff; border:1px solid var(--border);
+            border-radius:6px; overflow:hidden; width:auto; }
+        .dash .ptbl th { font-size:.68rem; padding:5px 12px; background: var(--header-bg);
+            border-bottom:1px solid var(--border); color: var(--muted); text-align:left; }
+        .dash .ptbl td { font-size:.78rem; padding:5px 12px; border-bottom:1px solid var(--border);
+            color: var(--text); text-align:left; white-space:nowrap; }
+        .dash .ptbl tr:last-child td { border-bottom:none; }
+        .dash .ptbl td.pa { font-family:ui-monospace,Menlo,monospace; font-weight:700; color: var(--accent); text-align:right; }
+        .dash .ptbl td.pt { font-family:ui-monospace,Menlo,monospace; color: var(--muted); font-size:.72rem; }
+    </style>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="dash flex flex-col gap-4">
+
+        <div class="flex items-center">
+            <h1 class="text-2xl font-semibold text-slate-800 flex-1">ダッシュボード</h1>
+        </div>
+
+        <div th:if="${stats.unboundPoolCount > 0}"
+             class="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-3">
+            <div class="flex-1">
+                <strong>どのユーザーにも紐付いていないAMGアドレスが <span th:text="${stats.unboundPoolCount}">0</span> 件あります。</strong>
+                これらのアドレス宛てに届く受信メールはユーザーに紐付かないため破棄されます。
+            </div>
+            <a class="inline-flex items-center px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded whitespace-nowrap"
+               th:href="@{/manager/carrier-pool(boundFilter='UNBOUND')}">未割当を確認</a>
+        </div>
+
+        <!-- ===== 入金レポート ===== -->
+        <div class="card">
+            <div class="card-top">
+                <span class="card-title">入金レポート</span>
+
+                <!-- scope toggle: 日 / 月 -->
+                <div class="scope-tabs" role="tablist">
+                    <a role="tab"
+                       th:href="@{/manager/dashboard(nyukinDate=${stats.nyukinDate != null} ? ${stats.nyukinDate} : ${stats.sendDate}, sendDate=${stats.sendDate})}"
+                       th:classappend="${stats.nyukinScope == 'day'} ? 'active' : ''">日</a>
+                    <a role="tab"
+                       th:href="@{/manager/dashboard(nyukinMonth=${stats.nyukinMonthValue != ''} ? ${stats.nyukinMonthValue} : ${#temporals.format(#temporals.createNow(), 'yyyy-MM')}, sendDate=${stats.sendDate})}"
+                       th:classappend="${stats.nyukinScope == 'month'} ? 'active' : ''">月</a>
+                </div>
+
+                <!-- Day scope input -->
+                <form th:if="${stats.nyukinScope == 'day'}" method="get" th:action="@{/manager/dashboard}"
+                      class="inline-form">
+                    <input type="date" name="nyukinDate" th:value="${stats.nyukinDate}"/>
+                    <input type="hidden" name="sendDate" th:value="${stats.sendDate}"/>
+                    <button type="submit" class="btn-show">表示</button>
+                </form>
+
+                <!-- Month scope input -->
+                <form th:if="${stats.nyukinScope == 'month'}" method="get" th:action="@{/manager/dashboard}"
+                      class="inline-form">
+                    <input type="month" name="nyukinMonth" th:value="${stats.nyukinMonthValue}"/>
+                    <input type="hidden" name="sendDate" th:value="${stats.sendDate}"/>
+                    <button type="submit" class="btn-show">表示</button>
+                </form>
+
+                <div class="chips">
+                    <div class="chip money">
+                        <span class="cl"
+                              th:text="${stats.nyukinScope == 'month'}
+                                       ? '入金合計 (' + ${stats.nyukinMonthValue} + ')'
+                                       : '入金合計 (' + ${stats.nyukinDate} + ')'">入金合計</span>
+                        <span class="cv" th:text="'¥' + ${#numbers.formatInteger(stats.totalNyukin, 1, 'COMMA')}">¥0</span>
+                    </div>
+                </div>
+            </div>
+            <div class="tbl-scroll">
+                <table class="d">
+                    <thead>
+                    <tr>
+                        <th class="lbl">表示名</th>
+                        <th class="user-col" th:each="u : ${stats.users}">
+                            <!-- Click goes to ユーザー詳細 (user detail), not the thread workspace. -->
+                            <a th:href="@{'/manager/users/' + ${u.id}}"
+                               th:text="${u.displayName != null and !u.displayName.isEmpty()} ? ${u.displayName} : ${u.email}">name</a>
+                        </th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr class="nyukin-total">
+                        <td class="lbl">入金額</td>
+                        <td th:each="u : ${stats.users}"
+                            th:with="amt=${stats.nyukinByUserId.getOrDefault(u.id, T(java.math.BigDecimal).ZERO)},
+                                     details=${stats.nyukinDetailByUserId.get(u.id)}"
+                            th:classappend="${amt.signum() > 0} ? 'money' : 'money zero'"
+                            th:attr="data-user-id=${u.id},
+                                     data-user-name=${u.displayName != null and !u.displayName.isEmpty()} ? ${u.displayName} : ${u.email}"
+                            th:text="${amt.signum() > 0} ? ('¥' + ${#numbers.formatInteger(amt, 1, 'COMMA')}) : '-'">
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="detail" id="nyukinDetail">
+                <div class="detail-title" id="detailTitle"></div>
+                <table class="ptbl">
+                    <thead>
+                    <tr><th>No.</th><th>金額</th><th>方法</th><th>日時</th></tr>
+                    </thead>
+                    <tbody id="payerBody"></tbody>
+                </table>
+            </div>
+
+            <!-- Per-user payment details, consumed by JS on cell click.
+                 Use th:inline="javascript" so Thymeleaf escapes any '</', non-ASCII, and
+                 quote characters automatically — a future user-supplied label can't break
+                 out of the script block via "</script>". -->
+            <script th:inline="javascript">
+                /*<![CDATA[*/
+                window.__nyukinDetailData = /*[[${nyukinDetailJson}]]*/ "{}";
+                /*]]>*/
+            </script>
+        </div>
+
+        <!-- ===== 送信数 (時間別 / 日別 / 月別 切替) ===== -->
+        <div class="card">
+            <form method="get" th:action="@{/manager/dashboard}" class="card-top">
+                <span class="card-title"
+                      th:text="${sendScope == 'day' ? '日別送信数' : (sendScope == 'month' ? '月別送信数' : '時間別送信数')}">送信数</span>
+
+                <!-- Scope toggle (時間別 / 日別 / 月別). Submitting the form on change so the
+                     server can pick the right query window. -->
+                <select name="sendScope" onchange="this.form.submit()" class="text-xs">
+                    <option value="hour"  th:selected="${sendScope == 'hour'}">時間別</option>
+                    <option value="day"   th:selected="${sendScope == 'day'}">日別</option>
+                    <option value="month" th:selected="${sendScope == 'month'}">月別</option>
+                </select>
+
+                <!-- Per-scope range inputs -->
+                <span th:if="${sendScope == 'hour'}">
+                    <label class="text-xs text-slate-500">日付</label>
+                    <input type="date" name="sendDate" th:value="${stats.sendDate}"/>
+                </span>
+                <span th:if="${sendScope == 'day'}">
+                    <label class="text-xs text-slate-500">月</label>
+                    <input type="month" name="sendMonth" th:value="${sendMonthValue}"/>
+                </span>
+                <span th:if="${sendScope == 'month'}">
+                    <label class="text-xs text-slate-500">年</label>
+                    <input type="number" name="sendYear" min="2020" max="2099"
+                           style="width:6em;" th:value="${sendYearValue}"/>
+                </span>
+
+                <input type="hidden" name="nyukinDate" th:if="${stats.nyukinDate != null}" th:value="${stats.nyukinDate}"/>
+                <input type="hidden" name="nyukinMonth" th:if="${stats.nyukinMonth != null}" th:value="${stats.nyukinMonthValue}"/>
+                <button type="submit" class="btn-show">表示</button>
+                <div class="chips">
+                    <div class="chip send">
+                        <span class="cl">送信合計</span>
+                        <span class="cv" th:text="${#numbers.formatInteger(sendTotalForScope, 1, 'COMMA')}">0</span>
+                    </div>
+                    <div class="chip ng">
+                        <span class="cl">NG合計</span>
+                        <span class="cv" th:text="${#numbers.formatInteger(ngTotalForScope, 1, 'COMMA')}">0</span>
+                    </div>
+                </div>
+            </form>
+            <script th:inline="javascript">
+                /*<![CDATA[*/
+                window.__hourlyChartData = /*[[${hourlyChartJson}]]*/ "{\"labels\":[],\"sent\":[],\"ng\":[]}";
+                /*]]>*/
+            </script>
+
+            <!-- Single horizontal-scroll wrapper containing BOTH the chart and the table.
+                 The inner block sizes to {@code max-content} so when many bucket columns push
+                 the table past the card width, the chart scrolls along with it — keeping
+                 bar X-positions vertically aligned with the data columns below them.
+                 The canvas wrapper has 76px left padding to match the table's 「指標」 column
+                 width; Chart.js Y-axis is hidden so the plot area uses the full canvas width. -->
+            <div class="tbl-scroll">
+                <div style="min-width:100%; width:max-content;">
+                    <div style="padding:10px 0 4px 76px;">
+                        <canvas id="hourlyChart" style="display:block;width:100%;height:200px;"></canvas>
+                    </div>
+                    <table class="d">
+                        <thead>
+                        <tr>
+                            <th class="lbl">指標</th>
+                            <th th:each="h : ${sendBuckets}" th:text="${h.label}">00:00</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            <td class="lbl">送信数</td>
+                            <td th:each="h : ${sendBuckets}"
+                                th:classappend="${h.sent > 0} ? 'send-v' : 'zero'"
+                                th:text="${#numbers.formatInteger(h.sent, 1, 'COMMA')}">0</td>
+                        </tr>
+                        <tr>
+                            <td class="lbl">NG数</td>
+                            <td th:each="h : ${sendBuckets}"
+                                th:classappend="${h.ng > 0} ? 'ng-v' : 'zero'"
+                                th:text="${#numbers.formatInteger(h.ng, 1, 'COMMA')}">0</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== 共有メモ ===== -->
+        <div class="card memo-card">
+            <div class="card-top">
+                <span class="card-title">共有メモ</span>
+                <span class="memo-count" id="memoCount">0件</span>
+                <button type="button" class="btn-show" id="btnOpenAdd">＋ 追加</button>
+            </div>
+            <div class="add-form" id="addForm">
+                <input type="text" id="newTitle" placeholder="タイトル"/>
+                <textarea id="newContent" placeholder="メモ内容を入力..."></textarea>
+                <div class="form-btns">
+                    <button type="button" class="btn-show" id="btnSaveNew">保存</button>
+                    <button type="button" class="btn-cancel-add" id="btnCancelAdd">キャンセル</button>
+                </div>
+            </div>
+            <div class="memo-list" id="memoList"></div>
+        </div>
+
+        <!-- ===== 直近のメッセージ (送信/受信) ===== -->
+        <div class="card">
+            <div class="card-top">
+                <span class="card-title">直近のメッセージ</span>
+                <span class="text-xs text-slate-500 ml-2">送受信 混在 (最新10件)</span>
+            </div>
+            <div class="tbl-scroll">
+                <table class="min-w-full divide-y divide-slate-200" style="font-size:.8rem;">
+                    <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+                    <tr>
+                        <th class="px-3 py-2 text-left" style="width:100px;">種別</th>
+                        <th class="px-3 py-2 text-left" style="width:220px;">ユーザー</th>
+                        <th class="px-3 py-2 text-left">件名</th>
+                        <th class="px-3 py-2 text-left" style="width:140px;">日時</th>
+                    </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                    <tr th:if="${stats.recentMessages == null or stats.recentMessages.empty}">
+                        <td colspan="4" class="px-3 py-6 text-center text-slate-400">メッセージはまだありません</td>
+                    </tr>
+                    <tr th:each="m : ${stats.recentMessages}">
+                        <td class="px-3 py-1.5">
+                            <span th:if="${m.direction == 'OUT'}" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">送信</span>
+                            <span th:if="${m.direction == 'IN' and m.channel == 'EMAIL'}" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">メール返信</span>
+                            <span th:if="${m.direction == 'IN' and m.channel == 'WEB_REPLY'}" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-sky-100 text-sky-700">Web返信</span>
+                        </td>
+                        <td class="px-3 py-1.5">
+                            <a class="text-blue-600 hover:underline"
+                               th:href="@{'/manager/users/' + ${m.userId} + '/thread'}" target="_blank"
+                               th:text="${userLabels.get(m.userId)} ?: ('ID=' + ${m.userId})">name</a>
+                        </td>
+                        <td class="px-3 py-1.5 text-slate-700 truncate" th:text="${m.subject}"></td>
+                        <td class="px-3 py-1.5 text-slate-500 text-xs" th:text="${m.createdAt != null} ? ${#temporals.format(m.createdAt, 'MM-dd HH:mm')} : '-'"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+    (function () {
+        // Source: window.__nyukinDetailData (set by Thymeleaf JS-inline above).
+        let details = {};
+        try { details = JSON.parse(window.__nyukinDetailData || '{}'); } catch (e) { details = {}; }
+
+        const detail = document.getElementById('nyukinDetail');
+        const title = document.getElementById('detailTitle');
+        const body = document.getElementById('payerBody');
+        let active = null;
+
+        function close() {
+            if (active) active.classList.remove('active');
+            active = null;
+            detail.classList.remove('show');
+        }
+
+        function fmtYen(n) { return '¥' + Number(n).toLocaleString(); }
+        function fmtTime(iso) {
+            if (!iso) return '-';
+            return String(iso).replace('T', ' ').slice(0, 16);
+        }
+
+        document.querySelectorAll('td.money').forEach(function (td) {
+            if (td.classList.contains('zero')) return;
+            td.addEventListener('click', function () {
+                if (active === td) { close(); return; }
+                document.querySelectorAll('td.money').forEach(t => t.classList.remove('active'));
+                td.classList.add('active'); active = td;
+
+                const uid = td.getAttribute('data-user-id');
+                const name = td.getAttribute('data-user-name') || '';
+                const rows = details[uid] || [];
+                title.textContent = name + '・入金明細（' + rows.length + '件）';
+                body.innerHTML = '';
+                rows.forEach(function (p, i) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td>' + (i + 1) + '</td>'
+                        + '<td class="pa">' + fmtYen(p.amount) + '</td>'
+                        + '<td>' + (p.paymentMethod || '-') + '</td>'
+                        + '<td class="pt">' + fmtTime(p.paidAt) + '</td>';
+                    body.appendChild(tr);
+                });
+                detail.classList.add('show');
+            });
+        });
+    })();
+
+    // ===== Shared memo =====
+    (function () {
+        const API = '/manager/api/shared-memos';
+        const list = document.getElementById('memoList');
+        const countEl = document.getElementById('memoCount');
+        const addForm = document.getElementById('addForm');
+        const newTitle = document.getElementById('newTitle');
+        const newContent = document.getElementById('newContent');
+
+        function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+        async function fetchJson(url, opts) {
+            const r = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.status === 204 ? null : r.json();
+        }
+
+        async function refresh() {
+            try {
+                const memos = await fetchJson(API);
+                countEl.textContent = memos.length + '件';
+                list.innerHTML = '';
+                if (memos.length === 0) {
+                    list.innerHTML = '<div class="memo-empty">メモがありません。「＋ 追加」から作成してください。</div>';
+                    return;
+                }
+                memos.forEach(function (m) {
+                    const item = document.createElement('div');
+                    item.className = 'memo-item';
+                    item.innerHTML =
+                        '<div class="memo-item-header">' +
+                          '<span class="memo-item-title">' + esc(m.title || '（タイトルなし）') + '</span>' +
+                          '<span class="memo-item-date">' + esc(m.updatedAt || '') + '</span>' +
+                          '<div class="memo-item-actions">' +
+                            '<button class="btn-edit" type="button">編集</button>' +
+                            '<button class="btn-del" type="button">削除</button>' +
+                          '</div>' +
+                        '</div>' +
+                        '<div class="memo-item-content"></div>' +
+                        '<div class="memo-edit-box">' +
+                          '<input type="text" class="e-title"/>' +
+                          '<textarea class="e-content"></textarea>' +
+                          '<div class="edit-btns">' +
+                            '<button class="btn-save" type="button">保存</button>' +
+                            '<button class="btn-cancel" type="button">キャンセル</button>' +
+                          '</div>' +
+                        '</div>';
+                    item.querySelector('.memo-item-content').textContent = m.content || '';
+                    item.querySelector('.e-title').value = m.title || '';
+                    item.querySelector('.e-content').value = m.content || '';
+
+                    const editBox = item.querySelector('.memo-edit-box');
+                    item.querySelector('.btn-edit').addEventListener('click', function () {
+                        document.querySelectorAll('.memo-edit-box').forEach(b => b.classList.remove('open'));
+                        editBox.classList.add('open');
+                        item.querySelector('.e-title').focus();
+                    });
+                    item.querySelector('.btn-cancel').addEventListener('click', function () {
+                        editBox.classList.remove('open');
+                    });
+                    item.querySelector('.btn-save').addEventListener('click', async function () {
+                        const body = { title: item.querySelector('.e-title').value.trim(),
+                                       content: item.querySelector('.e-content').value };
+                        await fetchJson(API + '/' + m.id, { method: 'PUT', body: JSON.stringify(body) });
+                        refresh();
+                    });
+                    item.querySelector('.btn-del').addEventListener('click', async function () {
+                        if (!confirm('このメモを削除しますか？')) return;
+                        await fetchJson(API + '/' + m.id, { method: 'DELETE' });
+                        refresh();
+                    });
+                    list.appendChild(item);
+                });
+            } catch (e) {
+                list.innerHTML = '<div class="memo-empty">メモの読み込みに失敗しました: ' + esc(e.message) + '</div>';
+            }
+        }
+
+        document.getElementById('btnOpenAdd').addEventListener('click', function () {
+            addForm.classList.toggle('open');
+            if (addForm.classList.contains('open')) newTitle.focus();
+        });
+        document.getElementById('btnCancelAdd').addEventListener('click', function () {
+            addForm.classList.remove('open');
+            newTitle.value = ''; newContent.value = '';
+        });
+        document.getElementById('btnSaveNew').addEventListener('click', async function () {
+            const title = newTitle.value.trim();
+            const content = newContent.value.trim();
+            if (!title && !content) { alert('タイトルまたはメモ内容を入力してください'); return; }
+            await fetchJson(API, { method: 'POST', body: JSON.stringify({ title: title, content: content }) });
+            newTitle.value = ''; newContent.value = '';
+            addForm.classList.remove('open');
+            refresh();
+        });
+
+        refresh();
+    })();
+    </script>
+
+    <!-- Chart.js (CDN) — used by the 時間別送信数 chart. Loaded once at end of body. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+    (function () {
+        var canvas = document.getElementById('hourlyChart');
+        if (!canvas || typeof Chart !== 'function') return;
+        var data;
+        try { data = JSON.parse(window.__hourlyChartData || '{}'); } catch (e) { return; }
+        if (!data.labels || !data.labels.length) return;
+        new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.labels,
+                datasets: [
+                    { label: '送信数', data: data.sent, backgroundColor: 'rgba(22,163,74,0.7)', borderRadius: 3 },
+                    { label: 'NG',     data: data.ng,   backgroundColor: 'rgba(220,38,38,0.7)', borderRadius: 3 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                // No internal padding — alignment with the table below is achieved by the
+                // chart's outer 76px left padding (matches table's 「指標」column width)
+                // and by hiding the y-axis so the plot area uses the full canvas width.
+                layout: { padding: { left: 0, right: 0, top: 0, bottom: 0 } },
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                scales: {
+                    x: { ticks: { font: { size: 10 }, maxRotation: 0 }, grid: { display: false } },
+                    y: { display: false, beginAtZero: true }
+                }
+            }
+        });
+    })();
+    </script>
+</section>
+</body>
+</html>

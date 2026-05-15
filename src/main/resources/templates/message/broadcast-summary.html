@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>一斉送信サマリー</title>
+    <style>
+        .list-page-footer {
+            flex-shrink:0; background:#fff; border-top:1px solid #e2e8f0;
+            padding:9px 20px; display:flex; align-items:center; justify-content:flex-end; gap:12px;
+            box-shadow:0 -1px 4px rgba(0,0,0,.05); margin-top:12px;
+        }
+        .list-page-footer .selected-count { font-size:.78rem; color:#64748b; }
+        .list-page-footer .btn-bulk-delete {
+            font-family:inherit; font-size:.82rem; font-weight:700;
+            padding:7px 16px; border-radius:6px; border:none; color:#fff; cursor:pointer; white-space:nowrap;
+            background:#dc2626; box-shadow:0 1px 3px rgba(220,38,38,.25);
+        }
+        .list-page-footer .btn-bulk-delete:hover:not(:disabled) { background:#b91c1c; }
+        .list-page-footer .btn-bulk-delete:disabled { background:#94a3b8; cursor:not-allowed; box-shadow:none; }
+    </style>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">一斉送信サマリー</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
+           th:href="@{/manager/messages/broadcast}">← 一斉送信返信履歴へ</a>
+    </div>
+
+    <form id="bcastBulkForm" method="post">
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left" style="width: 36px;"><input type="checkbox" id="bcastCheckAll" title="全選択"/></th>
+                <th class="px-3 py-2 text-left" style="width: 60px;">No</th>
+                <th class="px-3 py-2 text-left">件名</th>
+                <th class="px-3 py-2 text-left">ステータス</th>
+                <th class="px-3 py-2 text-right">対象</th>
+                <th class="px-3 py-2 text-right">送信</th>
+                <th class="px-3 py-2 text-right">失敗</th>
+                <th class="px-3 py-2 text-left">予約日時</th>
+                <th class="px-3 py-2 text-left">作成日時</th>
+                <th class="px-3 py-2 text-right">操作</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${broadcasts.totalElements == 0}">
+                <td colspan="10" class="px-3 py-6 text-center text-slate-400">一斉送信はまだ作成されていません</td>
+            </tr>
+            <tr th:each="b,it : ${broadcasts.content}" class="hover:bg-slate-50">
+                <td class="px-3 py-2"><input type="checkbox" class="bcast-row-item" name="ids" th:value="${b.id}"/></td>
+                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${broadcasts.number * broadcasts.size + it.count}"></code></td>
+                <td class="px-3 py-2"><a class="text-blue-600 hover:underline" th:href="@{'/manager/messages/broadcast/' + ${b.id}}" th:text="${b.subject} ?: '(件名なし)'"></a></td>
+                <td class="px-3 py-2">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                          th:classappend="${b.status == 'COMPLETED'} ? 'bg-emerald-100 text-emerald-700'
+                                           : (${b.status == 'SENDING'} ? 'bg-blue-100 text-blue-700'
+                                           : (${b.status == 'SCHEDULED'} ? 'bg-sky-100 text-sky-700'
+                                           : (${b.status == 'CANCELLED'} ? 'bg-slate-200 text-slate-600' : 'bg-slate-100 text-slate-600')))"
+                          th:text="${b.status}"></span>
+                </td>
+                <td class="px-3 py-2 text-right text-slate-700" th:text="${b.totalCount}"></td>
+                <td class="px-3 py-2 text-right text-emerald-600 font-medium" th:text="${b.sentCount}"></td>
+                <td class="px-3 py-2 text-right text-red-600 font-medium" th:text="${b.failedCount}"></td>
+                <td class="px-3 py-2 text-xs text-slate-500">
+                    <span th:if="${b.scheduledAt != null}" th:text="${#temporals.format(b.scheduledAt, 'yyyy-MM-dd HH:mm')}"></span>
+                    <span th:unless="${b.scheduledAt != null}" class="text-slate-400">即時</span>
+                </td>
+                <td class="px-3 py-2 text-xs text-slate-500" th:text="${#temporals.format(b.createdAt, 'yyyy-MM-dd HH:mm')}"></td>
+                <td class="px-3 py-2 text-right">
+                    <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded" th:href="@{'/manager/messages/broadcast/' + ${b.id}}">詳細</a>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="list-page-footer">
+        <span class="selected-count" id="bcastSelectedCount"></span>
+        <button type="submit" class="btn-bulk-delete" id="btnBcastDelete" disabled
+                formaction="/manager/messages/broadcast/bulk-delete"
+                onclick="return confirmBulkDeleteBcast();">選択削除</button>
+    </div>
+    </form>
+<script>
+(function () {
+    var checkAll = document.getElementById('bcastCheckAll');
+    var btnDelete = document.getElementById('btnBcastDelete');
+    var countLabel = document.getElementById('bcastSelectedCount');
+    function rows() { return document.querySelectorAll('.bcast-row-item'); }
+    function refresh() {
+        var checked = [].filter.call(rows(), function (c) { return c.checked; });
+        var has = checked.length > 0;
+        countLabel.textContent = has ? (checked.length + ' 件選択中') : '';
+        btnDelete.disabled = !has;
+        if (checkAll) {
+            checkAll.indeterminate = has && checked.length < rows().length;
+            checkAll.checked = rows().length > 0 && checked.length === rows().length;
+        }
+    }
+    if (checkAll) checkAll.addEventListener('change', function () {
+        [].forEach.call(rows(), function (c) { c.checked = checkAll.checked; });
+        refresh();
+    });
+    document.addEventListener('change', function (e) {
+        if (e.target.classList && e.target.classList.contains('bcast-row-item')) refresh();
+    });
+    window.confirmBulkDeleteBcast = function () {
+        var n = [].filter.call(rows(), function (c) { return c.checked; }).length;
+        if (n === 0) return false;
+        if (!confirm('選択した ' + n + ' 件の一斉送信を削除します。よろしいですか?')) return false;
+        if (!confirm('本当に削除してよろしいですか? この操作は取り消せません。')) return false;
+        var pw = prompt('管理者パスワードを入力してください');
+        if (!pw) return false;
+        var f = document.getElementById('bcastBulkForm');
+        var h = f.querySelector('input[name="confirmPassword"]');
+        if (!h) { h = document.createElement('input'); h.type='hidden'; h.name='confirmPassword'; f.appendChild(h); }
+        h.value = pw;
+        return true;
+    };
+})();
+</script>
+
+    <nav class="mt-4" th:if="${broadcasts.totalPages > 1}">
+        <ul class="flex items-center gap-1 text-sm">
+            <li>
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${broadcasts.first} ? 'opacity-50 pointer-events-none'"
+                   th:href="@{/manager/messages/broadcast/summary(page=${broadcasts.number - 1})}">前へ</a>
+            </li>
+            <li th:each="i : ${#numbers.sequence(0, broadcasts.totalPages - 1)}">
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${i == broadcasts.number} ? 'bg-blue-600 text-white border-blue-600'"
+                   th:href="@{/manager/messages/broadcast/summary(page=${i})}" th:text="${i + 1}"></a>
+            </li>
+            <li>
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${broadcasts.last} ? 'opacity-50 pointer-events-none'"
+                   th:href="@{/manager/messages/broadcast/summary(page=${broadcasts.number + 1})}">次へ</a>
+            </li>
+        </ul>
+    </nav>
+</section>
+</body>
+</html>

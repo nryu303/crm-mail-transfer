@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title th:text="'一斉送信 ' + (${broadcast.title} ?: '')">一斉送信</title>
+    <meta th:if="${running}" http-equiv="refresh" content="5"/>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1" th:text="'一斉送信 ' + (${broadcast.title} ?: '')"></h1>
+        <a class="text-sm text-blue-600 hover:underline" th:href="@{/manager/messages/broadcast}">一覧に戻る</a>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 mb-4" style="max-width: 820px;">
+        <div class="flex items-center mb-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mr-2"
+                  th:classappend="${broadcast.status == 'COMPLETED'} ? 'bg-emerald-100 text-emerald-700'
+                                   : (${broadcast.status == 'SENDING'} ? 'bg-blue-100 text-blue-700'
+                                   : (${broadcast.status == 'SCHEDULED'} ? 'bg-sky-100 text-sky-700'
+                                   : (${broadcast.status == 'CANCELLED'} ? 'bg-slate-200 text-slate-600' : 'bg-slate-100 text-slate-600')))"
+                  th:text="${broadcast.status}"></span>
+            <span class="text-xs text-slate-500">
+                作成: <span th:text="${#temporals.format(broadcast.createdAt, 'yyyy-MM-dd HH:mm')}"></span>
+            </span>
+            <span class="ml-auto text-xs text-slate-500" th:if="${running}">
+                5秒ごとに自動更新しています…
+            </span>
+        </div>
+
+        <div class="w-full bg-slate-200 rounded overflow-hidden mb-2" style="height: 24px;">
+            <div class="h-full flex items-center justify-center text-xs font-medium text-white transition-all"
+                 th:classappend="${broadcast.failedCount > 0} ? 'bg-amber-500' : 'bg-blue-600'"
+                 th:style="'width: ' + ${donePct} + '%'"
+                 th:text="${donePct} + '%'"></div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-3 text-center mt-4">
+            <div><div class="text-xs text-slate-500">対象</div><div class="text-2xl font-bold" th:text="${broadcast.totalCount}"></div></div>
+            <div><div class="text-xs text-slate-500">送信済み</div><div class="text-2xl font-bold text-emerald-600" th:text="${broadcast.sentCount}"></div></div>
+            <div><div class="text-xs text-slate-500">失敗</div><div class="text-2xl font-bold text-red-600" th:text="${broadcast.failedCount}"></div></div>
+            <div><div class="text-xs text-slate-500">残り</div><div class="text-2xl font-bold" th:text="${broadcast.totalCount - doneCount}"></div></div>
+        </div>
+
+        <div class="mt-4" th:if="${broadcast.status == 'SENDING' or broadcast.status == 'SCHEDULED'}">
+            <form method="post" th:action="@{'/manager/messages/broadcast/' + ${broadcast.id} + '/cancel'}"
+                  onsubmit="return confirm('送信をキャンセルします。未送信のメッセージは取り消されます。よろしいですか?');">
+                <button type="submit" class="inline-flex items-center px-3 py-2 text-sm border border-red-500 text-red-600 hover:bg-red-50 rounded-md">キャンセル</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-hidden" style="max-width: 820px;">
+        <div class="px-4 py-2 text-xs text-slate-500 bg-slate-50 border-b border-slate-200">内容</div>
+        <table class="w-full text-sm">
+            <tbody class="divide-y divide-slate-100">
+                <!-- The broadcast form has only a "subject" input; title is auto-populated from
+                     subject when not explicitly set. Show the title row only when it actually
+                     differs from the subject so the detail screen doesn't render duplicates. -->
+                <tr th:if="${broadcast.title != null and broadcast.title != broadcast.subject}">
+                    <th class="px-4 py-2 text-left text-slate-600 bg-slate-50" style="width: 180px;">タイトル</th>
+                    <td class="px-4 py-2" th:text="${broadcast.title}"></td>
+                </tr>
+                <tr><th class="px-4 py-2 text-left text-slate-600 bg-slate-50" style="width: 180px;">件名</th><td class="px-4 py-2" th:text="${broadcast.subject}"></td></tr>
+                <tr><th class="px-4 py-2 text-left text-slate-600 bg-slate-50">本文</th><td class="px-4 py-2" style="white-space: pre-wrap;" th:text="${broadcast.bodyText}"></td></tr>
+                <tr><th class="px-4 py-2 text-left text-slate-600 bg-slate-50">対象フィルタ</th><td class="px-4 py-2 text-xs text-slate-500" th:text="${broadcast.targetFilter}"></td></tr>
+                <tr><th class="px-4 py-2 text-left text-slate-600 bg-slate-50">レート</th><td class="px-4 py-2"><span th:text="${broadcast.ratePerMinute}"></span> 件/分</td></tr>
+                <tr th:if="${broadcast.scheduledAt != null}">
+                    <th class="px-4 py-2 text-left text-slate-600 bg-slate-50">予約日時</th><td class="px-4 py-2" th:text="${#temporals.format(broadcast.scheduledAt, 'yyyy-MM-dd HH:mm')}"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

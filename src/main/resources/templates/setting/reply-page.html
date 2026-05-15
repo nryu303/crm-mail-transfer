@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>返信画面設定</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">返信画面設定</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">設定に戻る</a>
+    </div>
+
+    <p class="text-sm text-slate-500 mb-4">
+        ここで設定した内容は、ユーザー宛の返信ページ (<code class="bg-slate-100 px-1 rounded">/reply/{token}</code>) 全体の共通ヘッダーとフッター、追加CSSとして適用されます。
+        各ユーザーのメモ欄が空の場合はここで設定したヘッダーが使われます。
+    </p>
+    <div class="max-w-3xl rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-4">
+        <strong>HTMLは生のまま入力してください。</strong>
+        <code class="bg-white px-1 rounded">&lt;h1&gt;...&lt;/h1&gt;</code> などのタグはそのまま記述します。
+        WYSIWYG ではなくテキストエディタとして動作するため、貼り付けた HTML が二重エスケープされる心配はありません。
+    </div>
+
+    <form method="post" th:action="@{/manager/settings/reply-page}" th:object="${form}"
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6" style="max-width: 960px;">
+
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-slate-800 mb-1">共通ヘッダーHTML</label>
+            <p class="text-xs text-slate-500 mb-2">
+                返信ページの上部に表示されるHTML。画像、装飾タグ、リンクが使えます。
+            </p>
+            <textarea id="headerEditor" th:field="*{defaultHeaderHtml}" rows="14"
+                      class="tw-input font-mono"
+                      style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:280px;"
+                      placeholder="例) &lt;!DOCTYPE html&gt;&#10;&lt;html lang=&quot;ja&quot;&gt;&#10;..."></textarea>
+        </div>
+
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-slate-800 mb-1">共通フッターHTML</label>
+            <p class="text-xs text-slate-500 mb-2">返信ページの下部に表示されるHTML。</p>
+            <textarea id="footerEditor" th:field="*{footerHtml}" rows="6"
+                      class="tw-input font-mono"
+                      style="white-space:pre; font-size:0.78rem; line-height:1.45;"></textarea>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-semibold text-slate-800 mb-1">追加CSS</label>
+            <p class="text-xs text-slate-500 mb-2">返信ページに適用される追加スタイル。通常のCSS構文で記述します。</p>
+            <textarea class="tw-input font-mono" rows="8" th:field="*{defaultCss}"
+                      placeholder=".reply-banner { background: #003366; }"></textarea>
+        </div>
+
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" class="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" id="requireLogin" th:field="*{requireLogin}"/>
+            <label class="ml-2 text-sm text-slate-700" for="requireLogin">ログインを必須にする (ユーザーのログインID/パスワードを要求)</label>
+        </div>
+        <p class="text-xs text-slate-500 mb-4 ml-6">将来の拡張用。現時点では設定のみ保存されます。</p>
+
+        <div class="flex items-center gap-3">
+            <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm">保存する</button>
+            <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">キャンセル</a>
+        </div>
+    </form>
+
+</section>
+</body>
+</html>

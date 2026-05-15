@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>広告グループ詳細</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">
+            グループ: <span th:text="${groupName}"></span>
+        </h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2"
+           th:href="@{/manager/ad-codes}">一覧に戻る</a>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm"
+           th:href="@{/manager/ad-codes/new}">新規発行</a>
+    </div>
+
+    <!-- Group-level URL + per-group Basic Auth credentials panel -->
+    <div class="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div class="flex items-start gap-3 mb-3">
+            <div class="flex-1">
+                <h2 class="text-sm font-semibold text-blue-900 mb-1">代理店向けURL (このグループ全体)</h2>
+                <code class="block bg-white border border-blue-300 rounded px-3 py-2 text-sm break-all"
+                      th:text="${externalGroupUrl}"></code>
+            </div>
+            <form method="post" th:action="@{/manager/ad-codes/group/rotate-auth}"
+                  onsubmit="return confirm('このグループのID/パスワードを再発行します。代理店に渡してある現クレデンシャルは即無効化されます。よろしいですか?');">
+                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                <input type="hidden" name="name" th:value="${groupName}"/>
+                <button type="submit" class="inline-flex items-center px-3 py-1.5 text-xs border border-blue-300 bg-white text-blue-700 hover:bg-blue-100 rounded">
+                    ID/PW再発行
+                </button>
+            </form>
+        </div>
+        <div class="bg-white border border-blue-300 rounded p-3 mb-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div>
+                    <div class="text-xs text-blue-900 font-semibold mb-1">Basic認証 ID</div>
+                    <code class="block bg-slate-100 px-2 py-1 rounded" th:text="${groupAuthUser}"></code>
+                </div>
+                <div>
+                    <div class="text-xs text-blue-900 font-semibold mb-1">Basic認証 パスワード</div>
+                    <code class="block bg-slate-100 px-2 py-1 rounded" th:text="${groupAuthPassword}"></code>
+                </div>
+            </div>
+        </div>
+        <p class="text-xs text-blue-800">
+            このグループ専用のID/パスワードです。他グループのURLにはアクセスできません。
+            URLとIDをセットで代理店にお渡しください。
+        </p>
+    </div>
+
+    <!-- Codes within this group -->
+    <h2 class="text-lg font-semibold text-slate-800 mb-2">所属広告コード一覧</h2>
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left" style="width: 50px;">No</th>
+                <th class="px-3 py-2 text-left">広告コード</th>
+                <th class="px-3 py-2 text-left">登録人数</th>
+                <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性</th>
+                <th class="px-3 py-2 text-left" style="color:#dc2626;">女性</th>
+                <th class="px-3 py-2 text-left">入金額 (累計)</th>
+                <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性課金</th>
+                <th class="px-3 py-2 text-left" style="color:#dc2626;">女性課金</th>
+                <th class="px-3 py-2 text-left">登録日</th>
+                <th class="px-3 py-2 text-left">メモ</th>
+                <th class="px-3 py-2 text-left" style="width: 70px;">状態</th>
+                <th class="px-3 py-2 text-right" style="width: 90px;">操作</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${summaries.empty}">
+                <td colspan="12" class="px-3 py-6 text-center text-slate-400">このグループに属する広告コードはまだありません</td>
+            </tr>
+            <tr th:each="s,it : ${summaries}" class="hover:bg-slate-50">
+                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                <td class="px-3 py-2"><a class="text-blue-600 hover:underline" th:href="@{'/manager/ad-codes/' + ${s.adCode.id}}">
+                    <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${s.adCode.code}"></code></a></td>
+                <td class="px-3 py-2 text-slate-700" th:text="${s.signupCount} + ' 人'"></td>
+                <td class="px-3 py-2" style="color:#1d4ed8;" th:text="${s.signupMale} + ' 人'"></td>
+                <td class="px-3 py-2" style="color:#dc2626;" th:text="${s.signupFemale} + ' 人'"></td>
+                <td class="px-3 py-2 text-slate-700" th:text="'¥ ' + ${#numbers.formatInteger(s.paidTotal, 1, 'COMMA')}"></td>
+                <td class="px-3 py-2" style="color:#1d4ed8;" th:text="'¥ ' + ${#numbers.formatInteger(s.paidMale, 1, 'COMMA')}"></td>
+                <td class="px-3 py-2" style="color:#dc2626;" th:text="'¥ ' + ${#numbers.formatInteger(s.paidFemale, 1, 'COMMA')}"></td>
+                <td class="px-3 py-2 text-xs text-slate-500"
+                    th:text="${#temporals.format(s.adCode.createdAt, 'yyyy-MM-dd')}"></td>
+                <td class="px-3 py-2 text-xs text-slate-500" style="max-width:200px; word-break:break-word;" th:text="${s.adCode.memo}"></td>
+                <td class="px-3 py-2">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                          th:classappend="${s.adCode.isActive} ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'"
+                          th:text="${s.adCode.isActive} ? '有効' : '無効'"></span>
+                </td>
+                <td class="px-3 py-2 text-right">
+                    <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
+                       th:href="@{'/manager/ad-codes/' + ${s.adCode.id}}">詳細</a>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

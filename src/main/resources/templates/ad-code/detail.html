@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>広告コード詳細</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1" th:text="${adCode.name}"></h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
+           th:href="@{/manager/ad-codes}">一覧に戻る</a>
+    </div>
+
+    <!-- External URL panel — Basic Auth credentials are managed globally on the list page. -->
+    <div class="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h2 class="text-sm font-semibold text-blue-900 mb-2">代理店ダッシュボード</h2>
+        <div class="text-xs text-blue-900 mb-1">グループ「<span th:text="${adCode.name}"></span>」の代理店向けURL (このグループに属する全広告コードを集計表示):</div>
+        <code class="block bg-white border border-blue-300 rounded px-3 py-2 text-sm break-all mb-3" th:text="${externalGroupUrl}"></code>
+        <div class="text-xs text-blue-900 mb-1">この広告コード単独の日別ドリルダウン:</div>
+        <code class="block bg-white border border-blue-300 rounded px-3 py-2 text-sm break-all mb-2" th:text="${externalCodeUrl}"></code>
+        <p class="text-xs text-blue-800">
+            アクセスにはBasic認証が必要です。ID/パスワードは
+            <a class="underline" th:href="@{/manager/ad-codes}">広告設定 一覧画面 上部</a>
+            で管理できます。
+        </p>
+    </div>
+
+    <!-- Edit form. The action row (delete + 更新) lives OUTSIDE this form because the
+         delete needs its own POST target. We close the update form before the action row
+         and let the 更新 submit button reach back via the HTML5 `form` attribute by id. -->
+    <form id="adCodeUpdateForm" method="post" th:action="@{'/manager/ad-codes/' + ${adCode.id} + '/update'}"
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 space-y-4">
+        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-xs text-slate-500 mb-1">広告コード</label>
+                <code class="block bg-slate-100 px-2 py-1.5 rounded text-sm" th:text="${adCode.code}"></code>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-500 mb-1">登録日時</label>
+                <div class="text-sm text-slate-700" th:text="${#temporals.format(adCode.createdAt, 'yyyy-MM-dd HH:mm')}"></div>
+            </div>
+        </div>
+        <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">グループ名</label>
+            <input type="text" name="name" class="tw-input" maxlength="255" th:value="${adCode.name}"/>
+        </div>
+        <div>
+            <label class="block text-sm font-semibold text-slate-700 mb-1">メモ</label>
+            <textarea name="memo" class="tw-input" rows="3" th:text="${adCode.memo}"></textarea>
+        </div>
+        <div>
+            <label class="inline-flex items-center gap-2">
+                <input type="checkbox" name="isActive" value="true" th:checked="${adCode.isActive}"/>
+                <span class="text-sm font-semibold text-slate-700">有効</span>
+            </label>
+        </div>
+    </form>
+
+    <!-- Action row — kept outside the update form so the delete <form> isn't nested. -->
+    <div class="flex justify-between gap-2 pt-4 mb-6">
+        <form method="post" th:action="@{'/manager/ad-codes/' + ${adCode.id} + '/delete'}"
+              onsubmit="return confirm('この広告コードを削除します。紐付く CRM_USER の AD_CODE は残ります。よろしいですか?');">
+            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+            <button type="submit" class="inline-flex items-center px-3 py-2 border border-red-500 text-red-600 hover:bg-red-50 rounded text-sm">削除</button>
+        </form>
+        <button type="submit" form="adCodeUpdateForm"
+                class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm">
+            更新
+        </button>
+    </div>
+
+    <!-- Monthly breakdown -->
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4 mb-6">
+        <div class="flex items-center mb-3">
+            <h2 class="text-base font-semibold text-slate-800 flex-1">月別 (<span th:text="${targetYear}"></span>年)</h2>
+            <form method="get" th:action="@{'/manager/ad-codes/' + ${adCode.id}}" class="flex items-center gap-2">
+                <input type="number" name="year" class="tw-input" style="width:90px;" th:value="${targetYear}" min="2020" max="2099"/>
+                <input type="hidden" name="month" th:value="${#temporals.format(targetMonth, 'yyyy-MM')}"/>
+                <button type="submit" class="px-3 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50">表示</button>
+            </form>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500">
+                <tr>
+                    <th class="px-3 py-2 text-left">月</th>
+                    <th class="px-3 py-2 text-left">登録人数</th>
+                    <th class="px-3 py-2 text-left">入金額</th>
+                </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                <tr th:each="m : ${monthly}">
+                    <td class="px-3 py-1.5" th:text="${m.year} + '年 ' + ${m.month} + '月'"></td>
+                    <td class="px-3 py-1.5" th:text="${m.signupCount} + ' 人'"></td>
+                    <td class="px-3 py-1.5" th:text="'¥ ' + ${#numbers.formatInteger(m.paidTotal, 1, 'COMMA')}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Daily breakdown -->
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4">
+        <div class="flex items-center mb-3">
+            <h2 class="text-base font-semibold text-slate-800 flex-1">日別 (<span th:text="${#temporals.format(targetMonth, 'yyyy-MM')}"></span>)</h2>
+            <form method="get" th:action="@{'/manager/ad-codes/' + ${adCode.id}}" class="flex items-center gap-2">
+                <input type="month" name="month" class="tw-input" style="width:160px;" th:value="${#temporals.format(targetMonth, 'yyyy-MM')}"/>
+                <input type="hidden" name="year" th:value="${targetYear}"/>
+                <button type="submit" class="px-3 py-1 text-xs border border-slate-300 rounded hover:bg-slate-50">表示</button>
+            </form>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500">
+                <tr>
+                    <th class="px-3 py-2 text-left">日付</th>
+                    <th class="px-3 py-2 text-left">登録人数</th>
+                    <th class="px-3 py-2 text-left">入金額</th>
+                </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                <tr th:each="d : ${daily}">
+                    <td class="px-3 py-1.5" th:text="${#temporals.format(d.date, 'MM/dd')}"></td>
+                    <td class="px-3 py-1.5" th:text="${d.signupCount} + ' 人'"></td>
+                    <td class="px-3 py-1.5" th:text="'¥ ' + ${#numbers.formatInteger(d.paidTotal, 1, 'COMMA')}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+</body>
+</html>

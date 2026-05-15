@@ -1,0 +1,413 @@
+package com.crm.controller;
+
+import com.crm.dto.DomainSettingForm;
+import com.crm.dto.MessageTemplateForm;
+import com.crm.dto.RelayServerForm;
+import com.crm.dto.ReplyPageSettingForm;
+import com.crm.entity.MessageTemplate;
+import com.crm.entity.RelayServer;
+import com.crm.interceptor.AuthInterceptor;
+import com.crm.service.AdminAuthService;
+import com.crm.service.AuditLogService;
+import com.crm.service.DomainSettingService;
+import com.crm.service.MessageTemplateService;
+import com.crm.service.RelayServerService;
+import com.crm.service.ReplyPageSettingService;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+
+import javax.servlet.http.HttpSession;
+import javax.validation.Valid;
+import java.util.Optional;
+
+@Controller
+@RequestMapping("/manager/settings")
+public class SettingController {
+
+    private final RelayServerService relayServerService;
+    private final MessageTemplateService templateService;
+    private final ReplyPageSettingService replyPageSettingService;
+    private final AdminAuthService adminAuthService;
+    private final AuditLogService auditLog;
+    private final DomainSettingService domainSettingService;
+    private final com.crm.service.FolderSettingService folderSettingService;
+    private final com.crm.service.HttpRelayOutboundMailService httpRelayOutboundMailService;
+
+    public SettingController(RelayServerService relayServerService,
+                             MessageTemplateService templateService,
+                             ReplyPageSettingService replyPageSettingService,
+                             AdminAuthService adminAuthService,
+                             AuditLogService auditLog,
+                             DomainSettingService domainSettingService,
+                             com.crm.service.FolderSettingService folderSettingService,
+                             org.springframework.beans.factory.ObjectProvider<com.crm.service.HttpRelayOutboundMailService> httpRelayProvider) {
+        this.relayServerService = relayServerService;
+        this.templateService = templateService;
+        this.replyPageSettingService = replyPageSettingService;
+        this.adminAuthService = adminAuthService;
+        this.auditLog = auditLog;
+        this.domainSettingService = domainSettingService;
+        this.folderSettingService = folderSettingService;
+        // ObjectProvider — the relay bean only exists when app.outbound.adapter=relay.
+        // In stub/test profiles the controller still loads but activeRelayHost stays empty.
+        this.httpRelayOutboundMailService = httpRelayProvider.getIfAvailable();
+    }
+
+    // ====== Folder settings ======
+    @GetMapping("/folders")
+    public String foldersForm(Model model) {
+        java.util.List<String> folders = folderSettingService.listFolders();
+        // Join as newline-separated text for the editor (one name per line).
+        model.addAttribute("folderText", String.join("\n", folders));
+        model.addAttribute("folderCount", folders.size());
+        return "setting/folders";
+    }
+
+    @PostMapping("/folders")
+    public String foldersSave(@RequestParam(name = "folderText", required = false) String folderText,
+                              RedirectAttributes ra) {
+        java.util.List<String> parsed = new java.util.ArrayList<>();
+        if (folderText != null) {
+            for (String line : folderText.split("[\\r\\n,]+")) {
+                String t = line.trim();
+                if (!t.isEmpty()) parsed.add(t);
+            }
+        }
+        folderSettingService.save(parsed);
+        ra.addFlashAttribute("flashSuccess", parsed.size() + " 個のフォルダを保存しました");
+        return "redirect:/manager/settings/folders";
+    }
+
+    // ====== Audit log viewer ======
+    @GetMapping("/audit-log")
+    public String auditLog(@RequestParam(name = "page", defaultValue = "0") int page, Model model) {
+        model.addAttribute("logs", auditLog.recent(page, 50));
+        return "setting/audit-log";
+    }
+
+    // ====== Sender-name settings ======
+    @GetMapping("/sender-names")
+    public String senderNamesForm(Model model) {
+        model.addAttribute("mode", domainSettingService.getSenderNameMode());
+        model.addAttribute("fixed", domainSettingService.getSenderNameFixed());
+        model.addAttribute("listText", String.join("\n", domainSettingService.getSenderNameList()));
+        model.addAttribute("randomLength", domainSettingService.getSenderNameRandomLength());
+        model.addAttribute("randomCase", domainSettingService.getSenderNameRandomCase());
+        return "setting/sender-names";
+    }
+
+    @PostMapping("/sender-names")
+    public String senderNamesSave(@RequestParam(name = "mode", required = false) String mode,
+                                   @RequestParam(name = "fixed", required = false) String fixed,
+                                   @RequestParam(name = "listText", required = false) String listText,
+                                   @RequestParam(name = "randomLength", required = false, defaultValue = "8") int randomLength,
+                                   @RequestParam(name = "randomCase", required = false, defaultValue = "mixed") String randomCase,
+                                   RedirectAttributes ra) {
+        domainSettingService.setSenderNamePolicy(mode, fixed, listText, randomLength, randomCase);
+        ra.addFlashAttribute("flashSuccess", "送信者名設定を保存しました");
+        return "redirect:/manager/settings/sender-names";
+    }
+
+    // --- Settings index ---
+    @GetMapping({"", "/"})
+    public String index(Model model) {
+        model.addAttribute("relayCount", relayServerService.listAll().size());
+        model.addAttribute("templateCount", templateService.count());
+        model.addAttribute("maxTemplates", MessageTemplateService.MAX_TEMPLATES);
+        return "setting/index";
+    }
+
+    // ====== Relay servers ======
+    @GetMapping("/relay-servers")
+    public String relayList(Model model) {
+        model.addAttribute("relays", relayServerService.listAll());
+        // Active relay host = the one HttpRelayOutboundMailService is configured to talk to.
+        // Used by the template to badge the "in-use" row. May be empty if the relay adapter
+        // isn't active (e.g. stub mode in dev).
+        model.addAttribute("activeRelayHost",
+                httpRelayOutboundMailService == null ? "" : httpRelayOutboundMailService.getActiveRelayHost());
+        model.addAttribute("useRelay", domainSettingService.isOutboundUseRelay());
+        model.addAttribute("broadcastRatePerMinute", domainSettingService.getBroadcastRatePerMinute());
+        return "setting/relay-list";
+    }
+
+    /** Save the global broadcast send-rate (used as default by new broadcast forms). */
+    @PostMapping("/relay-servers/rate")
+    public String saveBroadcastRate(@RequestParam("ratePerMinute") Integer rate,
+                                     RedirectAttributes ra) {
+        if (rate == null) rate = 60;
+        domainSettingService.setBroadcastRatePerMinute(rate);
+        ra.addFlashAttribute("flashSuccess", "送信インターバル (rate/min) を " + rate + " 通/分に更新しました");
+        return "redirect:/manager/settings/relay-servers";
+    }
+
+    @PostMapping("/relay-servers/toggle")
+    public String relayToggle(@RequestParam(name = "useRelay", required = false) String useRelay,
+                              RedirectAttributes ra) {
+        boolean enabled = "true".equalsIgnoreCase(useRelay) || "on".equalsIgnoreCase(useRelay) || "1".equals(useRelay);
+        domainSettingService.setOutboundUseRelay(enabled);
+        ra.addFlashAttribute("flashSuccess", enabled
+                ? "リレー (転送機) を使用する設定に切り替えました"
+                : "リレーを使用しない設定に切り替えました (登録済みカウントの SMTP で直接送信されます)");
+        return "redirect:/manager/settings/relay-servers";
+    }
+
+    @GetMapping("/relay-servers/new")
+    public String relayCreateForm(Model model) {
+        model.addAttribute("form", new RelayServerForm());
+        model.addAttribute("editing", false);
+        return "setting/relay-form";
+    }
+
+    @PostMapping("/relay-servers")
+    public String relayCreate(@Valid @ModelAttribute("form") RelayServerForm form,
+                              BindingResult br, RedirectAttributes ra, Model model) {
+        if (br.hasErrors()) {
+            model.addAttribute("editing", false);
+            return "setting/relay-form";
+        }
+        try {
+            relayServerService.create(form);
+            ra.addFlashAttribute("flashSuccess", "リレーサーバーを追加しました");
+            return "redirect:/manager/settings/relay-servers";
+        } catch (RelayServerService.DuplicateNameException e) {
+            br.rejectValue("name", "duplicate", "この名前は既に登録されています");
+            model.addAttribute("editing", false);
+            return "setting/relay-form";
+        }
+    }
+
+    @GetMapping("/relay-servers/{id}/edit")
+    public String relayEditForm(@PathVariable Long id, Model model, RedirectAttributes ra) {
+        Optional<RelayServer> r = relayServerService.findById(id);
+        if (!r.isPresent()) {
+            ra.addFlashAttribute("flashError", "リレーサーバーが見つかりません");
+            return "redirect:/manager/settings/relay-servers";
+        }
+        model.addAttribute("form", RelayServerForm.from(r.get()));
+        model.addAttribute("relayId", id);
+        model.addAttribute("editing", true);
+        return "setting/relay-form";
+    }
+
+    @PostMapping("/relay-servers/{id}")
+    public String relayUpdate(@PathVariable Long id,
+                              @Valid @ModelAttribute("form") RelayServerForm form,
+                              BindingResult br, RedirectAttributes ra, Model model) {
+        if (br.hasErrors()) {
+            model.addAttribute("relayId", id);
+            model.addAttribute("editing", true);
+            return "setting/relay-form";
+        }
+        try {
+            relayServerService.update(id, form);
+            ra.addFlashAttribute("flashSuccess", "リレーサーバーを更新しました");
+            return "redirect:/manager/settings/relay-servers";
+        } catch (RelayServerService.DuplicateNameException e) {
+            br.rejectValue("name", "duplicate", "この名前は既に登録されています");
+            model.addAttribute("relayId", id);
+            model.addAttribute("editing", true);
+            return "setting/relay-form";
+        } catch (RelayServerService.NotFoundException e) {
+            ra.addFlashAttribute("flashError", "リレーサーバーが見つかりません");
+            return "redirect:/manager/settings/relay-servers";
+        }
+    }
+
+    @PostMapping("/relay-servers/{id}/delete")
+    public String relayDelete(@PathVariable Long id, RedirectAttributes ra) {
+        relayServerService.delete(id);
+        ra.addFlashAttribute("flashSuccess", "リレーサーバーを削除しました");
+        return "redirect:/manager/settings/relay-servers";
+    }
+
+    // ====== Message templates ======
+    @GetMapping("/message-templates")
+    public String templateList(@RequestParam(name = "q", required = false) String q, Model model) {
+        java.util.List<com.crm.entity.MessageTemplate> all = templateService.listAll();
+        java.util.List<com.crm.entity.MessageTemplate> filtered;
+        if (q == null || q.trim().isEmpty()) {
+            filtered = all;
+        } else {
+            String needle = q.trim().toLowerCase();
+            filtered = new java.util.ArrayList<>();
+            for (com.crm.entity.MessageTemplate t : all) {
+                if ((t.getName() != null && t.getName().toLowerCase().contains(needle))
+                    || (t.getSubject() != null && t.getSubject().toLowerCase().contains(needle))
+                    || (t.getBody() != null && t.getBody().toLowerCase().contains(needle))) {
+                    filtered.add(t);
+                }
+            }
+        }
+        model.addAttribute("templates", filtered);
+        model.addAttribute("q", q == null ? "" : q);
+        model.addAttribute("maxTemplates", MessageTemplateService.MAX_TEMPLATES);
+        model.addAttribute("canCreate", templateService.count() < MessageTemplateService.MAX_TEMPLATES);
+        return "setting/template-list";
+    }
+
+    @GetMapping("/message-templates/new")
+    public String templateCreateForm(Model model, RedirectAttributes ra) {
+        if (templateService.count() >= MessageTemplateService.MAX_TEMPLATES) {
+            ra.addFlashAttribute("flashError", "定型文は最大" + MessageTemplateService.MAX_TEMPLATES + "件までです");
+            return "redirect:/manager/settings/message-templates";
+        }
+        model.addAttribute("form", new MessageTemplateForm());
+        model.addAttribute("editing", false);
+        model.addAttribute("builtinTags", com.crm.service.PlaceholderService.BUILTIN_TAGS);
+        return "setting/template-form";
+    }
+
+    @PostMapping("/message-templates")
+    public String templateCreate(@Valid @ModelAttribute("form") MessageTemplateForm form,
+                                 BindingResult br, RedirectAttributes ra, Model model) {
+        if (br.hasErrors()) {
+            model.addAttribute("editing", false);
+            return "setting/template-form";
+        }
+        try {
+            templateService.create(form);
+            ra.addFlashAttribute("flashSuccess", "定型文を追加しました");
+            return "redirect:/manager/settings/message-templates";
+        } catch (MessageTemplateService.TooManyTemplatesException e) {
+            ra.addFlashAttribute("flashError", e.getMessage());
+            return "redirect:/manager/settings/message-templates";
+        }
+    }
+
+    @GetMapping("/message-templates/{id}/edit")
+    public String templateEditForm(@PathVariable Long id, Model model, RedirectAttributes ra) {
+        Optional<MessageTemplate> t = templateService.findById(id);
+        if (!t.isPresent()) {
+            ra.addFlashAttribute("flashError", "定型文が見つかりません");
+            return "redirect:/manager/settings/message-templates";
+        }
+        model.addAttribute("form", MessageTemplateForm.from(t.get()));
+        model.addAttribute("templateId", id);
+        model.addAttribute("editing", true);
+        model.addAttribute("builtinTags", com.crm.service.PlaceholderService.BUILTIN_TAGS);
+        return "setting/template-form";
+    }
+
+    @PostMapping("/message-templates/{id}")
+    public String templateUpdate(@PathVariable Long id,
+                                 @Valid @ModelAttribute("form") MessageTemplateForm form,
+                                 BindingResult br, RedirectAttributes ra, Model model) {
+        if (br.hasErrors()) {
+            model.addAttribute("templateId", id);
+            model.addAttribute("editing", true);
+            return "setting/template-form";
+        }
+        try {
+            templateService.update(id, form);
+            ra.addFlashAttribute("flashSuccess", "定型文を更新しました");
+            return "redirect:/manager/settings/message-templates";
+        } catch (MessageTemplateService.NotFoundException e) {
+            ra.addFlashAttribute("flashError", "定型文が見つかりません");
+            return "redirect:/manager/settings/message-templates";
+        }
+    }
+
+    @PostMapping("/message-templates/{id}/delete")
+    public String templateDelete(@PathVariable Long id, RedirectAttributes ra) {
+        templateService.delete(id);
+        ra.addFlashAttribute("flashSuccess", "定型文を削除しました");
+        return "redirect:/manager/settings/message-templates";
+    }
+
+    // ====== Domain settings (reply URL + FROM address generation) ======
+    @GetMapping("/domain")
+    public String domainForm(Model model) {
+        DomainSettingForm form = new DomainSettingForm();
+        form.setReplyBaseUrl(domainSettingService.getReplyBaseUrl());
+        form.setReplyRandomSubdomainEnabled(domainSettingService.isReplyRandomSubdomainEnabled());
+        form.setReplyRandomSubdomainLength(domainSettingService.getReplyRandomLength());
+        form.setReplyFixedSubdomain(domainSettingService.getReplyFixedSubdomain());
+        form.setFromBaseDomain(domainSettingService.getFromBaseDomain());
+        form.setFromRandomLocalEnabled(domainSettingService.isFromRandomEnabled());
+        form.setFromRandomLocalLength(domainSettingService.getFromRandomLength());
+        form.setFromFixedLocal(domainSettingService.getFromFixedLocal());
+        form.setBindingExpireEnabled(domainSettingService.isBindingExpireEnabled());
+        form.setBindingExpireDays(domainSettingService.getBindingExpireDays());
+        model.addAttribute("form", form);
+        return "setting/domain";
+    }
+
+    @PostMapping("/domain")
+    public String domainSave(@ModelAttribute("form") DomainSettingForm form, RedirectAttributes ra) {
+        domainSettingService.save(DomainSettingService.KEY_REPLY_BASE_URL, s(form.getReplyBaseUrl()));
+        domainSettingService.save(DomainSettingService.KEY_REPLY_RANDOM_SUBDOMAIN,
+                String.valueOf(Boolean.TRUE.equals(form.getReplyRandomSubdomainEnabled())));
+        domainSettingService.save(DomainSettingService.KEY_REPLY_RANDOM_LENGTH,
+                String.valueOf(form.getReplyRandomSubdomainLength() == null ? 16 : form.getReplyRandomSubdomainLength()));
+        domainSettingService.save(DomainSettingService.KEY_REPLY_FIXED_SUBDOMAIN, s(form.getReplyFixedSubdomain()));
+        domainSettingService.save(DomainSettingService.KEY_FROM_BASE_DOMAIN, s(form.getFromBaseDomain()));
+        domainSettingService.save(DomainSettingService.KEY_FROM_RANDOM_LOCAL,
+                String.valueOf(Boolean.TRUE.equals(form.getFromRandomLocalEnabled())));
+        domainSettingService.save(DomainSettingService.KEY_FROM_RANDOM_LENGTH,
+                String.valueOf(form.getFromRandomLocalLength() == null ? 16 : form.getFromRandomLocalLength()));
+        domainSettingService.save(DomainSettingService.KEY_FROM_FIXED_LOCAL, s(form.getFromFixedLocal()));
+        domainSettingService.save(DomainSettingService.KEY_BINDING_EXPIRE_ENABLED,
+                String.valueOf(Boolean.TRUE.equals(form.getBindingExpireEnabled())));
+        domainSettingService.save(DomainSettingService.KEY_BINDING_EXPIRE_DAYS,
+                String.valueOf(form.getBindingExpireDays() == null ? 60 : form.getBindingExpireDays()));
+        ra.addFlashAttribute("flashSuccess", "ドメイン設定を保存しました");
+        return "redirect:/manager/settings/domain";
+    }
+
+    private static String s(String v) { return v == null ? "" : v.trim(); }
+
+    // ====== Reply page settings (singleton) ======
+    @GetMapping("/reply-page")
+    public String replyPageForm(Model model) {
+        model.addAttribute("form", ReplyPageSettingForm.from(replyPageSettingService.getOrCreate()));
+        return "setting/reply-page";
+    }
+
+    @PostMapping("/reply-page")
+    public String replyPageSave(@ModelAttribute("form") ReplyPageSettingForm form,
+                                 RedirectAttributes ra) {
+        replyPageSettingService.save(form);
+        ra.addFlashAttribute("flashSuccess", "返信画面設定を保存しました");
+        return "redirect:/manager/settings/reply-page";
+    }
+
+    // ====== Admin password change ======
+    @GetMapping("/admin-password")
+    public String adminPasswordForm() {
+        return "setting/admin-password";
+    }
+
+    @PostMapping("/admin-password")
+    public String adminPasswordSave(@RequestParam(name = "oldPassword", required = false) String oldPassword,
+                                     @RequestParam(name = "newPassword", required = false) String newPassword,
+                                     @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
+                                     HttpSession session,
+                                     RedirectAttributes ra,
+                                     Model model) {
+        if (newPassword == null || !newPassword.equals(confirmPassword)) {
+            model.addAttribute("errorMessage", "新しいパスワードと確認用パスワードが一致しません");
+            return "setting/admin-password";
+        }
+        Long adminId = (Long) session.getAttribute(AuthInterceptor.SESSION_ADMIN_ID);
+        if (adminId == null) return "redirect:/manager/login";
+        try {
+            adminAuthService.changePassword(adminId, oldPassword, newPassword);
+            auditLog.record(AuditLogService.ACTION_ADMIN_PASSWORD_CHANGE, "AdminUser", adminId, null);
+            session.invalidate();
+            ra.addFlashAttribute("flashSuccess", "パスワードを変更しました。新しいパスワードで再度ログインしてください。");
+            return "redirect:/manager/login";
+        } catch (AdminAuthService.PasswordChangeException e) {
+            model.addAttribute("errorMessage", e.getMessage());
+            return "setting/admin-password";
+        }
+    }
+}

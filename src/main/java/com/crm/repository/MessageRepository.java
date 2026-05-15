@@ -1,0 +1,151 @@
+package com.crm.repository;
+
+import com.crm.entity.Message;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+
+import java.util.List;
+
+public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpecificationExecutor<Message> {
+
+    /** Chronological thread for one user (oldest first). Used by inbound bulk delete. */
+    List<Message> findByUserIdOrderByCreatedAtAsc(Long userId);
+
+    /** Reverse-chronological thread for the user-detail thread pane (newest at top). */
+    List<Message> findByUserIdOrderByCreatedAtDesc(Long userId);
+
+    /** Recent messages across all users (for the /manager/messages list). */
+    Page<Message> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    int countByUserIdAndDirectionAndReadAtIsNull(Long userId, String direction);
+
+    /** Count OUT messages for {@code userId} that were finalised (sent/sent-failed/sent-success)
+     *  during the half-open window {@code [since, now)}, *excluding* the scheduled broadcast row
+     *  whose dispatch we are about to evaluate. Used to drop a queued broadcast row when the
+     *  same user already received some OTHER send after the broadcast was scheduled. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.userId = :userId AND m.direction = 'OUT' " +
+            "AND (m.status = 'SENT' OR m.sentAt IS NOT NULL) " +
+            "AND m.sentAt >= :since AND m.id <> :excludeId")
+    long countOutboundFinalisedSince(@org.springframework.data.repository.query.Param("userId") Long userId,
+                                       @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since,
+                                       @org.springframework.data.repository.query.Param("excludeId") Long excludeMessageId);
+
+    long countByDirectionAndReadAtIsNull(String direction);
+
+    long countByStatus(String status);
+
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.status IN :statuses AND m.sentAt >= :from")
+    long countSentSince(@org.springframework.data.repository.query.Param("dir") String direction,
+                         @org.springframework.data.repository.query.Param("statuses") java.util.Collection<String> statuses,
+                         @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(
+            "UPDATE Message m SET m.readAt = :now WHERE m.userId = :userId AND m.direction = :dir AND m.readAt IS NULL")
+    int markReadByUserAndDirection(@org.springframework.data.repository.query.Param("userId") Long userId,
+                                    @org.springframework.data.repository.query.Param("dir") String direction,
+                                    @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
+    List<Message> findByStatusAndScheduledAtLessThanEqual(String status, java.time.LocalDateTime now);
+
+    /**
+     * QUEUED messages that are ready to dispatch now. A message is "due" if either:
+     *   - SCHEDULED_AT has arrived (original user-requested schedule), or
+     *   - NEXT_RETRY_AT has arrived (transient-failure retry).
+     * Messages with no timestamp at all are also picked up (fresh queues).
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT m FROM Message m WHERE m.status = :status AND (" +
+            "   (m.scheduledAt IS NULL AND m.nextRetryAt IS NULL)" +
+            "   OR (m.scheduledAt IS NOT NULL AND m.scheduledAt <= :now)" +
+            "   OR (m.nextRetryAt IS NOT NULL AND m.nextRetryAt <= :now))")
+    List<Message> findDueForDispatch(@org.springframework.data.repository.query.Param("status") String status,
+                                     @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
+    boolean existsByMessageIdHeader(String messageIdHeader);
+
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.userId = :userId AND m.direction = :direction")
+    long countByUserIdAndDirection(@org.springframework.data.repository.query.Param("userId") Long userId,
+                                   @org.springframework.data.repository.query.Param("direction") String direction);
+
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT MAX(m.createdAt) FROM Message m WHERE m.userId = :userId AND m.direction = :direction")
+    java.time.LocalDateTime maxCreatedAtByUserIdAndDirection(@org.springframework.data.repository.query.Param("userId") Long userId,
+                                                              @org.springframework.data.repository.query.Param("direction") String direction);
+
+    /**
+     * Integrated history for /manager/messages/broadcast: every OUT message dispatched by
+     * a broadcast PLUS every IN reply pointing back to one of those OUT messages. Result is
+     * paginated and ordered by createdAt DESC. Optional address filter matches either
+     * fromAddress or toAddress (LIKE, lower-cased — pass a pre-built pattern or null).
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT m FROM Message m WHERE (" +
+            "    m.broadcastId IS NOT NULL " +
+            "    OR m.replyToMessageId IN (SELECT m2.id FROM Message m2 WHERE m2.broadcastId IS NOT NULL)" +
+            ") AND (:addrLike IS NULL " +
+            "       OR LOWER(m.toAddress) LIKE :addrLike " +
+            "       OR LOWER(m.fromAddress) LIKE :addrLike)")
+    Page<Message> findBroadcastRelated(@org.springframework.data.repository.query.Param("addrLike") String addrLike,
+                                       Pageable pageable);
+
+    /** Count messages matching direction (and non-draft status) within a time window. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.createdAt >= :from AND m.createdAt < :to")
+    long countByDirectionBetween(@org.springframework.data.repository.query.Param("dir") String direction,
+                                  @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                  @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
+
+    /** Count outbound messages with a specific status within a time window. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.status = :status " +
+            "AND m.createdAt >= :from AND m.createdAt < :to")
+    long countByDirectionAndStatusBetween(@org.springframework.data.repository.query.Param("dir") String direction,
+                                          @org.springframework.data.repository.query.Param("status") String status,
+                                          @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                          @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
+
+    /**
+     * Last successful outbound timestamp per user. Returns rows {userId, MAX(sentAt)} for
+     * messages where direction='OUT' AND status='SENT'.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT m.userId, MAX(m.sentAt) FROM Message m " +
+            "WHERE m.direction = 'OUT' AND m.status = 'SENT' AND m.sentAt IS NOT NULL " +
+            "GROUP BY m.userId")
+    java.util.List<Object[]> lastSentAtByUser();
+
+    /**
+     * Last user-reply timestamp per user. Returns rows {userId, MAX(createdAt)} for
+     * direction='IN' messages — i.e. when the user last replied to us. Used by the user
+     * list "最終送信" column (operator-facing label refers to the user's send, not ours).
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT m.userId, MAX(m.createdAt) FROM Message m " +
+            "WHERE m.direction = 'IN' " +
+            "GROUP BY m.userId")
+    java.util.List<Object[]> lastInboundAtByUser();
+
+    /**
+     * Inbox aggregation: one row per user who has any inbound messages.
+     * Returns [userId, latestINId, unreadCount, webReplyCount, mailReplyCount, outCount]
+     * ordered by latestINId DESC. Native SQL to support per-channel CASE expressions.
+     */
+    @org.springframework.data.jpa.repository.Query(nativeQuery = true, value =
+            "SELECT m.USER_ID, " +
+            "       MAX(CASE WHEN m.DIRECTION='IN' THEN m.ID ELSE NULL END) AS latest_in_id, " +
+            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.READ_AT IS NULL THEN 1 ELSE 0 END) AS unread, " +
+            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.CHANNEL='WEB_REPLY' THEN 1 ELSE 0 END) AS web_reply, " +
+            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.CHANNEL='EMAIL' THEN 1 ELSE 0 END) AS mail_reply, " +
+            "       SUM(CASE WHEN m.DIRECTION='OUT' THEN 1 ELSE 0 END) AS sent " +
+            "FROM MESSAGE m " +
+            "GROUP BY m.USER_ID " +
+            "HAVING MAX(CASE WHEN m.DIRECTION='IN' THEN m.ID ELSE NULL END) IS NOT NULL " +
+            "ORDER BY MAX(CASE WHEN m.DIRECTION='IN' THEN m.ID ELSE NULL END) DESC")
+    java.util.List<Object[]> inboxGroupByUser();
+}

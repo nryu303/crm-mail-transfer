@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>メッセージスレッド</title>
+    <style>
+        /* Make the layout's main area un-padded so the 4-pane fills the available height. */
+        main.flex-1.p-6 { padding: 0 !important; overflow: hidden !important; height: 100vh; display: flex; flex-direction: column; }
+
+        .wsx { display:grid; height:100vh; box-sizing:border-box;
+               /* 4 panes default to an equal 50/50 × 50/50 split. */
+               grid-template-columns: var(--colL,50%) 5px 1fr;
+               grid-template-rows: var(--rowT,50%) 5px 1fr;
+               background:#f1f5f9; }
+        .wsx .pane { background:#fff; overflow:hidden; display:flex; flex-direction:column; min-width:0; min-height:0;
+                     border:1px solid #e2e8f0; }
+        .wsx .pane > header { padding:6px 10px; background:#f8fafc; border-bottom:1px solid #e2e8f0;
+                              font-size:.78rem; font-weight:700; color:#334155; display:flex; align-items:center; gap:8px; }
+        .wsx .pane > .body { flex:1; overflow:auto; padding:6px 10px; min-height:0; }
+
+        .wsx .v-sash { grid-column: 2; grid-row: 1 / span 3; cursor:col-resize; background:#cbd5e1; }
+        .wsx .h-sash { grid-row: 2; grid-column: 1 / span 3; cursor:row-resize; background:#cbd5e1; }
+        .wsx .v-sash:hover, .wsx .h-sash:hover { background:#94a3b8; }
+
+        /* pane positioning */
+        .pane-tl { grid-column: 1; grid-row: 1; }
+        .pane-tr { grid-column: 3; grid-row: 1; }
+        .pane-bl { grid-column: 1; grid-row: 3; }
+        .pane-br { grid-column: 3; grid-row: 3; }
+
+        .ibx-row { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:5px; cursor:pointer;
+                   border:1px solid transparent; font-size:.78rem; }
+        .ibx-row:hover { background:#f1f5f9; border-color:#e2e8f0; }
+        .ibx-row.current { background:#eff6ff; border-color:#93c5fd; }
+        .ibx-row .nm { font-weight:700; color:#1e293b; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .ibx-row .dt { font-size:.66rem; color:#64748b; white-space:nowrap; }
+        .ibx-row .uc { font-size:.64rem; font-weight:700; padding:1px 6px; border-radius:3px; background:#fecaca; color:#b91c1c; }
+
+        .hist-item { padding:8px 10px; border-radius:6px; margin-bottom:6px; font-size:.8rem; line-height:1.5; }
+        .hist-item.out { background:#dbeafe; color:#1e3a8a; margin-left:20px; }
+        .hist-item.in  { background:#e2e8f0; color:#1e293b; margin-right:20px; }
+        .hist-item .meta { font-size:.66rem; color:#475569; margin-top:3px; }
+
+        /* cmp-form: natural-flow column. Previously had height:100% + textarea flex:1 which
+         * stretched the form to fill the pane and parked the tag panels far below — creating
+         * a perceived large gap between 個別メモ and デフォルトの置き換えタグ. With natural
+         * flow, everything stacks compactly and gap:4px is uniform. */
+        .cmp-form { display:flex; flex-direction:column; gap:4px; }
+        .cmp-form input, .cmp-form textarea {
+            width:100%; padding:6px 9px; border:1px solid #cbd5e1; border-radius:5px; font-size:.8rem; outline:none;
+        }
+        .cmp-form input:focus, .cmp-form textarea:focus { border-color:#2563eb; }
+        .cmp-form textarea { resize:vertical; min-height:60px; max-height:140px; }
+        .cmp-form .memo-row { display:flex; gap:6px; align-items:flex-start; }
+        .cmp-form .memo-row textarea {
+            flex:1; min-height:28px; max-height:50px;
+            border:1px solid #cbd5e1; border-radius:5px; padding:4px 8px; font-size:.78rem; outline:none; resize:vertical;
+        }
+        .cmp-form .memo-row textarea:focus { border-color:#2563eb; }
+        .cmp-form .memo-row .btn-mini {
+            padding:5px 10px; font-size:.72rem; font-weight:700; border:none;
+            background:#16a34a; color:#fff; border-radius:5px; cursor:pointer; white-space:nowrap;
+        }
+        .cmp-form .memo-row .btn-mini:hover { background:#15803d; }
+        .cmp-form .memo-row .btn-mini.saved { background:#94a3b8; }
+        .cmp-form .row { display:flex; gap:8px; align-items:center; }
+        .cmp-form .btn {
+            padding:6px 16px; border:none; border-radius:5px; font-weight:700; font-size:.8rem; color:#fff; cursor:pointer;
+            background:#2563eb;
+        }
+        .cmp-form .btn:hover { background:#1d4ed8; }
+
+        /* ---- Reservation (予約送信) panel ---- */
+        .sched-box { background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 10px; }
+        .sched-box .sched-head { display:flex; align-items:center; gap:8px; font-size:.72rem; font-weight:700; color:#475569; margin-bottom:6px; }
+        .sched-box .sched-status { font-size:.7rem; color:#16a34a; font-weight:700; }
+        .sched-box .sched-status.scheduled { color:#d97706; }
+        .sched-box .sched-row { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+        .sched-box .chip {
+            font-size:.7rem; font-weight:600; padding:3px 9px; border-radius:14px;
+            border:1px solid #cbd5e1; background:#fff; color:#475569; cursor:pointer; white-space:nowrap;
+        }
+        .sched-box .chip:hover { background:#eff6ff; border-color:#2563eb; color:#1d4ed8; }
+        .sched-box .chip.clear { color:#16a34a; border-color:#bbf7d0; background:#f0fdf4; }
+        .sched-box input[type="datetime-local"] {
+            padding:4px 8px; border:1px solid #cbd5e1; border-radius:5px; font-size:.78rem; outline:none; flex:1; min-width:180px;
+        }
+        .sched-box input[type="datetime-local"]:focus { border-color:#2563eb; }
+
+        /* ---- Tag panel ---- */
+        .tag-panel { background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:4px 8px; margin-top:2px; }
+        .tag-panel h4 { font-size:.72rem; font-weight:700; color:#475569; margin:0 0 2px 0; display:flex; align-items:center; gap:6px; }
+        .tag-panel .tag-row { display:flex; align-items:center; gap:6px; margin-bottom:2px; }
+        .tag-panel code.tag-name {
+            display:inline-block; padding:2px 7px; border-radius:3px; font-size:.7rem;
+            background:#e2e8f0; color:#1e293b; cursor:pointer; min-width:120px; text-align:center;
+        }
+        .tag-panel code.tag-name:hover { background:#dbeafe; color:#1d4ed8; }
+        .tag-panel .tag-desc { font-size:.7rem; color:#64748b; flex:1; }
+        .tag-panel input.tag-val {
+            flex:1; padding:3px 8px; font-size:.74rem; border:1px solid #cbd5e1; border-radius:4px; outline:none; min-width:0;
+        }
+        .tag-panel input.tag-val:focus { border-color:#2563eb; }
+        .tag-panel .btn-tag-save {
+            font-size:.7rem; padding:3px 12px; border-radius:4px; border:none; background:#16a34a; color:#fff; cursor:pointer; font-weight:700;
+        }
+        .tag-panel .btn-tag-save:hover { background:#15803d; }
+        .tag-panel .btn-tag-save.saved { background:#94a3b8; }
+
+        .tpl-item { padding:7px 9px; border-radius:5px; border:1px solid #e2e8f0; background:#f8fafc;
+                    margin-bottom:6px; font-size:.78rem; display:flex; align-items:center; gap:8px; }
+        .tpl-item:hover { background:#eff6ff; border-color:#2563eb; }
+        .tpl-item .txt { flex:1; min-width:0; cursor:pointer; display:flex; gap:10px; align-items:center; }
+        .tpl-item .name {
+            font-weight:700; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+            min-width:90px; max-width:160px; flex-shrink:0;
+        }
+        .tpl-item .subj {
+            font-size:.7rem; color:#475569; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+            flex:1; min-width:0;
+        }
+        .tpl-item a.icon {
+            font-size:.7rem; padding:2px 7px; border:1px solid #cbd5e1; border-radius:3px; color:#475569;
+            background:#fff; text-decoration:none; white-space:nowrap;
+        }
+        .tpl-item a.icon:hover { background:#f1f5f9; color:#1e293b; }
+
+        .btn-refresh { font-size:.7rem; padding:2px 9px; border:1px solid #cbd5e1; background:#fff; border-radius:4px;
+                       color:#475569; cursor:pointer; }
+        .btn-refresh:hover { background:#f1f5f9; }
+    </style>
+</head>
+<body>
+<section layout:fragment="content">
+<div class="wsx">
+
+    <!-- ===== Top-left: Inbox list ===== -->
+    <div class="pane pane-tl">
+        <header>
+            <span>受信 (<span th:text="${#lists.size(inboxRows)}">0</span>)</span>
+            <button class="btn-refresh ml-auto" type="button" onclick="location.reload()">更新</button>
+        </header>
+        <div class="body">
+            <div th:if="${inboxRows == null or inboxRows.empty}" class="text-xs text-slate-400 p-2">受信はまだありません</div>
+            <a th:each="r : ${inboxRows}" class="ibx-row"
+               th:href="@{'/manager/users/' + ${r.userId} + '/thread'}"
+               th:classappend="${r.userId == user.id} ? 'current'"
+               style="text-decoration:none;">
+                <span class="nm" th:text="${r.displayName}"></span>
+                <span class="uc" th:if="${r.unreadCount > 0}" th:text="${r.unreadCount}"></span>
+                <span class="dt"
+                      th:text="${r.latestAt != null} ? ${#temporals.format(r.latestAt, 'MM-dd HH:mm')} : '-'"></span>
+            </a>
+        </div>
+    </div>
+
+    <div class="v-sash" id="vSash"></div>
+
+    <!-- ===== Top-right: history ===== -->
+    <div class="pane pane-tr">
+        <header style="flex-wrap:wrap; gap:4px 10px;">
+            <a class="font-semibold text-blue-700 hover:underline"
+               th:href="@{'/manager/users/' + ${user.id}}"
+               th:text="${user.displayName} ?: ${user.email}"></a>
+            <span>過去のやり取り</span>
+            <span class="text-slate-400">|</span>
+            <span class="text-slate-500" th:if="${boundAddresses != null and !boundAddresses.empty}"
+                  th:text="${boundAddresses[0].carrierDomain}"></span>
+            <span class="text-slate-500" th:if="${boundAddresses == null or boundAddresses.empty}">-</span>
+            <span class="text-slate-400">|</span>
+            <span class="text-slate-500" th:text="'広告: ' + (${user.adCode} ?: '-')"></span>
+            <span class="text-slate-400">|</span>
+            <span class="text-slate-500" th:text="'フォルダ: ' + (${user.folder} ?: '-')"></span>
+            <span class="text-slate-400">|</span>
+            <span class="text-slate-500"
+                  th:text="'最終入金: ' + (${user.lastPaymentAt != null} ? ${#temporals.format(user.lastPaymentAt, 'yyyy-MM-dd')} : '-')"></span>
+            <span class="text-slate-400">|</span>
+            <span class="text-slate-500" th:text="'入金額: ' + ${#numbers.formatDecimal(totalPaid, 0, 'COMMA', 0, 'POINT')} + '円'"></span>
+            <span class="text-slate-400">|</span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-emerald-100 text-emerald-700"
+                  th:text="'Web ' + ${threadWebReply}" title="Web返信数"></span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-slate-200 text-slate-600"
+                  th:text="'Mail ' + ${threadMailReply}" title="メール返信数"></span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700"
+                  th:text="'送 ' + ${threadOut}" title="送信数"></span>
+        </header>
+        <div class="body" id="historyBody">
+            <div th:if="${thread.empty}" class="text-center text-xs text-slate-400 py-6">まだメッセージはありません</div>
+            <div th:each="m : ${thread}" class="hist-item"
+                 th:classappend="${m.direction == 'OUT'} ? 'out' : 'in'">
+                <div class="font-medium" th:text="${m.subject} ?: '(件名なし)'"></div>
+                <div class="whitespace-pre-wrap" th:text="${m.bodyText}"></div>
+                <div class="meta">
+                    <span th:if="${m.direction == 'OUT' and m.status == 'FAILED'}"
+                          style="font-weight:700;background:#fecaca;color:#991b1b;padding:1px 6px;border-radius:3px;">NG</span>
+                    <span th:if="${m.direction == 'OUT' and m.status != 'FAILED'}"
+                          th:text="${m.status}"></span>
+                    <span th:if="${m.direction == 'IN'}">RECV</span>
+                    ·
+                    <span th:text="${#temporals.format(m.createdAt, 'yyyy-MM-dd HH:mm')}"></span>
+                    <span th:if="${m.scheduledAt != null and m.status == 'QUEUED'}"
+                          class="text-amber-700 font-semibold ml-2"
+                          th:text="'予約: ' + ${#temporals.format(m.scheduledAt, 'yyyy-MM-dd HH:mm')}"></span>
+                    <span th:if="${m.status == 'FAILED' and m.errorMessage != null}"
+                          style="color:#dc2626;margin-left:6px;font-size:.66rem;"
+                          th:text="${#strings.abbreviate(m.errorMessage, 80)}"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="h-sash" id="hSash"></div>
+
+    <!-- ===== Bottom-left: compose ===== -->
+    <div class="pane pane-bl">
+        <header>
+            <span>新規メッセージ</span>
+        </header>
+        <div class="body">
+            <form method="post" th:action="@{'/manager/users/' + ${user.id} + '/messages'}" th:object="${form}" class="cmp-form">
+                <input type="hidden" th:field="*{replyToMessageId}"/>
+
+                <div>
+                    <input type="text" id="subject" th:field="*{subject}" placeholder="件名"/>
+                </div>
+                <textarea id="body" th:field="*{body}" placeholder="本文"></textarea>
+
+                <div class="sched-box" data-sched-box>
+                    <div class="sched-head">
+                        <span>予約送信</span>
+                        <span class="sched-status" data-sched-status>即時送信</span>
+                    </div>
+                    <div class="sched-row">
+                        <input type="datetime-local" th:field="*{scheduledAt}" data-sched-input/>
+                        <button type="button" class="chip" data-sched-quick="60">+1時間</button>
+                        <button type="button" class="chip" data-sched-quick="180">+3時間</button>
+                        <button type="button" class="chip" data-sched-quick="1440">明日同時刻</button>
+                        <button type="button" class="chip clear" data-sched-clear>今すぐ送信</button>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <button type="submit" class="btn ml-auto">返信</button>
+                </div>
+
+                <!-- 個別メモ (admin-only, saved via separate AJAX endpoint) -->
+                <div style="margin-top:2px;border-top:1px solid #e2e8f0;padding-top:2px;">
+                    <label class="text-xs text-slate-500" style="font-weight:600;">個別メモ <span class="text-slate-400 font-normal">(管理者用)</span></label>
+                    <div class="memo-row">
+                        <textarea id="userInternalMemo" th:text="${user.internalMemo}" placeholder="このユーザーに関する社内メモ"></textarea>
+                        <button type="button" class="btn-mini" id="btnInternalMemoSave"
+                                th:attr="data-user-id=${user.id}">保存</button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- 置き換えタグ — クリックで本文末尾に挿入。ユーザー専用タグはここで保存編集可。 -->
+            <div class="tag-panel">
+                <h4>デフォルトの置き換えタグ <span class="text-slate-400 font-normal">(クリックで本文に挿入)</span></h4>
+                <div class="tag-row" th:each="t : ${builtinTags}">
+                    <code class="tag-name" th:text="${t.token}" th:attr="data-token=${t.token}"></code>
+                    <span class="tag-desc" th:text="${t.description}"></span>
+                </div>
+            </div>
+
+            <div class="tag-panel" th:with="uid=${user.id}">
+                <h4>置き換えタグ（ユーザー専用・保存編集可）</h4>
+                <div class="tag-row">
+                    <code class="tag-name" data-token="%amount%">%amount%</code>
+                    <input type="text" class="tag-val" data-tag="amount" th:value="${user.tag1Value}" placeholder="例: 1,200円"/>
+                </div>
+                <div class="tag-row">
+                    <code class="tag-name" data-token="%product%">%product%</code>
+                    <input type="text" class="tag-val" data-tag="product" th:value="${user.tag2Value}" placeholder="例: ご注文商品"/>
+                </div>
+                <div class="tag-row">
+                    <code class="tag-name" data-token="%full_address%">%full_address%</code>
+                    <input type="text" class="tag-val" data-tag="fullAddress" th:value="${user.tag3Value}" placeholder="例: 東京都..."/>
+                </div>
+                <div class="tag-row">
+                    <code class="tag-name" data-token="%date_jp%">%date_jp%</code>
+                    <input type="text" class="tag-val" data-tag="dateJp" th:value="${user.tag4Value}" placeholder="空欄なら送信日を自動設定"/>
+                </div>
+                <div class="tag-row">
+                    <code class="tag-name" data-token="%reply_url%">%reply_url%</code>
+                    <span class="tag-desc">返信URL（送信時に自動生成）</span>
+                </div>
+                <div class="tag-row" style="justify-content:flex-end;">
+                    <button type="button" class="btn-tag-save" id="btnTagSave"
+                            th:attr="data-user-id=${user.id}">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="v-sash" style="grid-row: 3;" id="vSash2"></div>
+
+    <!-- ===== Bottom-right: templates ===== -->
+    <div class="pane pane-br">
+        <header>
+            <span>定型文</span>
+            <a class="btn-refresh ml-auto" th:href="@{/manager/settings/message-templates/new}" target="_blank">＋新規</a>
+            <a class="btn-refresh" th:href="@{/manager/settings/message-templates}" target="_blank">一覧</a>
+        </header>
+        <div class="body">
+            <div th:if="${templates.empty}" class="text-xs text-slate-400 p-2">定型文はまだ登録されていません</div>
+            <div th:each="t : ${templates}" class="tpl-item">
+                <div class="txt"
+                     th:attr="data-subject=${t.subject},data-body=${t.body}"
+                     onclick="applyTemplateFromElement(this)"
+                     style="flex-direction:column;align-items:flex-start;">
+                    <span class="name" th:text="${t.name}" th:title="${t.name}"></span>
+                    <span class="subj" th:text="${t.subject} ?: '(タイトル未設定)'" th:title="${t.subject}" style="font-weight:600;color:#1e293b;"></span>
+                    <span class="subj" th:text="${t.body}" th:title="${t.body}"></span>
+                </div>
+                <a class="icon" th:href="@{'/manager/settings/message-templates/' + ${t.id} + '/edit'}" target="_blank">編集</a>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// --- Drag handlers for the vertical & horizontal sashes ---
+(function () {
+    var root = document.querySelector('.wsx');
+    if (!root) return;
+
+    function onDragStart(axis) {
+        return function (ev) {
+            ev.preventDefault();
+            var move = function (e) {
+                if (axis === 'x') {
+                    var pct = Math.max(12, Math.min(70, (e.clientX / window.innerWidth) * 100));
+                    root.style.setProperty('--colL', pct + '%');
+                } else {
+                    var pct = Math.max(12, Math.min(85, (e.clientY / window.innerHeight) * 100));
+                    root.style.setProperty('--rowT', pct + '%');
+                }
+            };
+            var up = function () {
+                document.removeEventListener('mousemove', move);
+                document.removeEventListener('mouseup', up);
+            };
+            document.addEventListener('mousemove', move);
+            document.addEventListener('mouseup', up);
+        };
+    }
+    document.querySelectorAll('.v-sash').forEach(function (el) {
+        el.addEventListener('mousedown', onDragStart('x'));
+    });
+    document.querySelectorAll('.h-sash').forEach(function (el) {
+        el.addEventListener('mousedown', onDragStart('y'));
+    });
+})();
+
+function applyTemplateFromElement(el) {
+    var s = el.getAttribute('data-subject') || '';
+    var b = el.getAttribute('data-body') || '';
+    document.getElementById('subject').value = s;
+    document.getElementById('body').value = b;
+}
+
+// --- Reservation (予約送信) helpers shared with broadcast-form ---
+function pad2(n) { return String(n).padStart(2, '0'); }
+function fmtLocal(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
+        + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+document.querySelectorAll('[data-sched-box]').forEach(function (box) {
+    var input = box.querySelector('[data-sched-input]');
+    var status = box.querySelector('[data-sched-status]');
+    function refresh() {
+        if (input.value) {
+            status.textContent = '予約: ' + input.value.replace('T', ' ');
+            status.classList.add('scheduled');
+        } else {
+            status.textContent = '即時送信';
+            status.classList.remove('scheduled');
+        }
+    }
+    input.addEventListener('change', refresh);
+    box.querySelectorAll('[data-sched-quick]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var minutes = parseInt(btn.getAttribute('data-sched-quick'), 10);
+            var d = new Date(Date.now() + minutes * 60000);
+            input.value = fmtLocal(d);
+            refresh();
+        });
+    });
+    var clear = box.querySelector('[data-sched-clear]');
+    if (clear) clear.addEventListener('click', function () { input.value = ''; refresh(); });
+    refresh();
+});
+
+// --- Tag panel: click-to-insert + AJAX save ---
+function insertTagToBody(token) {
+    var ta = document.getElementById('body');
+    if (!ta) return;
+    var pos = ta.selectionStart || ta.value.length;
+    ta.value = ta.value.slice(0, pos) + token + ta.value.slice(ta.selectionEnd || pos);
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = pos + token.length;
+}
+document.querySelectorAll('code.tag-name[data-token]').forEach(function (el) {
+    el.addEventListener('click', function () { insertTagToBody(el.getAttribute('data-token')); });
+});
+
+(function () {
+    var memoBtn = document.getElementById('btnInternalMemoSave');
+    if (memoBtn) {
+        var uid = memoBtn.getAttribute('data-user-id');
+        memoBtn.addEventListener('click', async function () {
+            var memo = (document.getElementById('userInternalMemo') || {}).value || '';
+            try {
+                var r = await fetch('/manager/api/users/' + uid + '/internal-memo', {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ internalMemo: memo })
+                });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                memoBtn.textContent = '保存しました';
+                memoBtn.classList.add('saved');
+                setTimeout(function () { memoBtn.textContent = '保存'; memoBtn.classList.remove('saved'); }, 1500);
+            } catch (e) { alert('メモ保存失敗: ' + e.message); }
+        });
+    }
+})();
+
+(function () {
+    var btn = document.getElementById('btnTagSave');
+    if (!btn) return;
+    var uid = btn.getAttribute('data-user-id');
+    btn.addEventListener('click', async function () {
+        var body = {};
+        document.querySelectorAll('.tag-val[data-tag]').forEach(function (i) {
+            body[i.getAttribute('data-tag')] = i.value;
+        });
+        try {
+            var r = await fetch('/manager/api/users/' + uid + '/tags', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            btn.textContent = '保存しました';
+            btn.classList.add('saved');
+            setTimeout(function () { btn.textContent = '保存'; btn.classList.remove('saved'); }, 1500);
+        } catch (e) {
+            alert('保存に失敗しました: ' + e.message);
+        }
+    });
+})();
+</script>
+</section>
+</body>
+</html>

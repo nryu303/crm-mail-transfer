@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="robots" content="noindex,nofollow"/>
+    <title th:text="${adCode.name} + ' — 日別集計'">日別集計</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+               background: #f3faf3; color: #1a1a1a; font-size: .85rem; }
+        .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+        .header-bar { background: #fff; border: 1px solid #d4e6d4; border-radius: 4px;
+                      padding: 12px 18px; font-size: 1rem; font-weight: 600; }
+        .back { display: inline-block; margin-bottom: 12px; color: #1d4ed8; text-decoration: none; }
+        .back:hover { text-decoration: underline; }
+        .month-nav { text-align: center; margin: 18px 0 6px; }
+        .month-nav .month { font-size: 1rem; font-weight: 600; }
+        .month-nav .links { margin-top: 6px; font-size: .85rem; }
+        .month-nav a { color: #1d4ed8; text-decoration: none; }
+        .month-nav a:hover { text-decoration: underline; }
+        .month-nav .sep { color: #94a3b8; margin: 0 8px; }
+        .legend { text-align: center; margin: 14px 0 6px; font-weight: 600; }
+        .legend .m { color: #1d4ed8; }
+        .legend .f { color: #dc2626; margin-left: 18px; }
+        table { width: 100%; border-collapse: collapse; background: #fff;
+                border: 1px solid #c4dec4; }
+        thead .group-header { background: #d4ecd4; text-align: center; padding: 8px;
+                              font-weight: 600; border-bottom: 1px solid #b3d4b3; }
+        thead .col-header th { background: #f1f5f9; padding: 7px 8px;
+                               border-bottom: 1px solid #c4dec4; border-right: 1px solid #e2e8f0;
+                               font-size: .82rem; font-weight: 600; color: #1e293b; text-align: center; }
+        thead .col-header th.male { color: #1d4ed8; }
+        thead .col-header th.female { color: #dc2626; }
+        tbody td { padding: 6px 8px; border-bottom: 1px solid #e9efe9; border-right: 1px solid #e9efe9;
+                   text-align: right; }
+        tbody td.day { text-align: left; font-weight: 500; }
+        tbody td.male { color: #1d4ed8; }
+        tbody td.female { color: #dc2626; }
+        tbody td.zero { color: #94a3b8; }
+        tbody tr.total td { background: #f1f5f9; font-weight: 600; border-top: 2px solid #94a3b8; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <!-- Preserve the agency's group scope when going back to the list. Without ?g= the
+         link would land on the cross-group view (which is restricted to admin creds). -->
+    <a class="back" th:href="@{/media/index(g=${groupSlug},ym=${#temporals.format(targetMonth, 'yyyy-MM')})}">&lt;&lt; 一覧へ戻る</a>
+    <div class="header-bar"
+         th:text="${adCode.name} + ' (' + ${adCode.code} + ') — 日別集計'"></div>
+
+    <div class="month-nav">
+        <div class="month" th:text="${#temporals.format(targetMonth, 'yyyy年MM月')}"></div>
+        <div class="links">
+            <a th:href="@{'/media/index/' + ${adCode.code}(ym=${#temporals.format(prevMonth, 'yyyy-MM')})}">&lt;&lt; 前月</a>
+            <span class="sep">|</span>
+            <a th:href="@{'/media/index/' + ${adCode.code}(ym=${#temporals.format(nextMonth, 'yyyy-MM')})}">翌月 &gt;&gt;</a>
+        </div>
+    </div>
+
+    <div class="legend">
+        <span class="m">■ 男性</span>
+        <span class="f">■ 女性</span>
+    </div>
+
+    <table>
+        <thead>
+        <tr><th colspan="7" class="group-header" th:text="'日別集計 (' + ${#lists.size(daily)} + '日分)'"></th></tr>
+        <tr class="col-header">
+            <th style="width:140px;">日付</th>
+            <th class="male">登録</th>
+            <th class="female">登録</th>
+            <th>合計登録</th>
+            <th class="male">入金</th>
+            <th class="female">入金</th>
+            <th>入金合計</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="d : ${daily}">
+            <td class="day" th:text="${#temporals.format(d.date, 'M月d日 (E)')}"></td>
+            <td class="male" th:classappend="${d.signupMale == 0} ? 'zero'" th:text="${d.signupMale}"></td>
+            <td class="female" th:classappend="${d.signupFemale == 0} ? 'zero'" th:text="${d.signupFemale}"></td>
+            <td th:classappend="${d.signupTotal == 0} ? 'zero'" th:text="${d.signupTotal}"></td>
+            <td class="male" th:classappend="${d.paidMale.signum() == 0} ? 'zero'" th:text="${#numbers.formatInteger(d.paidMale, 1, 'COMMA')} + '円'"></td>
+            <td class="female" th:classappend="${d.paidFemale.signum() == 0} ? 'zero'" th:text="${#numbers.formatInteger(d.paidFemale, 1, 'COMMA')} + '円'"></td>
+            <td th:classappend="${d.paidTotal.signum() == 0} ? 'zero'" th:text="${#numbers.formatInteger(d.paidTotal, 1, 'COMMA')} + '円'"></td>
+        </tr>
+        <tr class="total">
+            <td>合計</td>
+            <td class="male" th:text="${#aggregates.sum(daily.![signupMale])}"></td>
+            <td class="female" th:text="${#aggregates.sum(daily.![signupFemale])}"></td>
+            <td th:text="${#aggregates.sum(daily.![signupTotal])}"></td>
+            <td class="male" th:text="${#numbers.formatInteger(#aggregates.sum(daily.![paidMale]), 1, 'COMMA')} + '円'"></td>
+            <td class="female" th:text="${#numbers.formatInteger(#aggregates.sum(daily.![paidFemale]), 1, 'COMMA')} + '円'"></td>
+            <td th:text="${#numbers.formatInteger(#aggregates.sum(daily.![paidTotal]), 1, 'COMMA')} + '円'"></td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

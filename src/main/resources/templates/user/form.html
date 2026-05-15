@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title th:text="${editing} ? 'ユーザー編集' : 'ユーザー新規作成'">ユーザー</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1" th:text="${editing} ? 'ユーザー編集' : 'ユーザー新規作成'"></h1>
+        <a class="text-sm text-blue-600 hover:underline" th:href="@{/manager/users}">一覧に戻る</a>
+    </div>
+
+    <form method="post"
+          th:action="${editing} ? @{'/manager/users/' + ${userId}} : @{/manager/users}"
+          th:object="${form}" class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-3xl">
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">メールアドレス <span class="text-red-500">*</span></label>
+            <input type="email" class="tw-input" th:field="*{email}"
+                   th:classappend="${#fields.hasErrors('email')} ? 'border-red-400'"/>
+            <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></p>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">表示名</label>
+            <input type="text" class="tw-input" th:field="*{displayName}"/>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">キャリアドメイン</label>
+            <input type="text" class="tw-input" th:field="*{carrierDomain}" placeholder="例: i.softbank.jp"/>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">ステータス</label>
+            <select class="tw-input" th:field="*{status}">
+                <option th:each="s : ${statuses}" th:value="${s}" th:text="${s}"></option>
+            </select>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">フォルダ</label>
+            <select class="tw-input" th:field="*{folder}">
+                <option value="">（未設定）</option>
+                <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
+            </select>
+            <p class="mt-1 text-xs text-slate-500">フォルダ名は管理者設定で変更できます。</p>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">専用返信画面HTML</label>
+            <textarea class="tw-input font-mono" rows="6" th:field="*{memo}"
+                      placeholder="例: &lt;p&gt;%name% 様&lt;/p&gt;&#10;&lt;p&gt;ご請求額: %amount%&lt;/p&gt;"></textarea>
+            <p class="mt-1 text-sm text-slate-500">
+                ユーザーの返信ページ上部にHTMLとして表示されます。下記の置き換えタグはそのユーザーの値に差し替えられます。
+            </p>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">個別メモ <span class="text-slate-400 font-normal">(管理者用、返信画面には表示されません)</span></label>
+            <textarea class="tw-input" rows="3" th:field="*{internalMemo}"
+                      placeholder="このユーザーに関する社内メモ"></textarea>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-2">置き換えタグ</label>
+            <p class="text-sm text-slate-500 mb-3">
+                メッセージの件名や本文に下記のタグを入れると、送信時にこのユーザーの値へ自動的に差し替えられます。<br/>
+                組み込みタグ (設定不要、自動的に入ります):
+                <code class="bg-slate-100 px-2 py-0.5 rounded text-slate-700 mx-1">%name%</code>→ 表示名
+                <code class="bg-slate-100 px-2 py-0.5 rounded text-slate-700 mx-1">%email%</code>→ メールアドレス
+            </p>
+
+            <div class="space-y-2">
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <label class="col-span-3 text-sm text-slate-600">
+                        <code class="bg-slate-100 px-2 py-0.5 rounded">%amount%</code>
+                        <span class="text-xs text-slate-400">(金額)</span>
+                    </label>
+                    <div class="col-span-9"><input type="text" class="tw-input" th:field="*{amount}" placeholder="例: 1,200円"/></div>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <label class="col-span-3 text-sm text-slate-600">
+                        <code class="bg-slate-100 px-2 py-0.5 rounded">%product%</code>
+                        <span class="text-xs text-slate-400">(商品名)</span>
+                    </label>
+                    <div class="col-span-9"><input type="text" class="tw-input" th:field="*{product}" placeholder="例: iPhone 15 Pro"/></div>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <label class="col-span-3 text-sm text-slate-600">
+                        <code class="bg-slate-100 px-2 py-0.5 rounded">%full_address%</code>
+                        <span class="text-xs text-slate-400">(住所)</span>
+                    </label>
+                    <div class="col-span-9"><input type="text" class="tw-input" th:field="*{fullAddress}" placeholder="例: 東京都千代田区丸の内1-1-1"/></div>
+                </div>
+                <div class="grid grid-cols-12 gap-2 items-center">
+                    <label class="col-span-3 text-sm text-slate-600">
+                        <code class="bg-slate-100 px-2 py-0.5 rounded">%date_jp%</code>
+                        <span class="text-xs text-slate-400">(日付)</span>
+                    </label>
+                    <div class="col-span-9"><input type="text" class="tw-input" th:field="*{dateJp}" placeholder="空欄なら当日の日付を自動設定"/></div>
+                </div>
+            </div>
+        </div>
+
+        <input type="hidden" name="confirmPassword" id="updateConfirmPassword"/>
+        <div class="flex items-center gap-3">
+            <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm"
+                    th:text="${editing} ? '更新する' : '作成する'"
+                    th:onclick="${editing} ? 'return maybeConfirmEmailChange(this);' : null"
+                    th:attr="data-original-email=${editing} ? ${form.email} : ''"></button>
+            <a class="text-sm text-blue-600 hover:underline" th:href="@{/manager/users}">キャンセル</a>
+            <a th:if="${editing}"
+               class="ml-auto inline-flex items-center px-3 py-2 text-sm border border-sky-500 text-sky-700 hover:bg-sky-50 rounded-md"
+               th:href="@{'/manager/users/' + ${userId} + '/reply-preview'}" target="_blank">返信画面プレビュー</a>
+        </div>
+    </form>
+    <script>
+    function maybeConfirmEmailChange(btn) {
+        var form = btn.closest('form');
+        var orig = btn.getAttribute('data-original-email') || '';
+        var current = form.querySelector('[name="email"]').value.trim();
+        if (orig.toLowerCase() === current.toLowerCase()) return true; // unchanged
+        var pw = prompt('メールアドレスを変更します。管理者パスワードを入力してください。');
+        if (pw === null || pw === '') { return false; }
+        form.querySelector('#updateConfirmPassword').value = pw;
+        return true;
+    }
+    </script>
+
+    <form th:if="${editing}" method="post" class="mt-4 max-w-3xl"
+          th:action="@{'/manager/users/' + ${userId} + '/delete'}"
+          onsubmit="return confirmDelete(this);">
+        <input type="hidden" name="confirmPassword" id="confirmPassword"/>
+        <button type="submit" class="inline-flex items-center px-3 py-2 text-sm border border-red-500 text-red-600 hover:bg-red-50 rounded-md">削除</button>
+        <p class="mt-2 text-xs text-slate-500">※削除には管理者パスワードの確認が必要です。</p>
+    </form>
+    <script>
+    function confirmDelete(form) {
+        if (!confirm('このユーザーを削除します。よろしいですか? 関連するメッセージと入金履歴も削除されます。')) return false;
+        var pw = prompt('管理者パスワードを入力してください (削除の確認)');
+        if (pw === null || pw === '') return false;
+        form.querySelector('#confirmPassword').value = pw;
+        return true;
+    }
+    </script>
+</section>
+</body>
+</html>

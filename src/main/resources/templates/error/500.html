@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>500 | CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-100 flex items-start justify-center pt-24">
+<div class="w-full max-w-md">
+    <div class="bg-white rounded-lg shadow p-8 text-center">
+        <div class="text-6xl font-bold text-slate-300 mb-4">500</div>
+        <h1 class="text-xl font-semibold text-slate-800 mb-3">予期しないエラーが発生しました</h1>
+        <p class="text-sm text-slate-500 mb-6">
+            お手数をおかけいたしますが、時間をおいて再度お試しください。<br/>
+            問題が解消しない場合は管理者にご連絡ください。
+        </p>
+        <a class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm"
+           th:href="@{/manager/dashboard}">ダッシュボードへ戻る</a>
+    </div>
+</div>
+</body>
+</html>
