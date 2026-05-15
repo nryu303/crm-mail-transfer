@@ -1,0 +1,49 @@
+[Unit]
+Description=CRM Carrier Messaging Platform
+Documentation=https://49.212.164.254
+After=network-online.target
+Wants=network-online.target
+# MySQL runs inside rootless podman under the centos user; we don't hard-depend because
+# the container is started by podman's user-level machinery, not a system unit.
+
+[Service]
+Type=simple
+User=centos
+Group=centos
+WorkingDirectory=/home/centos/crm-platform
+
+# Non-secret configuration (host names, IP allowlists, toolchain path)
+Environment="JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk"
+Environment="SPRING_PROFILES_ACTIVE=dev"
+Environment="OUTBOUND_ADAPTER=relay"
+Environment="REPLY_BASE_URL=http://49.212.164.254"
+Environment="RELAY_URL=http://133.88.116.190:50000/api/mail/received"
+Environment="RELAY_SSH_HOST=133.88.116.190"
+Environment="RELAY_SSH_USER=root"
+Environment="AMG_IPS=133.88.116.190,160.251.233.64,160.251.180.110,160.16.231.39,157.7.89.36,127.0.0.1"
+
+# Secrets — loaded from /etc/crm.env (mode 0600 root:root).
+# Required keys: DB_PASSWORD, AES_ENCRYPTION_KEY, RELAY_SSH_PASSWORD.
+# The leading dash makes startup tolerant of a missing file (would surface as
+# a Spring property-resolution error rather than a systemd unit failure).
+EnvironmentFile=-/etc/crm.env
+
+ExecStart=/usr/lib/jvm/java-1.8.0-openjdk/bin/java -Xms256m -Xmx1g -jar /home/centos/crm-platform/target/crm.jar
+
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# Lockdown
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/centos/crm-platform
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crm
+
+[Install]
+WantedBy=multi-user.target

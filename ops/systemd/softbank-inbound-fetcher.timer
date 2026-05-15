@@ -1,0 +1,11 @@
+[Unit]
+Description=Run softbank-inbound-fetcher every 2 minutes
+After=network-online.target
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+Unit=softbank-inbound-fetcher.service
+
+[Install]
+WantedBy=timers.target

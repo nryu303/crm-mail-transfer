@@ -1,0 +1,13 @@
+[Unit]
+Description=SoftBank IMAP inbound-mail fetcher (multi-account)
+After=network-online.target crm.service
+
+[Service]
+Type=oneshot
+# Credentials loaded from a root-owned 0600 env file. Required key:
+#   SOFTBANK_IMAP_ACCOUNTS=user1@i.softbank.jp|pw1;user2@i.softbank.jp|pw2;...
+EnvironmentFile=/etc/softbank-fetcher.env
+ExecStart=/usr/bin/python3 /usr/local/bin/softbank-inbound-fetcher.py
+StandardOutput=journal
+StandardError=journal
+User=centos
