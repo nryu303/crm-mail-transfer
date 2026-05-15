@@ -50,6 +50,7 @@ public class InboundMailService {
     public static final String REASON_BOUNCE         = "from_looks_like_system_bounce";
     public static final String REASON_MISSING_FIELDS = "missing_from_or_to";
     public static final String REASON_DUPLICATE      = "duplicate_message_id";
+    public static final String REASON_USER_NOT_ACTIVE = "user_status_not_active";
 
     private final InboundMailLogRepository logRepository;
     private final CarrierAddressPoolRepository poolRepository;
@@ -163,6 +164,14 @@ public class InboundMailService {
         }
         CrmUser user = userOpt.get();
         entry.setMatchedUserId(user.getId());
+
+        // H2: suspended / non-active users should not get inbound rows on their thread.
+        // Operationally an inbound from a suspended user is a no-op — it cannot drive an
+        // outbound reply (the dispatcher would not reach them) and pollutes the thread
+        // view used for live-account triage. Log it instead.
+        if (!CrmUser.STATUS_ACTIVE.equals(user.getStatus())) {
+            return reject(entry, REASON_USER_NOT_ACTIVE);
+        }
 
         // 3) Pool/user binding is informational only as of the 2026-05 receive-only-pool
         //    refactor. The user's policy ("キャリアプール=受信専用に固定") means the pool
