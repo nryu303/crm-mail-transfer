@@ -19,24 +19,29 @@
 </head>
 <body>
 
-<div class="preview-banner bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-900 flex items-center gap-3"
-     style="font-family:sans-serif;">
-    <strong>管理者プレビュー</strong>
-    <span>ユーザーID <code th:text="${user.id}" style="background:#fff;padding:0 4px;border-radius:3px;"></code></span>
+<!-- Banners use inline styles because reply.css is the only stylesheet loaded
+     on this page (Tailwind is NOT available here, so utility classes like
+     bg-amber-50 / flex / gap-3 have no effect). Keep tokens inline. -->
+<div class="preview-banner"
+     style="position:sticky;top:0;z-index:30;background:#fffbeb;border-bottom:1px solid #fde68a;padding:10px 16px;font-size:.85rem;color:#78350f;font-family:sans-serif;display:flex;align-items:center;gap:14px;flex-wrap:wrap;line-height:1.5;">
+    <strong style="color:#7c2d12;">管理者プレビュー</strong>
+    <span>ユーザーID
+        <code th:text="${user.id}" style="background:#fff;padding:1px 6px;border-radius:3px;border:1px solid #fde68a;"></code>
+    </span>
     <span th:if="${user.displayName}" th:text="'(' + ${user.displayName} + ')'"></span>
-    <span class="text-amber-700" style="opacity:.85;">置き換えタグはこのユーザーの値で差し替えています。 / 「送信する」ボタンはプレビュー上では動作しません。</span>
-    <a class="ml-auto" href="javascript:history.back()" style="margin-left:auto;color:#2563eb;text-decoration:underline;">戻る</a>
+    <span style="opacity:.85;color:#92400e;">置き換えタグはこのユーザーの値で差し替えています。 / 「送信する」ボタンはプレビュー上では動作しません。</span>
+    <a href="javascript:history.back()" style="margin-left:auto;color:#2563eb;text-decoration:underline;">戻る</a>
 </div>
 
-<div th:if="${usingDefaultHtml}" class="bg-sky-50 border-b border-sky-200 px-4 py-2 text-xs text-sky-800"
-     style="font-family:sans-serif;">
+<div th:if="${usingDefaultHtml}"
+     style="background:#f0f9ff;border-bottom:1px solid #bae6fd;padding:8px 16px;font-size:.78rem;color:#075985;font-family:sans-serif;line-height:1.5;">
     このユーザーには専用返信画面HTMLが未設定です。<strong>設定ページのデフォルト返信画面HTML</strong>を表示しています。
     <a th:href="@{/manager/settings/reply-page}" style="color:#2563eb;text-decoration:underline;margin-left:8px;">設定ページへ</a>
 </div>
-<div th:if="${repaired}" class="bg-red-50 border-b border-red-200 px-4 py-2 text-xs text-red-800"
-     style="font-family:sans-serif;">
-    メモのHTMLに <code style="background:#fff;padding:0 4px;border-radius:3px;">&lt;/style&gt;</code> または
-    <code style="background:#fff;padding:0 4px;border-radius:3px;">&lt;script&gt;</code> の不足が検出されたため、プレビューでは自動修復しています。
+<div th:if="${repaired}"
+     style="background:#fef2f2;border-bottom:1px solid #fecaca;padding:8px 16px;font-size:.78rem;color:#991b1b;font-family:sans-serif;line-height:1.5;">
+    メモのHTMLに <code style="background:#fff;padding:1px 6px;border-radius:3px;border:1px solid #fecaca;">&lt;/style&gt;</code> または
+    <code style="background:#fff;padding:1px 6px;border-radius:3px;border:1px solid #fecaca;">&lt;script&gt;</code> の不足が検出されたため、プレビューでは自動修復しています。
     実際のユーザー画面でも正しく表示されるよう、専用返信画面HTMLの保存内容をご確認のうえ修正ください。
 </div>
 
