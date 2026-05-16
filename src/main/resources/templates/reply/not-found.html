@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="robots" content="noindex,nofollow"/>
+    <title>ページは存在しません</title>
+    <style>
+        body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans",sans-serif;
+               background:#f8fafc; color:#1e293b; padding:0; }
+        .wrap { max-width:640px; margin:60px auto; padding:32px 28px; background:#fff;
+                border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,.06); }
+        h1 { font-size:28px; color:#dc2626; margin:0 0 8px 0; font-weight:700; }
+        .sub { color:#475569; font-size:14px; line-height:1.7; margin-bottom:32px; }
+        .visitor { background:#fef2f2; border:1px solid #fecaca; border-radius:8px;
+                   padding:16px 18px; font-size:13px; color:#991b1b; }
+        .visitor h2 { font-size:13px; font-weight:700; color:#7f1d1d; margin:0 0 10px 0;
+                      letter-spacing:.05em; }
+        .visitor dl { margin:0; }
+        .visitor dt { font-weight:600; color:#7f1d1d; margin-top:8px; font-size:11px;
+                      text-transform:uppercase; letter-spacing:.05em; }
+        .visitor dd { margin:2px 0 0 0; padding-left:0;
+                      font-family:Menlo,Consolas,monospace; font-size:12px; color:#450a0a;
+                      word-break:break-all; line-height:1.4; }
+        .footer { text-align:center; margin-top:28px; font-size:11px; color:#94a3b8; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>ページは存在しません</h1>
+    <p class="sub">
+        お探しのページは見つかりませんでした。<br/>
+        このURLは無効です。<br/><br/>
+        本ページへのアクセス情報を記録しました。
+    </p>
+
+    <div class="visitor">
+        <h2>アクセス情報</h2>
+        <dl>
+            <dt>IPアドレス</dt>
+            <dd th:text="${visitorIp}">-</dd>
+
+            <dt>ブラウザ / OS (User-Agent)</dt>
+            <dd th:text="${visitorUa}">-</dd>
+
+            <dt>言語設定</dt>
+            <dd th:text="${visitorLang}">-</dd>
+
+            <dt>アクセス日時 (サーバー時刻)</dt>
+            <dd th:text="${#temporals.format(visitedAt, 'yyyy-MM-dd HH:mm:ss')}">-</dd>
+        </dl>
+    </div>
+
+    <p class="footer">本サイトのアクセスログは保管されています。</p>
+</div>
+</body>
+</html>

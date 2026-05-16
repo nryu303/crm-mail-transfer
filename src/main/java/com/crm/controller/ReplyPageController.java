@@ -1,5 +1,7 @@
 package com.crm.controller;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.crm.entity.CrmUser;
 import com.crm.entity.Message;
 import com.crm.entity.ReplyPage;
@@ -32,6 +34,8 @@ import java.util.regex.Pattern;
  */
 @Controller
 public class ReplyPageController {
+
+    private static final Logger log = LoggerFactory.getLogger(ReplyPageController.class);
 
     /** Hard caps on the public reply form. Matches the bulk-reply guard in InboxController. */
     private static final int REPLY_SUBJECT_MAX = 500;
@@ -68,6 +72,27 @@ public class ReplyPageController {
         this.rateLimitService = rateLimitService;
     }
 
+    /**
+     * Render a deterrent "page does not exist" view that also discloses the visitor's
+     * own IP and User-Agent. Used when the URL is technically valid but the underlying
+     * user has been suspended — operators wanted this distinct from a regular 404 so
+     * a curious/malicious visitor sees that we logged their fingerprint.
+     */
+    private String renderNotFoundWithVisitorInfo(HttpServletRequest request, Model model, String reason) {
+        String ip = com.crm.util.ClientIpResolver.resolve(request);
+        String ua = request.getHeader("User-Agent");
+        if (ua == null) ua = "(none)";
+        if (ua.length() > 500) ua = ua.substring(0, 500) + "…";
+        String accept = request.getHeader("Accept-Language");
+        log.info("Reply URL blocked ({}): ip={} ua={}", reason,
+                com.crm.util.LogSafe.of(ip), com.crm.util.LogSafe.of(ua));
+        model.addAttribute("visitorIp", ip);
+        model.addAttribute("visitorUa", ua);
+        model.addAttribute("visitorLang", accept == null ? "(none)" : accept);
+        model.addAttribute("visitedAt", java.time.LocalDateTime.now());
+        return "reply/not-found";
+    }
+
     @GetMapping("/reply/{token}")
     public String show(@PathVariable String token, HttpServletRequest request, Model model) {
         Optional<ReplyPage> rpOpt = replyPageService.findByToken(token);
@@ -75,12 +100,21 @@ public class ReplyPageController {
             return "reply/expired";
         }
         ReplyPage rp = rpOpt.get();
+
+        // Block suspended users — show a "page does not exist" deterrent screen that
+        // exposes the visitor's IP/UA, on the assumption that anyone hitting the URL
+        // after the user was suspended is probing it deliberately.
+        Optional<CrmUser> userPre = userRepository.findById(rp.getUserId());
+        if (userPre.isPresent() && !CrmUser.STATUS_ACTIVE.equals(userPre.get().getStatus())) {
+            return renderNotFoundWithVisitorInfo(request, model, "user_suspended");
+        }
+
         replyPageService.recordView(rp);
 
         // Fall-back chain for header: REPLY_PAGE.HEADER_HTML → user.memo → site-default.
         // Treat empty/whitespace strings as "not set" so the next fallback layer kicks in
         // (admin reported that user.memo = "" was blocking the site-default from being used).
-        Optional<CrmUser> user = userRepository.findById(rp.getUserId());
+        Optional<CrmUser> user = userPre;
         if (!isPreviewBot(request)) {
             user.ifPresent(userActivityService::touchLastLogin);
         }
@@ -110,6 +144,12 @@ public class ReplyPageController {
             return "reply/expired";
         }
         ReplyPage rp = rpOpt.get();
+        // Mirror the GET-side suspended-user block so a malicious POST via curl
+        // can't bypass it. Same deterrent screen with IP/UA disclosure.
+        Optional<CrmUser> postUserCheck = userRepository.findById(rp.getUserId());
+        if (postUserCheck.isPresent() && !CrmUser.STATUS_ACTIVE.equals(postUserCheck.get().getStatus())) {
+            return renderNotFoundWithVisitorInfo(request, model, "user_suspended_on_post");
+        }
         // Rate-limit per (token, IP) plus a per-IP global cap — see ReplyRateLimitService.
         String clientIp = ClientIpResolver.resolve(request);
         if (!rateLimitService.tryAcquire(token, clientIp)) {
