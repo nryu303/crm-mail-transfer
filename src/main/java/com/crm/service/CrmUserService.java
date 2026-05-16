@@ -61,6 +61,20 @@ public class CrmUserService {
     private final PasswordEncoder passwordEncoder;
     private final CarrierBindingService bindingService;
 
+    /**
+     * Live CSV-import progress counter. Reset to 0 at the start of each importCsv()
+     * call, incremented per processed row. Read by the GET /manager/users/import/progress
+     * endpoint so the frontend can poll and show "X / Y件 登録中..." during a long
+     * import. Not transactional — informational only. Single global counter assumes
+     * only one operator imports at a time (matches actual usage).
+     */
+    private final java.util.concurrent.atomic.AtomicLong importProgress =
+            new java.util.concurrent.atomic.AtomicLong(0);
+    private volatile boolean importRunning = false;
+
+    public long getImportProgress() { return importProgress.get(); }
+    public boolean isImportRunning() { return importRunning; }
+
     public CrmUserService(CrmUserRepository repository,
                           PasswordEncoder passwordEncoder,
                           CarrierBindingService bindingService) {
@@ -189,6 +203,10 @@ public class CrmUserService {
 
     @Transactional
     public CsvImportResult importCsv(InputStream in) throws IOException {
+        // Reset the live progress counter so the frontend poller starts from 0.
+        importProgress.set(0);
+        importRunning = true;
+        try {
         CsvImportResult result = new CsvImportResult();
         try (CSVReader reader = openReader(in)) {
             String[] header = reader.readNext();
@@ -213,11 +231,15 @@ public class CrmUserService {
                 rowNum++;
                 result.incrementTotal();
                 processRow(row, rowNum, result);
+                importProgress.set(rowNum - 1);  // live counter for /import/progress poller
             }
         } catch (CsvValidationException e) {
             result.addError(0, "CSVの読み込みに失敗しました: " + e.getMessage());
         }
         return result;
+        } finally {
+            importRunning = false;
+        }
     }
 
     private void processRow(String[] row, int rowNum, CsvImportResult result) {

@@ -491,6 +491,20 @@ public class UserController {
     }
 
     /**
+     * Lightweight JSON endpoint polled by the import page during a long upload so the
+     * operator sees "現在 X件 登録中..." instead of staring at a blank tab for minutes.
+     * Returns the live row counter maintained by CrmUserService.importCsv().
+     */
+    @GetMapping("/import/progress")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public java.util.Map<String, Object> importProgress() {
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("progress", service.getImportProgress());
+        body.put("running",  service.isImportRunning());
+        return body;
+    }
+
+    /**
      * Admin-only preview of what the user would see on their reply page —
      * the memo, with placeholder tags substituted against this user's data.
      */

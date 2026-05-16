@@ -28,7 +28,7 @@ public class UserSearchForm {
     private String registerTo;
 
     private int page = 0;
-    private int size = 100;
+    private int size = 500;
 
     /** Parse email into tokens (split on \n, \r, comma). Empty list if blank. */
     public java.util.List<String> emailTokens() { return splitTokens(email); }
@@ -90,7 +90,7 @@ public class UserSearchForm {
     public void setPage(int page) { this.page = Math.max(page, 0); }
 
     public int getSize() { return size; }
-    public void setSize(int size) { this.size = (size < 1 || size > 200) ? 100 : size; }
+    public void setSize(int size) { this.size = (size < 1 || size > 1000) ? 500 : size; }
 
     public boolean hasAnyFilter() {
         return hasText(email) || hasText(displayName) || hasText(status) || hasText(carrierCode)

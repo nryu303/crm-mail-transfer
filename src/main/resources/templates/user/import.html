@@ -24,14 +24,83 @@
         既存のメールアドレスと重複する行はスキップされます。
     </div>
 
-    <form method="post" th:action="@{/manager/users/import}" enctype="multipart/form-data"
+    <form id="importForm" method="post" th:action="@{/manager/users/import}" enctype="multipart/form-data"
           class="max-w-3xl bg-white rounded-lg shadow-sm border border-slate-100 p-6 mb-4">
         <div class="mb-4">
             <label class="block text-sm font-medium text-slate-700 mb-1">CSVファイル</label>
-            <input type="file" name="file" accept=".csv,text/csv" class="tw-input" required/>
+            <input type="file" id="importFile" name="file" accept=".csv,text/csv" class="tw-input" required/>
         </div>
-        <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm">インポート実行</button>
+        <button id="importSubmitBtn" type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm">インポート実行</button>
     </form>
+
+    <!-- Live progress panel — shown while the import is running. The form submit
+         still POSTs normally; this panel polls /import/progress every 2s so the
+         operator sees "X / Y件 登録中..." instead of staring at a blank tab. -->
+    <div id="importProgressPanel" class="max-w-3xl bg-white rounded-lg shadow-sm border border-slate-100 p-6 mb-4" style="display:none;">
+        <h2 class="text-base font-semibold text-slate-800 mb-3">📥 インポート進行中...</h2>
+        <div class="text-3xl font-bold text-blue-600 mb-2">
+            <span id="impProgress">0</span>
+            <span class="text-base text-slate-500"> / <span id="impTotal">?</span> 件</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden mb-2">
+            <div id="impBar" class="bg-blue-600 h-3" style="width:0%;transition:width .3s;"></div>
+        </div>
+        <p class="text-xs text-slate-500">
+            処理中はこのページを閉じないでください。
+            完了次第、結果が下に表示されます。<br/>
+            ※カウンタはサーバ側の処理済み行数 (2秒ごとに更新)。
+        </p>
+    </div>
+
+<script>
+(function(){
+    var form = document.getElementById('importForm');
+    var fileInput = document.getElementById('importFile');
+    var btn = document.getElementById('importSubmitBtn');
+    var panel = document.getElementById('importProgressPanel');
+    var elProgress = document.getElementById('impProgress');
+    var elTotal = document.getElementById('impTotal');
+    var elBar = document.getElementById('impBar');
+
+    function countRowsLocally(file, cb) {
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var n = (e.target.result.match(/\n/g) || []).length;
+            // Subtract 1 for the header row when present.
+            cb(Math.max(0, n - 1));
+        };
+        reader.onerror = function() { cb(null); };
+        reader.readAsText(file);
+    }
+
+    function poll() {
+        fetch('/manager/users/import/progress', {credentials:'same-origin'})
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                elProgress.textContent = d.progress;
+                var totalStr = elTotal.textContent;
+                if (totalStr !== '?' && parseInt(totalStr, 10) > 0) {
+                    var pct = Math.min(100, (d.progress / parseInt(totalStr, 10)) * 100);
+                    elBar.style.width = pct + '%';
+                }
+                if (d.running) setTimeout(poll, 2000);
+            })
+            .catch(function(){ setTimeout(poll, 3000); });
+    }
+
+    form.addEventListener('submit', function(){
+        var f = fileInput.files[0];
+        if (!f) return;
+        btn.disabled = true;
+        btn.textContent = 'アップロード中...';
+        panel.style.display = '';
+        countRowsLocally(f, function(n){
+            if (n != null) elTotal.textContent = n;
+        });
+        setTimeout(poll, 1500);
+    });
+})();
+</script>
 
     <div th:if="${result}" class="max-w-3xl bg-white rounded-lg shadow-sm border border-slate-100 p-6">
         <h2 class="text-base font-semibold text-slate-800 mb-3">インポート結果</h2>

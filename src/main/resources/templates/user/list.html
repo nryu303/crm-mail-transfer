@@ -331,11 +331,26 @@
                            th:classappend="${users.first} ? 'opacity-50 pointer-events-none'"
                            th:href="@{/manager/users(page=${users.number - 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}">前へ</a>
                     </li>
-                    <li th:each="i : ${#numbers.sequence(0, users.totalPages - 1)}">
+                    <!-- Windowed pagination: first page, an ellipsis,
+                         a sliding window of current ± 2, an ellipsis, last page.
+                         Avoids the 1..151 wall when totalPages is large. -->
+                    <li th:if="${users.number > 2}">
+                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                           th:href="@{/manager/users(page=0,size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}">1</a>
+                    </li>
+                    <li th:if="${users.number > 3}" style="color:#94a3b8; padding:0 4px;">…</li>
+                    <li th:each="i : ${#numbers.sequence(0, users.totalPages - 1)}"
+                        th:if="${i >= users.number - 2 and i <= users.number + 2}">
                         <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                            th:classappend="${i == users.number} ? 'bg-blue-600 text-white border-blue-600'"
                            th:href="@{/manager/users(page=${i},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}"
                            th:text="${i + 1}"></a>
+                    </li>
+                    <li th:if="${users.number < users.totalPages - 4}" style="color:#94a3b8; padding:0 4px;">…</li>
+                    <li th:if="${users.number < users.totalPages - 3}">
+                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                           th:href="@{/manager/users(page=${users.totalPages - 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}"
+                           th:text="${users.totalPages}"></a>
                     </li>
                     <li>
                         <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
