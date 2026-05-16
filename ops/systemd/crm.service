@@ -1,10 +1,11 @@
 [Unit]
 Description=CRM Carrier Messaging Platform
 Documentation=https://49.212.164.254
-After=network-online.target
+After=network-online.target user@1000.service
 Wants=network-online.target
-# MySQL runs inside rootless podman under the centos user; we don't hard-depend because
-# the container is started by podman's user-level machinery, not a system unit.
+# MySQL runs as a USER systemd unit (container-crm-mysql.service under
+# /home/centos/.config/systemd/user). We can't directly depend on a user-unit
+# from a system-unit, so ExecStartPre below polls the DB port instead.
 
 [Service]
 Type=simple
@@ -23,11 +24,14 @@ Environment="RELAY_SSH_HOST=133.88.116.190"
 Environment="RELAY_SSH_USER=root"
 Environment="AMG_IPS=133.88.116.190,160.251.233.64,160.251.180.110,160.16.231.39,157.7.89.36,127.0.0.1"
 
-# Secrets — loaded from /etc/crm.env (mode 0600 root:root).
-# Required keys: DB_PASSWORD, AES_ENCRYPTION_KEY, RELAY_SSH_PASSWORD.
-# The leading dash makes startup tolerant of a missing file (would surface as
-# a Spring property-resolution error rather than a systemd unit failure).
+# Secrets loaded from /etc/crm.env (mode 0600 root:root).
 EnvironmentFile=-/etc/crm.env
+
+# Wait up to 120 s for MySQL to accept connections before starting Spring.
+# Without this, a fresh boot races the MySQL container and Spring throws a
+# DB-connection error on startup. systemd's Restart=on-failure would
+# eventually recover, but at the cost of a noisy boot.
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do (echo > /dev/tcp/127.0.0.1/3306) >/dev/null 2>&1 && exit 0; sleep 2; done; echo "MySQL on 3306 not reachable after 120s"; exit 1'
 
 ExecStart=/usr/lib/jvm/java-1.8.0-openjdk/bin/java -Xms256m -Xmx1g -jar /home/centos/crm-platform/target/crm.jar
 
@@ -35,6 +39,7 @@ SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
+TimeoutStartSec=180
 
 # Lockdown
 NoNewPrivileges=true
