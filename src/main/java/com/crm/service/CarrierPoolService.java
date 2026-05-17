@@ -8,6 +8,8 @@ import com.crm.repository.CarrierAddressPoolRepository;
 import com.crm.util.AesEncryptionUtil;
 import com.crm.util.CsvUtil;
 import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.CSVParserBuilder;
 import com.opencsv.exceptions.CsvValidationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,9 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.persistence.criteria.Predicate;
 import java.io.BufferedReader;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PushbackReader;
+import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -131,8 +136,7 @@ public class CarrierPoolService {
     @Transactional
     public CsvImportResult importCsv(InputStream in) throws IOException {
         CsvImportResult result = new CsvImportResult();
-        try (CSVReader reader = new CSVReader(new BufferedReader(
-                new InputStreamReader(in, StandardCharsets.UTF_8)))) {
+        try (CSVReader reader = openReader(in)) {
             String[] header = reader.readNext();
             if (header == null) {
                 result.addError(0, "CSVが空です");
@@ -211,6 +215,42 @@ public class CarrierPoolService {
         p.setIsActive(true);
         repository.save(p);
         result.incrementSuccess();
+    }
+
+    /**
+     * Open the import stream as a CSV reader, stripping the UTF-8 BOM (﻿) if
+     * present and autodetecting comma vs. tab as the delimiter. Mirrors
+     * CrmUserService.openReader so both import surfaces accept the same input shapes:
+     *   - Excel "Save as CSV UTF-8" → comma-separated with a BOM ← was the bug
+     *   - Plain text-editor save     → comma or tab, no BOM
+     */
+    private static CSVReader openReader(InputStream in) throws IOException {
+        Reader base = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        PushbackReader pbr = new PushbackReader(base, 4096);
+        int first = pbr.read();
+        if (first != -1 && first != 0xFEFF) {
+            pbr.unread(first);
+        }
+        char[] buf = new char[2048];
+        int n = pbr.read(buf, 0, buf.length);
+        char sep = ',';
+        if (n > 0) {
+            int newline = -1;
+            for (int i = 0; i < n; i++) {
+                if (buf[i] == '\n' || buf[i] == '\r') { newline = i; break; }
+            }
+            int end = newline >= 0 ? newline : n;
+            int tabs = 0, commas = 0;
+            for (int i = 0; i < end; i++) {
+                if (buf[i] == '\t') tabs++;
+                else if (buf[i] == ',') commas++;
+            }
+            if (tabs > commas) sep = '\t';
+            pbr.unread(buf, 0, n);
+        }
+        return new CSVReaderBuilder(pbr)
+                .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
+                .build();
     }
 
     private static boolean isExpectedHeader(String[] header) {

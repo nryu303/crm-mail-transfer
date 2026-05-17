@@ -4,6 +4,34 @@
       layout:decorate="~{layout/default}">
 <head>
     <title>返信画面設定</title>
+    <style>
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .field-row > .editor-side > textarea { width: 100%; }
+        .preview-pane {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #fff;
+            overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+        .preview-pane .preview-label {
+            background: #f1f5f9; color: #475569; font-size: .68rem; font-weight: 600;
+            padding: 4px 8px; border-bottom: 1px solid #cbd5e1; letter-spacing: .05em;
+        }
+        .preview-pane iframe { flex: 1; border: 0; width: 100%; background: #fff; }
+        .preview-pane .preview-html-body {
+            flex: 1; padding: 10px; overflow: auto; font-family: sans-serif;
+            font-size: .85rem; color: #1e293b; background: #fff; line-height: 1.5;
+        }
+        @media (max-width: 1100px) {
+            .field-row { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
 <section layout:fragment="content">
@@ -16,39 +44,57 @@
         ここで設定した内容は、ユーザー宛の返信ページ (<code class="bg-slate-100 px-1 rounded">/reply/{token}</code>) 全体の共通ヘッダーとフッター、追加CSSとして適用されます。
         各ユーザーのメモ欄が空の場合はここで設定したヘッダーが使われます。
     </p>
-    <div class="max-w-3xl rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-4">
+    <div class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-4">
         <strong>HTMLは生のまま入力してください。</strong>
-        <code class="bg-white px-1 rounded">&lt;h1&gt;...&lt;/h1&gt;</code> などのタグはそのまま記述します。
-        WYSIWYG ではなくテキストエディタとして動作するため、貼り付けた HTML が二重エスケープされる心配はありません。
+        右側のプレビューは入力中に自動更新されます (保存前の見た目確認用)。
     </div>
 
     <form method="post" th:action="@{/manager/settings/reply-page}" th:object="${form}"
-          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6" style="max-width: 960px;">
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6">
 
-        <div class="mb-6">
-            <label class="block text-sm font-semibold text-slate-800 mb-1">共通ヘッダーHTML</label>
-            <p class="text-xs text-slate-500 mb-2">
-                返信ページの上部に表示されるHTML。画像、装飾タグ、リンクが使えます。
-            </p>
-            <textarea id="headerEditor" th:field="*{defaultHeaderHtml}" rows="14"
-                      class="tw-input font-mono"
-                      style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:280px;"
-                      placeholder="例) &lt;!DOCTYPE html&gt;&#10;&lt;html lang=&quot;ja&quot;&gt;&#10;..."></textarea>
+        <div class="field-row">
+            <div class="editor-side">
+                <label class="block text-sm font-semibold text-slate-800 mb-1">共通ヘッダーHTML</label>
+                <p class="text-xs text-slate-500 mb-2">
+                    返信ページの上部に表示されるHTML。画像、装飾タグ、リンクが使えます。
+                </p>
+                <textarea id="headerEditor" th:field="*{defaultHeaderHtml}" rows="14"
+                          class="tw-input font-mono"
+                          style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:320px;"
+                          placeholder="例) &lt;!DOCTYPE html&gt;&#10;&lt;html lang=&quot;ja&quot;&gt;&#10;..."></textarea>
+            </div>
+            <div class="preview-pane" style="min-height:320px;">
+                <div class="preview-label">▶ ヘッダー プレビュー (sandboxed iframe)</div>
+                <iframe id="headerPreview" sandbox="allow-same-origin"></iframe>
+            </div>
         </div>
 
-        <div class="mb-6">
-            <label class="block text-sm font-semibold text-slate-800 mb-1">共通フッターHTML</label>
-            <p class="text-xs text-slate-500 mb-2">返信ページの下部に表示されるHTML。</p>
-            <textarea id="footerEditor" th:field="*{footerHtml}" rows="6"
-                      class="tw-input font-mono"
-                      style="white-space:pre; font-size:0.78rem; line-height:1.45;"></textarea>
+        <div class="field-row">
+            <div class="editor-side">
+                <label class="block text-sm font-semibold text-slate-800 mb-1">共通フッターHTML</label>
+                <p class="text-xs text-slate-500 mb-2">返信ページの下部に表示されるHTML。</p>
+                <textarea id="footerEditor" th:field="*{footerHtml}" rows="6"
+                          class="tw-input font-mono"
+                          style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:180px;"></textarea>
+            </div>
+            <div class="preview-pane" style="min-height:180px;">
+                <div class="preview-label">▶ フッター プレビュー</div>
+                <div id="footerPreview" class="preview-html-body"></div>
+            </div>
         </div>
 
-        <div class="mb-4">
-            <label class="block text-sm font-semibold text-slate-800 mb-1">追加CSS</label>
-            <p class="text-xs text-slate-500 mb-2">返信ページに適用される追加スタイル。通常のCSS構文で記述します。</p>
-            <textarea class="tw-input font-mono" rows="8" th:field="*{defaultCss}"
-                      placeholder=".reply-banner { background: #003366; }"></textarea>
+        <div class="field-row">
+            <div class="editor-side">
+                <label class="block text-sm font-semibold text-slate-800 mb-1">追加CSS</label>
+                <p class="text-xs text-slate-500 mb-2">返信ページに適用される追加スタイル。通常のCSS構文で記述します。</p>
+                <textarea id="cssEditor" class="tw-input font-mono" rows="8" th:field="*{defaultCss}"
+                          style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:220px;"
+                          placeholder=".reply-banner { background: #003366; }"></textarea>
+            </div>
+            <div class="preview-pane" style="min-height:220px;">
+                <div class="preview-label">▶ CSS プレビュー (ミニ返信フォームに適用)</div>
+                <iframe id="cssPreview" sandbox="allow-same-origin"></iframe>
+            </div>
         </div>
 
         <div class="mb-4 flex items-center">
@@ -62,6 +108,49 @@
             <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">キャンセル</a>
         </div>
     </form>
+
+    <script>
+    (function () {
+        // Live preview wiring. Each editor's input event updates its preview pane.
+        // Header → iframe srcdoc (sandboxed; safe for full-document HTML).
+        // Footer → innerHTML on a plain div (matches th:utext at runtime, sanitized server-side on save).
+        // CSS    → mini reply-form mockup iframe with the CSS injected so selectors like
+        //          .reply-banner / .reply-form / button preview correctly.
+
+        var headerEd = document.getElementById('headerEditor');
+        var headerPv = document.getElementById('headerPreview');
+        function updateHeader() { headerPv.srcdoc = headerEd.value || '<p style="padding:24px;color:#94a3b8;">(空)</p>'; }
+
+        var footerEd = document.getElementById('footerEditor');
+        var footerPv = document.getElementById('footerPreview');
+        function updateFooter() { footerPv.innerHTML = footerEd.value || '<span style="color:#94a3b8;">(空)</span>'; }
+
+        var cssEd = document.getElementById('cssEditor');
+        var cssPv = document.getElementById('cssPreview');
+        function updateCss() {
+            var css = cssEd.value || '/* (空) */';
+            var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">'
+                     + '<link rel="stylesheet" href="/css/reply.css">'
+                     + '<style>' + css + '</style>'
+                     + '<style>body{margin:0;padding:8px;background:#fff;}</style>'
+                     + '</head><body><div class="reply-shell">'
+                     + '<div class="reply-banner"><h1>入力欄</h1></div>'
+                     + '<form class="reply-form" onsubmit="return false;">'
+                     + '<div class="field"><textarea rows="3" placeholder="(プレビュー用の本文)"></textarea></div>'
+                     + '<div class="actions"><button type="submit">送信する</button></div>'
+                     + '</form>'
+                     + '</div></body></html>';
+            cssPv.srcdoc = html;
+        }
+
+        headerEd.addEventListener('input', updateHeader);
+        footerEd.addEventListener('input', updateFooter);
+        cssEd.addEventListener('input', updateCss);
+
+        // Initial render on page load.
+        updateHeader(); updateFooter(); updateCss();
+    })();
+    </script>
 
 </section>
 </body>

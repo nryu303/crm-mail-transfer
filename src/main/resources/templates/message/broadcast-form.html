@@ -132,14 +132,14 @@
 
                 <!-- Targeting lock-in: when admin came in via "選択一斉送信", show the picked
                      users explicitly and pin the targetUserIds[] so filters won't widen the list. -->
+                <!-- Selected-users summary. The address list itself is intentionally NOT
+                     rendered — at 500 names it pushed the template panel out of view.
+                     Operators just need confirmation of the targeting; the addresses can
+                     be reviewed on /manager/users before clicking 選択一斉送信. -->
                 <div th:if="${selectedUsers != null and !selectedUsers.empty}"
-                     style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:8px 10px;font-size:.78rem;">
-                    <div style="font-weight:700;color:#92400e;margin-bottom:4px;">
+                     style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:10px 12px;font-size:.85rem;">
+                    <div style="font-weight:700;color:#92400e;">
                         選択ユーザー <span th:text="'(' + ${#lists.size(selectedUsers)} + '名)'"></span> のみに送信
-                    </div>
-                    <div style="color:#78350f;line-height:1.5;">
-                        <span th:each="u,it : ${selectedUsers}"
-                              th:text="${u.email} + (${it.last} ? '' : ', ')"></span>
                     </div>
                     <input type="hidden" th:each="u : ${selectedUsers}" name="targetUserIds" th:value="${u.id}"/>
                 </div>
