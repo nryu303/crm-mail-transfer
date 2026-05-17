@@ -129,6 +129,62 @@ public class UserController {
     }
 
     /**
+     * Background bulk-bind-all state. Holds the latest run's progress + total + flag.
+     * Single global slot — we assume one operator at a time triggers 全ユーザー割り当て.
+     */
+    private final java.util.concurrent.atomic.AtomicLong bindAllProgress = new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong bindAllTotal    = new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong bindAllCreated  = new java.util.concurrent.atomic.AtomicLong(0);
+    private volatile boolean bindAllRunning = false;
+    private volatile String  bindAllResultMsg = "";
+
+    /**
+     * Bind every active pool address to EVERY user (15K+ users × 15+ addresses).
+     * Runs asynchronously on a background thread because the operation is expected
+     * to take minutes on the 2GB-RAM tier. The frontend polls /bulk-bind-all/progress
+     * for X / Y display.
+     */
+    @PostMapping("/bulk-bind-all")
+    public String bulkBindAllUsers(RedirectAttributes ra) {
+        if (bindAllRunning) {
+            ra.addFlashAttribute("flashError", "全ユーザー割り当て処理は既に実行中です。完了まで少々お待ちください。");
+            return "redirect:/manager/users";
+        }
+        bindAllRunning = true;
+        bindAllProgress.set(0);
+        bindAllTotal.set(0);
+        bindAllCreated.set(0);
+        bindAllResultMsg = "";
+        new Thread(() -> {
+            try {
+                int created = bindingService.bindAllAvailableToAllUsers(500, bindAllProgress, bindAllTotal);
+                bindAllCreated.set(created);
+                bindAllResultMsg = bindAllTotal.get() + " 名へ全キャリアアドレスを割り当て (新規 " + created + " 件)";
+            } catch (Exception e) {
+                bindAllResultMsg = "エラー: " + e.getClass().getSimpleName() + " — " + e.getMessage();
+            } finally {
+                bindAllRunning = false;
+            }
+        }, "bulk-bind-all").start();
+        ra.addFlashAttribute("flashSuccess",
+                "全ユーザーへの一括割り当てを開始しました。進捗はこのページのバナーで確認できます。");
+        return "redirect:/manager/users";
+    }
+
+    /** Polled by user-list JS for live progress display. */
+    @GetMapping("/bulk-bind-all/progress")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public java.util.Map<String, Object> bulkBindAllProgress() {
+        java.util.Map<String, Object> m = new java.util.HashMap<>();
+        m.put("running",  bindAllRunning);
+        m.put("progress", bindAllProgress.get());
+        m.put("total",    bindAllTotal.get());
+        m.put("created",  bindAllCreated.get());
+        m.put("message",  bindAllResultMsg);
+        return m;
+    }
+
+    /**
      * Bulk-bind a single carrier-pool address (or all active pool addresses) to the selected users.
      * Called by the 「キャリア登録割り当て」 button on the user list page.
      * If poolId == null or empty, binds ALL active pool addresses to each selected user.

@@ -88,6 +88,34 @@ public class CarrierBindingService {
         return created;
     }
 
+    /**
+     * Bind every active pool entry to EVERY user, processed in chunks so a 15K-user
+     * × 15-pool-address job (~225K rows) doesn't blow up the 2GB-RAM JVM in one big
+     * transaction. Each chunk runs in its own transaction via bindAllAvailable() —
+     * the @Transactional there scopes per-user, so a chunk commit boundary is N users.
+     * Updates a shared progress counter so the frontend can poll status.
+     */
+    public int bindAllAvailableToAllUsers(int chunkSize,
+                                          java.util.concurrent.atomic.AtomicLong progress,
+                                          java.util.concurrent.atomic.AtomicLong total) {
+        java.util.List<Long> ids = userRepository.findAllIdsByCreatedAsc();
+        if (ids.isEmpty()) return 0;
+        total.set(ids.size());
+        int created = 0;
+        for (int i = 0; i < ids.size(); i++) {
+            Long uid = ids.get(i);
+            if (uid != null) {
+                try { created += bindAllAvailable(uid); } catch (Exception ignored) {}
+            }
+            progress.set(i + 1);
+            // Yield the JVM/DB between chunks so other requests get scheduled
+            if ((i + 1) % chunkSize == 0) {
+                try { Thread.sleep(50); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+            }
+        }
+        return created;
+    }
+
     /** Bind one active pool entry matching the user's carrier domain, if not already bound. */
     @Transactional
     public Optional<CarrierAddressPool> autoBind(CrmUser user) {

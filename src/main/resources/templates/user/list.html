@@ -401,6 +401,27 @@
                 style="background:#dc2626;border-color:#dc2626;color:#fff;">選択削除</button>
     </div>
     </form>
+
+    <!-- All-users carrier-assign (independent of selection — explicit confirmation required) -->
+    <form id="bindAllForm" method="post" th:action="@{/manager/users/bulk-bind-all}"
+          style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #e2e8f0;background:#fffbeb;"
+          onsubmit="return confirmBindAll();">
+        <span style="font-size:.85rem;font-weight:700;color:#92400e;">⚠ 全ユーザーへ一括割り当て:</span>
+        <span style="font-size:.78rem;color:#78350f;flex:1;">
+            登録済み全ユーザーに、有効な全キャリアアドレスを割り当てます (処理時間: 数分〜十数分)。
+        </span>
+        <button type="submit" class="btn-broadcast" style="background:#d97706;">全ユーザー割り当て</button>
+    </form>
+
+    <!-- Live progress banner for the all-users bind. Hidden when not running. -->
+    <div id="bindAllProgress"
+         style="display:none;padding:10px 14px;background:#dbeafe;border-top:1px solid #bfdbfe;font-size:.85rem;color:#1e3a8a;">
+        <strong>📌 全ユーザー割り当て進行中:</strong>
+        <span id="bindAllText">準備中...</span>
+        <div style="margin-top:6px;background:#fff;height:8px;border-radius:4px;overflow:hidden;border:1px solid #bfdbfe;">
+            <div id="bindAllBar" style="width:0%;height:100%;background:#3b82f6;transition:width .3s;"></div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -470,6 +491,39 @@ document.addEventListener('DOMContentLoaded', function () {
         var tr = e.target.closest('tr'); if (tr) tr.classList.toggle('selected-row', e.target.checked);
         refresh();
     });
+
+    window.confirmBindAll = function () {
+        if (!confirm('登録済みの全ユーザーへ全キャリアアドレスを一括割り当てします。\n処理に数分〜十数分かかります。\nよろしいですか?')) return false;
+        return confirm('本当に実行しますか? メモリ負荷の高い処理のため、終わるまで一斉送信などの操作は控えてください。');
+    };
+
+    // --- Live progress poller for /bulk-bind-all ---
+    (function () {
+        var panel = document.getElementById('bindAllProgress');
+        var txt   = document.getElementById('bindAllText');
+        var bar   = document.getElementById('bindAllBar');
+        function poll() {
+            fetch('/manager/users/bulk-bind-all/progress', {credentials:'same-origin'})
+                .then(function(r){ return r.json(); })
+                .then(function(d){
+                    var pct = d.total > 0 ? Math.min(100, (d.progress / d.total) * 100) : 0;
+                    bar.style.width = pct + '%';
+                    if (d.running) {
+                        panel.style.display = '';
+                        txt.textContent = d.progress + ' / ' + d.total + ' 名処理済み (新規 ' + d.created + ' 件)';
+                        setTimeout(poll, 2000);
+                    } else if (d.message) {
+                        panel.style.display = '';
+                        txt.textContent = '✅ 完了: ' + d.message;
+                        // Keep visible — operator can navigate away to clear.
+                    } else {
+                        panel.style.display = 'none';
+                    }
+                })
+                .catch(function(){ setTimeout(poll, 5000); });
+        }
+        poll();  // start on page load — banner shows automatically if a run is active
+    })();
 
     window.goBroadcast = function () {
         // POST-then-redirect because at 500+ selected users the GET URL exceeded

@@ -23,7 +23,11 @@
             background: #f1f5f9; color: #475569; font-size: .68rem; font-weight: 600;
             padding: 4px 8px; border-bottom: 1px solid #cbd5e1; letter-spacing: .05em;
         }
-        .preview-pane iframe { flex: 1; border: 0; width: 100%; background: #fff; }
+        .preview-pane iframe { flex: 1; border: 0; width: 100%; background: #fff; min-height: 0; }
+        /* Header preview deserves much more vertical room — operators paste 800px tall
+         * landing pages (Mt-Fuji hero etc.) and need to scroll through the full content. */
+        .preview-pane.header-preview { min-height: 600px; }
+        .preview-pane.header-preview iframe { height: 600px; }
         .preview-pane .preview-html-body {
             flex: 1; padding: 10px; overflow: auto; font-family: sans-serif;
             font-size: .85rem; color: #1e293b; background: #fff; line-height: 1.5;
@@ -63,8 +67,8 @@
                           style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:320px;"
                           placeholder="例) &lt;!DOCTYPE html&gt;&#10;&lt;html lang=&quot;ja&quot;&gt;&#10;..."></textarea>
             </div>
-            <div class="preview-pane" style="min-height:320px;">
-                <div class="preview-label">▶ ヘッダー プレビュー (sandboxed iframe)</div>
+            <div class="preview-pane header-preview">
+                <div class="preview-label">▶ ヘッダー プレビュー (sandboxed iframe — 上下スクロール可)</div>
                 <iframe id="headerPreview" sandbox="allow-same-origin"></iframe>
             </div>
         </div>
