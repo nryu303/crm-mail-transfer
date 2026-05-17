@@ -33,7 +33,11 @@ IMAP_PORT    = 993
 MAILBOX      = "INBOX"
 WEBHOOK_URL  = "http://127.0.0.1:50000/api/inbound/receive-raw"
 STATE_DIR    = "/var/lib/softbank-inbound-fetcher"
-MAX_FETCH    = 50  # per-account safety cap per run
+MAX_FETCH    = 10  # per-account safety cap per run. Lowered from 50 to 10
+                   # after a 6.8K-mail backlog spike (10 new accounts × ~700 each)
+                   # caused CRM swap pressure. 10 × 15 accounts × 30 ticks/hour
+                   # = 4,500/hr ceiling — still drains backlogs steadily without
+                   # overwhelming the 2GB-RAM JVM. Raise only after RAM upgrade.
 
 # Accounts are loaded from SOFTBANK_IMAP_ACCOUNTS env var.
 # Format: "user1@i.softbank.jp|password1;user2@i.softbank.jp|password2;..."
