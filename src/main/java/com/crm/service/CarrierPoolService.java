@@ -164,7 +164,7 @@ public class CarrierPoolService {
             row = Arrays.copyOf(row, CSV_HEADER.length);
         }
         String address = CsvUtil.trimOrNull(row[0]);
-        String carrierCode = CsvUtil.trimOrNull(row[1]);
+        String carrierCode = normaliseCarrierCode(CsvUtil.trimOrNull(row[1]));
         String carrierDomain = CsvUtil.trimOrNull(row[2]);
         String smtpHost = CsvUtil.trimOrNull(row[3]);
         String smtpPortStr = CsvUtil.trimOrNull(row[4]);
@@ -215,6 +215,29 @@ public class CarrierPoolService {
         p.setIsActive(true);
         repository.save(p);
         result.incrementSuccess();
+    }
+
+    /**
+     * Accept common carrier_code variants from operator-prepared CSVs and normalise
+     * to the canonical short code ({@code softbank}, {@code docomo}, {@code au}).
+     * Without this, an Excel sheet that wrote {@code "softbank.jp"} or {@code "@docomo.ne.jp"}
+     * in the carrier_code column would fail validation row-by-row even though the
+     * intent was obvious.
+     */
+    static String normaliseCarrierCode(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim().toLowerCase();
+        if (s.isEmpty()) return null;
+        // Drop a leading '@' (someone might have copied the domain with the at sign)
+        if (s.startsWith("@")) s = s.substring(1);
+        // Already canonical? keep.
+        if (CARRIER_CODES_SET.contains(s)) return s;
+        // Domain-form mappings — anything matching a known carrier's mail domain
+        // collapses to the short code.
+        if (s.contains("softbank")) return "softbank";
+        if (s.contains("docomo")) return "docomo";
+        if (s.equals("ezweb.ne.jp") || s.equals("au.com") || s.contains("ezweb") || s.equals("au")) return "au";
+        return raw;  // return unchanged so the caller's validation surfaces the error
     }
 
     /**
