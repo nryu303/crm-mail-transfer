@@ -135,9 +135,39 @@ public class BroadcastController {
         return "message/broadcast-summary";
     }
 
+    /**
+     * Accept selected user IDs via POST and stash them in the HTTP session, then redirect
+     * to the form. Used by /manager/users 「選択一斉送信」 when many users are selected —
+     * a GET with 500+ ?userIds=... pairs hits browser/server URL-length limits (~8KB Tomcat
+     * default) and the navigation silently fails. POST has no such limit.
+     */
+    @PostMapping("/new")
+    public String selectUsersForBroadcast(@RequestParam(name = "userIds", required = false) List<Long> userIds,
+                                           HttpSession session) {
+        if (userIds != null && !userIds.isEmpty()) {
+            session.setAttribute("broadcastSelectedUserIds", new java.util.ArrayList<>(userIds));
+        } else {
+            session.removeAttribute("broadcastSelectedUserIds");
+        }
+        return "redirect:/manager/messages/broadcast/new";
+    }
+
     @GetMapping("/new")
     public String createForm(@RequestParam(name = "userIds", required = false) List<Long> userIds,
+                              HttpSession session,
                               Model model) {
+        // Fall back to session if the GET has no userIds query string — this is the
+        // path taken after the POST-then-redirect bulk-broadcast flow above.
+        if (userIds == null || userIds.isEmpty()) {
+            @SuppressWarnings("unchecked")
+            List<Long> fromSession = (List<Long>) session.getAttribute("broadcastSelectedUserIds");
+            if (fromSession != null && !fromSession.isEmpty()) {
+                userIds = fromSession;
+                // One-shot — clear so a later visit to /broadcast/new without going through
+                // 選択一斉送信 doesn't reuse stale IDs.
+                session.removeAttribute("broadcastSelectedUserIds");
+            }
+        }
         if (!model.containsAttribute("form")) {
             BroadcastForm f = new BroadcastForm();
             if (userIds != null && !userIds.isEmpty()) f.setTargetUserIds(userIds);

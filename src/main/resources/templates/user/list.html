@@ -472,13 +472,34 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     window.goBroadcast = function () {
-        // Forward selected user IDs as query params; broadcast form locks targeting to them.
+        // POST-then-redirect because at 500+ selected users the GET URL exceeded
+        // Tomcat's default 8KB header limit and the browser navigation silently failed.
+        // The server stashes the IDs in the HTTP session and redirects to the form.
         var ids = [].filter.call(rows(), function (c) { return c.checked; }).map(function (c) { return c.value; });
         if (ids.length === 0) {
             window.location.href = '/manager/messages/broadcast/new';
             return;
         }
-        window.location.href = '/manager/messages/broadcast/new?userIds=' + ids.join('&userIds=');
+        var f = document.createElement('form');
+        f.method = 'POST';
+        f.action = '/manager/messages/broadcast/new';
+        // CSRF token: pick it up from the existing bulkForm so the request is accepted.
+        var bulk = document.getElementById('bulkForm');
+        if (bulk) {
+            var csrf = bulk.querySelector('input[name="_csrf"]');
+            if (csrf) {
+                var h = document.createElement('input');
+                h.type = 'hidden'; h.name = '_csrf'; h.value = csrf.value;
+                f.appendChild(h);
+            }
+        }
+        ids.forEach(function (id) {
+            var i = document.createElement('input');
+            i.type = 'hidden'; i.name = 'userIds'; i.value = id;
+            f.appendChild(i);
+        });
+        document.body.appendChild(f);
+        f.submit();
     };
 
     // Double-confirmation for bulk delete + admin-password prompt. Returns true to submit.
