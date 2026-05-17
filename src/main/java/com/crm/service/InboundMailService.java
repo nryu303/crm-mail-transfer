@@ -51,6 +51,11 @@ public class InboundMailService {
     public static final String REASON_MISSING_FIELDS = "missing_from_or_to";
     public static final String REASON_DUPLICATE      = "duplicate_message_id";
     public static final String REASON_USER_NOT_ACTIVE = "user_status_not_active";
+    /** Reject inbound when the matched user has zero outbound history from our system —
+     *  protects against stale historical mail that was sitting in a re-used SoftBank
+     *  inbox before we onboarded the address. The FROM happens to match a registered
+     *  user, but we never actually sent them anything, so the "reply" is meaningless. */
+    public static final String REASON_NO_OUT_HISTORY = "user_has_no_outbound_history";
 
     private final InboundMailLogRepository logRepository;
     private final CarrierAddressPoolRepository poolRepository;
@@ -171,6 +176,16 @@ public class InboundMailService {
         // view used for live-account triage. Log it instead.
         if (!CrmUser.STATUS_ACTIVE.equals(user.getStatus())) {
             return reject(entry, REASON_USER_NOT_ACTIVE);
+        }
+
+        // Stale-mail guard: if we have never sent this user anything, this inbound
+        // is not actually a reply to us. The most common cause is a re-used SoftBank
+        // inbox that still has unread mail from the address's previous owner. Our
+        // operator policy is "always send first" so a user with zero OUT history
+        // shouldn't have any IN traffic — silently drop and log the reason.
+        long outCount = messageRepository.countByUserIdAndDirection(user.getId(), Message.DIR_OUT);
+        if (outCount == 0) {
+            return reject(entry, REASON_NO_OUT_HISTORY);
         }
 
         // 3) Pool/user binding is informational only as of the 2026-05 receive-only-pool
