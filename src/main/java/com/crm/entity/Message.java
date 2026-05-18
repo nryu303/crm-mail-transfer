@@ -75,6 +75,9 @@ public class Message {
     @Column(name = "READ_AT")
     private LocalDateTime readAt;
 
+    @Column(name = "INBOX_DISMISSED_AT")
+    private LocalDateTime inboxDismissedAt;
+
     @Column(name = "ERROR_MESSAGE", columnDefinition = "TEXT")
     private String errorMessage;
 
@@ -143,6 +146,8 @@ public class Message {
     public void setSentAt(LocalDateTime sentAt) { this.sentAt = sentAt; }
     public LocalDateTime getReadAt() { return readAt; }
     public void setReadAt(LocalDateTime readAt) { this.readAt = readAt; }
+    public LocalDateTime getInboxDismissedAt() { return inboxDismissedAt; }
+    public void setInboxDismissedAt(LocalDateTime inboxDismissedAt) { this.inboxDismissedAt = inboxDismissedAt; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
     public Integer getSendAttempts() { return sendAttempts; }

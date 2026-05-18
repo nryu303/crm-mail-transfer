@@ -92,6 +92,11 @@ public class MessageService {
             r.webReplyCount = ((Number) g[3]).longValue();
             r.mailReplyCount = ((Number) g[4]).longValue();
             r.outCount = ((Number) g[5]).longValue();
+            // 未返信 = there is at least one non-dismissed IN row and no OUT row arrived after it.
+            // g[6]/g[7] are java.sql.Timestamp from the native query; coerce safely.
+            java.time.LocalDateTime latestIn = toLdt(g[6]);
+            java.time.LocalDateTime latestOut = toLdt(g[7]);
+            r.unreplied = (latestIn != null) && (latestOut == null || latestOut.isBefore(latestIn));
             CrmUser u = userById.get(r.userId);
             if (u != null) {
                 r.displayName = (u.getDisplayName() == null || u.getDisplayName().isEmpty())
@@ -120,6 +125,24 @@ public class MessageService {
         return s.length() <= max ? s : s.substring(0, max) + "…";
     }
 
+    /** Coerce native-query MAX(CREATED_AT) result (Timestamp or LocalDateTime depending on driver) to LocalDateTime. */
+    private static java.time.LocalDateTime toLdt(Object v) {
+        if (v == null) return null;
+        if (v instanceof java.time.LocalDateTime) return (java.time.LocalDateTime) v;
+        if (v instanceof java.sql.Timestamp) return ((java.sql.Timestamp) v).toLocalDateTime();
+        return null;
+    }
+
+    /**
+     * Dismiss every non-dismissed inbound message for {@code userId}. The user disappears
+     * from the left-upper 受信 list on thread.html; Message rows are NOT deleted so the
+     * 過去のやり取り pane and per-user thread history stay intact. Used by the per-row × button.
+     */
+    @Transactional
+    public int dismissInboxForUser(Long userId) {
+        return messageRepository.dismissInboxByUserId(userId, LocalDateTime.now());
+    }
+
     /** Flat row for the inbox triage list. */
     public static class InboxRow {
         public Long userId;
@@ -134,6 +157,8 @@ public class MessageService {
         public String latestPreview;
         public LocalDateTime latestAt;
         public boolean latestRead;
+        /** true when the user has at least one IN message and we haven't sent any OUT after it. */
+        public boolean unreplied;
 
         public Long getUserId() { return userId; }
         public String getDisplayName() { return displayName; }
@@ -147,6 +172,7 @@ public class MessageService {
         public String getLatestPreview() { return latestPreview; }
         public LocalDateTime getLatestAt() { return latestAt; }
         public boolean isLatestRead() { return latestRead; }
+        public boolean isUnreplied() { return unreplied; }
     }
 
     /** Mark all inbound messages for this user as read. Called when admin opens the thread. */

@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS MESSAGE (
   SCHEDULED_AT      DATETIME      DEFAULT NULL,
   SENT_AT           DATETIME      DEFAULT NULL,
   READ_AT           DATETIME      DEFAULT NULL,
+  INBOX_DISMISSED_AT DATETIME     DEFAULT NULL COMMENT 'set when admin clicks the per-row delete button on the thread inbox; filtered out of inboxGroupByUser so the user disappears from the 受信 list, but the message row is preserved so 過去のやり取り stays intact',
   ERROR_MESSAGE     TEXT          DEFAULT NULL,
   SEND_ATTEMPTS     INT           DEFAULT 0,
   NEXT_RETRY_AT     DATETIME      DEFAULT NULL,

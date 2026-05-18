@@ -33,9 +33,21 @@
                    border:1px solid transparent; font-size:.78rem; }
         .ibx-row:hover { background:#f1f5f9; border-color:#e2e8f0; }
         .ibx-row.current { background:#eff6ff; border-color:#93c5fd; }
+        /* 未返信 — visually loud so an unreplied inbox stands out at a glance. Wins over hover
+         * and 'current' so opening a thread does NOT mask the unreplied state. */
+        .ibx-row.unreplied { background:#fef2f2; border-color:#fecaca; }
+        .ibx-row.unreplied:hover { background:#fee2e2; border-color:#fca5a5; }
+        .ibx-row.unreplied.current { background:#fee2e2; border-color:#f87171; }
         .ibx-row .nm { font-weight:700; color:#1e293b; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .ibx-row .dt { font-size:.66rem; color:#64748b; white-space:nowrap; }
         .ibx-row .uc { font-size:.64rem; font-weight:700; padding:1px 6px; border-radius:3px; background:#fecaca; color:#b91c1c; }
+        /* Per-row delete (受信から外す). Red so it's unmistakable; small so it doesn't bully the row. */
+        .ibx-row .del {
+            font-size:.7rem; line-height:1; padding:3px 7px; border-radius:4px;
+            background:#dc2626; color:#fff; border:none; cursor:pointer; font-weight:700;
+        }
+        .ibx-row .del:hover { background:#b91c1c; }
+        .ibx-row .del:disabled { background:#cbd5e1; cursor:wait; }
 
         .hist-item { padding:8px 10px; border-radius:6px; margin-bottom:6px; font-size:.8rem; line-height:1.5; }
         .hist-item.out { background:#dbeafe; color:#1e3a8a; margin-left:20px; }
@@ -138,19 +150,22 @@
     <!-- ===== Top-left: Inbox list ===== -->
     <div class="pane pane-tl">
         <header>
-            <span>受信 (<span th:text="${#lists.size(inboxRows)}">0</span>)</span>
+            <span>受信 (<span id="inboxCount" th:text="${#lists.size(inboxRows)}">0</span>)</span>
             <button class="btn-refresh ml-auto" type="button" onclick="location.reload()">更新</button>
         </header>
-        <div class="body">
+        <div class="body" id="inboxBody">
             <div th:if="${inboxRows == null or inboxRows.empty}" class="text-xs text-slate-400 p-2">受信はまだありません</div>
             <a th:each="r : ${inboxRows}" class="ibx-row"
                th:href="@{'/manager/users/' + ${r.userId} + '/thread'}"
-               th:classappend="${r.userId == user.id} ? 'current'"
+               th:classappend="(${r.userId == user.id} ? 'current ' : '') + (${r.unreplied} ? 'unreplied' : '')"
+               th:attr="data-user-id=${r.userId}"
                style="text-decoration:none;">
                 <span class="nm" th:text="${r.displayName}"></span>
                 <span class="uc" th:if="${r.unreadCount > 0}" th:text="${r.unreadCount}"></span>
                 <span class="dt"
                       th:text="${r.latestAt != null} ? ${#temporals.format(r.latestAt, 'MM-dd HH:mm')} : '-'"></span>
+                <button type="button" class="del" title="この受信を一覧から削除（履歴は残ります）"
+                        th:attr="data-dismiss-user=${r.userId}">×</button>
             </a>
         </div>
     </div>
@@ -425,6 +440,46 @@ document.querySelectorAll('code.tag-name[data-token]').forEach(function (el) {
             } catch (e) { alert('メモ保存失敗: ' + e.message); }
         });
     }
+})();
+
+// --- Per-row 受信 削除 (dismiss-from-inbox). One click → POST → DOM update, no reload. ---
+(function () {
+    var body = document.getElementById('inboxBody');
+    if (!body) return;
+    body.addEventListener('click', function (ev) {
+        var btn = ev.target.closest && ev.target.closest('.del[data-dismiss-user]');
+        if (!btn) return;
+        // The button is inside an <a>; we must stop both the link navigation and any further bubbling.
+        ev.preventDefault();
+        ev.stopPropagation();
+        var uid = btn.getAttribute('data-dismiss-user');
+        if (!uid) return;
+        if (btn.disabled) return;
+        btn.disabled = true;
+        fetch('/manager/users/' + uid + '/inbox/dismiss', {
+            method: 'POST',
+            credentials: 'same-origin'
+        })
+            .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function () {
+                // Remove this row + recompute 受信 (N). Keep the operator on the current thread
+                // so any draft reply they were typing in the bottom-left pane is preserved.
+                var row = btn.closest('.ibx-row');
+                if (row && row.parentNode) row.parentNode.removeChild(row);
+                var counter = document.getElementById('inboxCount');
+                if (counter) {
+                    var remaining = body.querySelectorAll('.ibx-row').length;
+                    counter.textContent = remaining;
+                }
+            })
+            .catch(function (e) {
+                btn.disabled = false;
+                alert('削除に失敗しました: ' + e.message);
+            });
+    });
 })();
 
 (function () {

@@ -132,20 +132,40 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
     java.util.List<Object[]> lastInboundAtByUser();
 
     /**
-     * Inbox aggregation: one row per user who has any inbound messages.
-     * Returns [userId, latestINId, unreadCount, webReplyCount, mailReplyCount, outCount]
-     * ordered by latestINId DESC. Native SQL to support per-channel CASE expressions.
+     * Inbox aggregation: one row per user who has any non-dismissed inbound messages.
+     * Returns [userId, latestINId, unreadCount, webReplyCount, mailReplyCount, outCount,
+     *          latestInAt, latestOutAt] ordered by latestINId DESC.
+     *
+     * IN rows with INBOX_DISMISSED_AT set are ignored everywhere in the IN aggregates so the
+     * user disappears from the 受信 list after admin dismisses them. The OUT aggregates and
+     * latestOutAt are NOT filtered — they reflect every OUT the user ever got, which is what
+     * we need to decide 未返信 (unreplied) state on the rows that DO show up.
      */
     @org.springframework.data.jpa.repository.Query(nativeQuery = true, value =
             "SELECT m.USER_ID, " +
-            "       MAX(CASE WHEN m.DIRECTION='IN' THEN m.ID ELSE NULL END) AS latest_in_id, " +
-            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.READ_AT IS NULL THEN 1 ELSE 0 END) AS unread, " +
-            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.CHANNEL='WEB_REPLY' THEN 1 ELSE 0 END) AS web_reply, " +
-            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.CHANNEL='EMAIL' THEN 1 ELSE 0 END) AS mail_reply, " +
-            "       SUM(CASE WHEN m.DIRECTION='OUT' THEN 1 ELSE 0 END) AS sent " +
+            "       MAX(CASE WHEN m.DIRECTION='IN' AND m.INBOX_DISMISSED_AT IS NULL THEN m.ID ELSE NULL END) AS latest_in_id, " +
+            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.INBOX_DISMISSED_AT IS NULL AND m.READ_AT IS NULL THEN 1 ELSE 0 END) AS unread, " +
+            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.INBOX_DISMISSED_AT IS NULL AND m.CHANNEL='WEB_REPLY' THEN 1 ELSE 0 END) AS web_reply, " +
+            "       SUM(CASE WHEN m.DIRECTION='IN' AND m.INBOX_DISMISSED_AT IS NULL AND m.CHANNEL='EMAIL' THEN 1 ELSE 0 END) AS mail_reply, " +
+            "       SUM(CASE WHEN m.DIRECTION='OUT' THEN 1 ELSE 0 END) AS sent, " +
+            "       MAX(CASE WHEN m.DIRECTION='IN' AND m.INBOX_DISMISSED_AT IS NULL THEN m.CREATED_AT ELSE NULL END) AS latest_in_at, " +
+            "       MAX(CASE WHEN m.DIRECTION='OUT' THEN m.CREATED_AT ELSE NULL END) AS latest_out_at " +
             "FROM MESSAGE m " +
             "GROUP BY m.USER_ID " +
-            "HAVING MAX(CASE WHEN m.DIRECTION='IN' THEN m.ID ELSE NULL END) IS NOT NULL " +
-            "ORDER BY MAX(CASE WHEN m.DIRECTION='IN' THEN m.ID ELSE NULL END) DESC")
+            "HAVING MAX(CASE WHEN m.DIRECTION='IN' AND m.INBOX_DISMISSED_AT IS NULL THEN m.ID ELSE NULL END) IS NOT NULL " +
+            "ORDER BY MAX(CASE WHEN m.DIRECTION='IN' AND m.INBOX_DISMISSED_AT IS NULL THEN m.ID ELSE NULL END) DESC")
     java.util.List<Object[]> inboxGroupByUser();
+
+    /**
+     * Dismiss every non-dismissed inbound message for one user. Called when the operator
+     * clicks the per-row × button on the thread page's left-upper 受信 list — the user is
+     * removed from the inbox aggregate, while every Message row stays in place so the
+     * 過去のやり取り pane and per-user thread view are unaffected.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(
+            "UPDATE Message m SET m.inboxDismissedAt = :now " +
+            "WHERE m.userId = :userId AND m.direction = 'IN' AND m.inboxDismissedAt IS NULL")
+    int dismissInboxByUserId(@org.springframework.data.repository.query.Param("userId") Long userId,
+                              @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 }

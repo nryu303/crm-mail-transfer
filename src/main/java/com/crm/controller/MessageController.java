@@ -190,6 +190,23 @@ public class MessageController {
         return "redirect:/manager/users/" + userId + "/thread";
     }
 
+    /**
+     * Dismiss a user from the thread page's left-upper 受信 list. No password required —
+     * the client confirmed this should be a one-click operation. Every IN message for the
+     * user is flagged INBOX_DISMISSED_AT=NOW(); rows stay in MESSAGE so the 過去のやり取り
+     * pane is unaffected. Returns 204 so the in-page JS can update the DOM without a
+     * full reload (which would lose any draft reply the operator was typing).
+     */
+    @PostMapping("/manager/users/{userId}/inbox/dismiss")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public org.springframework.http.ResponseEntity<java.util.Map<String, Object>> dismissInbox(
+            @PathVariable Long userId) {
+        int n = messageService.dismissInboxForUser(userId);
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        body.put("dismissed", n);
+        return org.springframework.http.ResponseEntity.ok(body);
+    }
+
     @PostMapping("/manager/messages/{id}/cancel")
     public String cancel(@PathVariable Long id, RedirectAttributes ra) {
         if (messageService.cancelScheduled(id)) {
