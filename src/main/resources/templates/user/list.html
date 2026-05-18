@@ -523,21 +523,39 @@ document.addEventListener('DOMContentLoaded', function () {
         var folderSel = document.getElementById('folderSelect'); // the target-folder dropdown in the footer
         if (!scope || !filterSel || !btnMove) return;
 
+        var btnDel = document.getElementById('btnDelete');
+        var btnUnbind = document.getElementById('btnUnbindCarrier');
+
         function refreshScope() {
             // Only enable when a specific folder (or 未設定) is in the filter — 'すべて' is not a valid source
             var hasFilter = filterSel.value !== '';
             scope.disabled = !hasFilter;
             if (!hasFilter) scope.checked = false;
 
-            // When the checkbox is on, the bulk-move button works WITHOUT row checkboxes.
+            // When the checkbox is on, the bulk-move / delete / unbind buttons work WITHOUT row checkboxes.
             if (scope.checked && hasFilter) {
-                btnMove.disabled = !folderSel || !folderSel.value && folderSel.value !== '';
-                if (folderSel) folderSel.disabled = false;
+                if (folderSel) {
+                    folderSel.disabled = false;
+                    btnMove.disabled = false;
+                }
                 btnMove.textContent = 'フォルダ内全件移動';
-                btnMove.style.background = '#d97706';  // amber tint = scope override mode
+                btnMove.style.background = '#d97706';
+
+                if (btnDel) {
+                    btnDel.disabled = false;
+                    btnDel.textContent = 'フォルダ内全削除';
+                    btnDel.style.background = '#7f1d1d';  // dark red — destructive scope-override mode
+                }
+                if (btnUnbind) {
+                    btnUnbind.disabled = false;
+                    btnUnbind.textContent = 'フォルダ内全割り当て削除';
+                    btnUnbind.style.background = '#d97706';
+                }
             } else {
                 btnMove.textContent = '選択フォルダ移動';
                 btnMove.style.background = '';
+                if (btnDel) { btnDel.textContent = '選択削除'; btnDel.style.background = '#dc2626'; }
+                if (btnUnbind) { btnUnbind.textContent = '選択キャリア解除'; btnUnbind.style.background = ''; }
             }
         }
         scope.addEventListener('change', refreshScope);
@@ -545,25 +563,47 @@ document.addEventListener('DOMContentLoaded', function () {
         if (folderSel) folderSel.addEventListener('change', refreshScope);
         refreshScope();
 
-        // Inject scope override into the submitted form just before POST
+        // Inject scope override into the submitted form just before POST.
+        // Applies to bulk-move-folder, bulk-delete, and bulk-unbind-carrier when
+        // フォルダ内全件対象 is on. Each path has its own confirm prompt.
         var bulkForm = document.getElementById('bulkForm');
+        function addHidden(name, value) {
+            var i = document.createElement('input');
+            i.type = 'hidden'; i.name = name; i.value = value;
+            bulkForm.appendChild(i);
+        }
         if (bulkForm) {
             bulkForm.addEventListener('submit', function (ev) {
-                // Only override for the bulk-move-folder action; leave delete/bind alone
                 var action = ev.submitter && ev.submitter.getAttribute('formaction');
-                if (action && action.indexOf('bulk-move-folder') >= 0 && scope.checked && filterSel.value !== '') {
-                    var srcVal = filterSel.value === '__NONE__' ? '' : filterSel.value;
-                    // Confirm because this can be a huge change
-                    var n = filterSel.options[filterSel.selectedIndex].text;
+                if (!action || !scope.checked || filterSel.value === '') return;
+                var srcVal = filterSel.value === '__NONE__' ? '' : filterSel.value;
+                var srcLabel = filterSel.options[filterSel.selectedIndex].text;
+
+                if (action.indexOf('bulk-move-folder') >= 0) {
                     var to = folderSel.options[folderSel.selectedIndex].text;
-                    if (!confirm('フォルダ「' + n + '」内の全ユーザーを「' + to + '」に移動します。\nよろしいですか?')) {
-                        ev.preventDefault();
-                        return;
+                    if (!confirm('フォルダ「' + srcLabel + '」内の全ユーザーを「' + to + '」に移動します。\nよろしいですか?')) {
+                        ev.preventDefault(); return;
                     }
-                    function addHidden(name, value) {
-                        var i = document.createElement('input');
-                        i.type = 'hidden'; i.name = name; i.value = value;
-                        bulkForm.appendChild(i);
+                    addHidden('scope', 'allInFolder');
+                    addHidden('sourceFolder', srcVal);
+                } else if (action.indexOf('bulk-delete') >= 0) {
+                    if (!confirm('⚠️ フォルダ「' + srcLabel + '」内の全ユーザーを削除します。\n関連メッセージ・入金履歴・キャリア紐付けもすべて消えます。\nよろしいですか?')) {
+                        ev.preventDefault(); return;
+                    }
+                    if (!confirm('本当に実行しますか? この操作は取り消せません。')) {
+                        ev.preventDefault(); return;
+                    }
+                    // bulk-delete still needs the admin password prompt (existing flow)
+                    var pw = prompt('管理者パスワードを入力してください');
+                    if (!pw) { ev.preventDefault(); return; }
+                    var ph = bulkForm.querySelector('input[name="confirmPassword"]');
+                    if (!ph) { ph = document.createElement('input'); ph.type='hidden'; ph.name='confirmPassword'; bulkForm.appendChild(ph); }
+                    ph.value = pw;
+                    addHidden('scope', 'allInFolder');
+                    addHidden('sourceFolder', srcVal);
+                } else if (action.indexOf('bulk-unbind-carrier') >= 0) {
+                    if (!confirm('フォルダ「' + srcLabel + '」内の全ユーザーのキャリア割り当てをすべて解除します。\nよろしいですか?')) {
+                        ev.preventDefault(); return;
                     }
                     addHidden('scope', 'allInFolder');
                     addHidden('sourceFolder', srcVal);

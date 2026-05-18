@@ -30,6 +30,12 @@ public interface CrmUserRepository extends JpaRepository<CrmUser, Long>, JpaSpec
     @Query(value = "UPDATE CRM_USER SET AD_CODE = NULL WHERE AD_CODE = :code", nativeQuery = true)
     int clearAdCodeForCode(@org.springframework.data.repository.query.Param("code") String code);
 
+    @Query("SELECT u.id FROM CrmUser u WHERE u.folder = :folder")
+    List<Long> findIdsByFolder(@org.springframework.data.repository.query.Param("folder") String folder);
+
+    @Query("SELECT u.id FROM CrmUser u WHERE u.folder IS NULL")
+    List<Long> findIdsByFolderIsNull();
+
     /**
      * Bulk-move every user currently in {@code fromFolder} into {@code toFolder}.
      * Pass {@code null} for either to mean '未設定' (FOLDER IS NULL). One UPDATE

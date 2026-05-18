@@ -167,6 +167,30 @@ public class CrmUserService {
     }
 
     /**
+     * Delete every user currently in {@code folder} (null = '未設定'). Processed
+     * one user at a time so JPA cascades (MESSAGE, PAYMENT, CARRIER_USER_BINDING,
+     * etc.) fire correctly. Each delete is its own short transaction — no giant
+     * lock, no single-statement DELETE that would orphan child rows. Returns
+     * the number of users removed.
+     */
+    @org.springframework.transaction.annotation.Transactional(propagation =
+            org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    public int deleteAllInFolder(String folder) {
+        java.util.List<Long> ids = (folder == null)
+                ? repository.findIdsByFolderIsNull()
+                : repository.findIdsByFolder(folder);
+        int n = 0;
+        for (Long id : ids) {
+            try { repository.deleteById(id); n++; } catch (Exception ignored) {}
+            // Yield every 200 deletes so the dispatcher / web threads stay responsive.
+            if (n % 200 == 0) {
+                try { Thread.sleep(20); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+            }
+        }
+        return n;
+    }
+
+    /**
      * Issue (or re-issue) credentials for an existing user.
      * - If loginId is missing, generates a new unique loginId.
      * - Always generates a new password.

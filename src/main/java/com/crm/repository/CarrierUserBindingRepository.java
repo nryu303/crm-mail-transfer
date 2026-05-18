@@ -31,6 +31,23 @@ public interface CarrierUserBindingRepository extends JpaRepository<CarrierUserB
     @Query("DELETE FROM CarrierUserBinding b WHERE b.poolId = :poolId")
     int deleteAllByPoolId(@Param("poolId") Long poolId);
 
+    /**
+     * Delete every binding belonging to users in {@code folder}. Pass null to mean
+     * '未設定' (FOLDER IS NULL). Single DELETE with a correlated subquery — no
+     * entity load, no JPA cascade, fast even at 100K rows.
+     */
+    @Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query(value =
+            "DELETE FROM CARRIER_USER_BINDING " +
+            "WHERE USER_ID IN (" +
+            "  SELECT id FROM CRM_USER " +
+            "  WHERE (:folder IS NULL AND FOLDER IS NULL) " +
+            "     OR (:folder IS NOT NULL AND FOLDER = :folder)" +
+            ")",
+            nativeQuery = true)
+    int deleteByUserFolder(@Param("folder") String folder);
+
     /** Pool IDs that have zero bindings. */
     @Query("SELECT p.id FROM CarrierAddressPool p " +
            "WHERE p.isActive = true AND " +

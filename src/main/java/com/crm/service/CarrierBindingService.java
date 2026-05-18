@@ -75,6 +75,16 @@ public class CarrierBindingService {
         return created;
     }
 
+    /**
+     * Delete every carrier binding for every user currently in {@code folder}.
+     * Single DELETE statement scoped via subquery — fast even for 100K-user folders.
+     * Returns the number of binding rows removed.
+     */
+    @Transactional
+    public int unbindAllInFolder(String folder) {
+        return bindingRepository.deleteByUserFolder(folder);
+    }
+
     /** Bind every active pool entry to many users. Used by the user-list bulk action. */
     @Transactional
     public int bindAllAvailableToMany(java.util.List<Long> userIds) {

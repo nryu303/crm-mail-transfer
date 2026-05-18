@@ -240,7 +240,20 @@ public class UserController {
     @PostMapping("/bulk-unbind-carrier")
     public String bulkUnbindCarrier(@RequestParam(name = "ids", required = false) java.util.List<Long> ids,
                                     @RequestParam(name = "poolId", required = false) Long poolId,
+                                    @RequestParam(name = "scope", required = false) String scope,
+                                    @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
                                     RedirectAttributes ra) {
+        // Scope override: unbind every carrier-pool address from every user in a folder.
+        if ("allInFolder".equals(scope)) {
+            String src = sourceFolder == null ? null : sourceFolder.trim();
+            if (src != null && src.isEmpty()) src = null;
+            int removed = bindingService.unbindAllInFolder(src);
+            String srcLabel = (src == null) ? "（未設定）" : src;
+            ra.addFlashAttribute("flashSuccess",
+                    "フォルダ「" + srcLabel + "」内ユーザーのキャリア割り当てを全解除しました (" + removed + " 件)");
+            return "redirect:/manager/users";
+        }
+
         if (ids == null || ids.isEmpty()) {
             ra.addFlashAttribute("flashError", "ユーザーが選択されていません");
             return "redirect:/manager/users";
@@ -478,6 +491,8 @@ public class UserController {
 
     @PostMapping("/bulk-delete")
     public String bulkDelete(@RequestParam(name = "ids", required = false) List<Long> ids,
+                              @RequestParam(name = "scope", required = false) String scope,
+                              @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
                               @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
                               javax.servlet.http.HttpSession session,
                               RedirectAttributes ra) {
@@ -486,6 +501,18 @@ public class UserController {
             ra.addFlashAttribute("flashError", "一括削除には管理者パスワードの確認が必要です");
             return "redirect:/manager/users";
         }
+
+        // Scope override: delete every user in a folder, not just checkbox-selected.
+        if ("allInFolder".equals(scope)) {
+            String src = sourceFolder == null ? null : sourceFolder.trim();
+            if (src != null && src.isEmpty()) src = null;
+            int n = service.deleteAllInFolder(src);
+            String srcLabel = (src == null) ? "（未設定）" : src;
+            ra.addFlashAttribute("flashSuccess",
+                    "フォルダ「" + srcLabel + "」内の " + n + " 名を削除しました");
+            return "redirect:/manager/users";
+        }
+
         int n = 0;
         java.util.List<String> failures = new java.util.ArrayList<>();
         if (ids != null) {
