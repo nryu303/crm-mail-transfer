@@ -229,7 +229,16 @@ public class CrmUserService {
                 + LOGIN_ID_MAX_ATTEMPTS + " attempts");
     }
 
-    @Transactional
+    // DO NOT add @Transactional here. Same rationale as deleteAllInFolder above: a
+    // 10K-row CSV import takes ~75 minutes (BCrypt-dominated). With a single wrapping
+    // transaction, every row stays uncommitted/invisible to other DB connections (and
+    // operators querying CRM_USER) until the WHOLE run finishes — making the import
+    // look stuck for over an hour even though it is actually progressing. Each
+    // repository.save() inside processRow() has its own short Spring Data transaction,
+    // so progress becomes visible row-by-row. NOT_SUPPORTED makes this explicit and
+    // suspends any enclosing tx if one ever gets introduced higher up the call chain.
+    @org.springframework.transaction.annotation.Transactional(propagation =
+            org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public CsvImportResult importCsv(InputStream in) throws IOException {
         // Reset the live progress counter so the frontend poller starts from 0.
         importProgress.set(0);
