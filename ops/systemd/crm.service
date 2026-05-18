@@ -33,7 +33,7 @@ EnvironmentFile=-/etc/crm.env
 # eventually recover, but at the cost of a noisy boot.
 ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do (echo > /dev/tcp/127.0.0.1/3306) >/dev/null 2>&1 && exit 0; sleep 2; done; echo "MySQL on 3306 not reachable after 120s"; exit 1'
 
-ExecStart=/usr/lib/jvm/java-1.8.0-openjdk/bin/java -Xms256m -Xmx1g -jar /home/centos/crm-platform/target/crm.jar
+ExecStart=/usr/lib/jvm/java-1.8.0-openjdk/bin/java -Xms512m -Xmx2g -jar /home/centos/crm-platform/target/crm.jar
 
 SuccessExitStatus=143
 Restart=on-failure
