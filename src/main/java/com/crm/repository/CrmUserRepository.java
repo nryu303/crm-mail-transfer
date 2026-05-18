@@ -53,6 +53,14 @@ public interface CrmUserRepository extends JpaRepository<CrmUser, Long>, JpaSpec
     int bulkUpdateFolderByFolder(@org.springframework.data.repository.query.Param("fromFolder") String fromFolder,
                                  @org.springframework.data.repository.query.Param("toFolder") String toFolder);
 
+    /** Limited-scope folder move: update only the first N users (by id ASC) currently
+     *  in {@code fromFolder}. Lets the operator process 1K/2K-sized batches. */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("UPDATE CrmUser u SET u.folder = :toFolder, u.updatedAt = CURRENT_TIMESTAMP WHERE u.id IN :ids")
+    int bulkUpdateFolderForIds(@org.springframework.data.repository.query.Param("ids") java.util.List<Long> ids,
+                               @org.springframework.data.repository.query.Param("toFolder") String toFolder);
+
     /** Per-day signup counts for an ad code, returned as [yyyy-MM-dd, count] rows. */
     @Query(value = "SELECT DATE_FORMAT(CREATED_AT, '%Y-%m-%d') AS d, COUNT(*) " +
                    "FROM CRM_USER WHERE AD_CODE = :code AND CREATED_AT BETWEEN :start AND :end " +

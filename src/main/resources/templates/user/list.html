@@ -145,6 +145,20 @@
                                         <input type="checkbox" id="folderAllScope" style="margin:0;"/>
                                         フォルダ内全件対象
                                     </label>
+                                    <!-- Optional per-batch cap. Empty = process the whole folder; 1000/2000/5000
+                                         = process only the first N (by id ASC) so the operator can run a 15K
+                                         delete/move in 1K-size chunks without locking the server up. -->
+                                    <span id="folderScopeLimitWrap"
+                                          style="display:none;margin-left:8px;font-size:.7rem;color:#475569;">
+                                        件数上限:
+                                        <select id="folderScopeLimit" style="font-size:.7rem;padding:1px 4px;border:1px solid #cbd5e1;border-radius:3px;">
+                                            <option value="">全件</option>
+                                            <option value="500">500</option>
+                                            <option value="1000" selected>1,000</option>
+                                            <option value="2000">2,000</option>
+                                            <option value="5000">5,000</option>
+                                        </select>
+                                    </span>
                                 </label>
                                 <select class="tw-input" id="folderFilterSelect" th:field="*{folder}">
                                     <option value="">すべて</option>
@@ -525,12 +539,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var btnDel = document.getElementById('btnDelete');
         var btnUnbind = document.getElementById('btnUnbindCarrier');
+        var limitWrap = document.getElementById('folderScopeLimitWrap');
+        var limitSel = document.getElementById('folderScopeLimit');
 
         function refreshScope() {
             // Only enable when a specific folder (or 未設定) is in the filter — 'すべて' is not a valid source
             var hasFilter = filterSel.value !== '';
             scope.disabled = !hasFilter;
             if (!hasFilter) scope.checked = false;
+            if (limitWrap) limitWrap.style.display = (scope.checked && hasFilter) ? '' : 'none';
 
             // When the checkbox is on, the bulk-move / delete / unbind buttons work WITHOUT row checkboxes.
             if (scope.checked && hasFilter) {
@@ -579,21 +596,24 @@ document.addEventListener('DOMContentLoaded', function () {
                 var srcVal = filterSel.value === '__NONE__' ? '' : filterSel.value;
                 var srcLabel = filterSel.options[filterSel.selectedIndex].text;
 
+                var lim = limitSel && limitSel.value ? parseInt(limitSel.value, 10) : 0;
+                var limitText = lim > 0 ? '上限 ' + lim.toLocaleString() + ' 名' : '全件';
+
                 if (action.indexOf('bulk-move-folder') >= 0) {
                     var to = folderSel.options[folderSel.selectedIndex].text;
-                    if (!confirm('フォルダ「' + srcLabel + '」内の全ユーザーを「' + to + '」に移動します。\nよろしいですか?')) {
+                    if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'を「' + to + '」に移動します。\nよろしいですか?')) {
                         ev.preventDefault(); return;
                     }
                     addHidden('scope', 'allInFolder');
                     addHidden('sourceFolder', srcVal);
+                    if (lim > 0) addHidden('scopeLimit', lim);
                 } else if (action.indexOf('bulk-delete') >= 0) {
-                    if (!confirm('⚠️ フォルダ「' + srcLabel + '」内の全ユーザーを削除します。\n関連メッセージ・入金履歴・キャリア紐付けもすべて消えます。\nよろしいですか?')) {
+                    if (!confirm('⚠️ フォルダ「' + srcLabel + '」内の' + limitText + 'を削除します。\n関連メッセージ・入金履歴・キャリア紐付けもすべて消えます。\nよろしいですか?')) {
                         ev.preventDefault(); return;
                     }
                     if (!confirm('本当に実行しますか? この操作は取り消せません。')) {
                         ev.preventDefault(); return;
                     }
-                    // bulk-delete still needs the admin password prompt (existing flow)
                     var pw = prompt('管理者パスワードを入力してください');
                     if (!pw) { ev.preventDefault(); return; }
                     var ph = bulkForm.querySelector('input[name="confirmPassword"]');
@@ -601,12 +621,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     ph.value = pw;
                     addHidden('scope', 'allInFolder');
                     addHidden('sourceFolder', srcVal);
+                    if (lim > 0) addHidden('scopeLimit', lim);
                 } else if (action.indexOf('bulk-unbind-carrier') >= 0) {
-                    if (!confirm('フォルダ「' + srcLabel + '」内の全ユーザーのキャリア割り当てをすべて解除します。\nよろしいですか?')) {
+                    if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'のキャリア割り当てを解除します。\nよろしいですか?')) {
                         ev.preventDefault(); return;
                     }
                     addHidden('scope', 'allInFolder');
                     addHidden('sourceFolder', srcVal);
+                    if (lim > 0) addHidden('scopeLimit', lim);
                 }
             });
         }

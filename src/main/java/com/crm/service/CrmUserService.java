@@ -167,18 +167,22 @@ public class CrmUserService {
     }
 
     /**
-     * Delete every user currently in {@code folder} (null = '未設定'). Processed
-     * one user at a time so JPA cascades (MESSAGE, PAYMENT, CARRIER_USER_BINDING,
-     * etc.) fire correctly. Each delete is its own short transaction — no giant
-     * lock, no single-statement DELETE that would orphan child rows. Returns
-     * the number of users removed.
+     * Delete users in {@code folder} (null = '未設定'). When {@code limit} is null
+     * or <= 0, every user in the folder is processed; otherwise only the first
+     * {@code limit} users (sorted by ID) are processed, so the operator can run
+     * a 15K-user reclassify in 1K/2K-sized batches. Each delete is its own short
+     * transaction so JPA cascades fire correctly and a single failure doesn't
+     * roll back the rest. Returns the number of users actually deleted.
      */
     @org.springframework.transaction.annotation.Transactional(propagation =
             org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
-    public int deleteAllInFolder(String folder) {
+    public int deleteAllInFolder(String folder, Integer limit) {
         java.util.List<Long> ids = (folder == null)
                 ? repository.findIdsByFolderIsNull()
                 : repository.findIdsByFolder(folder);
+        if (limit != null && limit > 0 && ids.size() > limit) {
+            ids = ids.subList(0, limit);
+        }
         int n = 0;
         for (Long id : ids) {
             try { repository.deleteById(id); n++; } catch (Exception ignored) {}

@@ -48,6 +48,13 @@ public interface CarrierUserBindingRepository extends JpaRepository<CarrierUserB
             nativeQuery = true)
     int deleteByUserFolder(@Param("folder") String folder);
 
+    /** Bulk delete bindings for a fixed list of user IDs. Used by the limited-scope
+     *  variant of unbindAllInFolder so the operator can process 1K/2K at a time. */
+    @Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("DELETE FROM CarrierUserBinding b WHERE b.userId IN :userIds")
+    int deleteByUserIdIn(@Param("userIds") java.util.List<Long> userIds);
+
     /** Pool IDs that have zero bindings. */
     @Query("SELECT p.id FROM CarrierAddressPool p " +
            "WHERE p.isActive = true AND " +

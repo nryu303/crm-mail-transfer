@@ -242,15 +242,19 @@ public class UserController {
                                     @RequestParam(name = "poolId", required = false) Long poolId,
                                     @RequestParam(name = "scope", required = false) String scope,
                                     @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                    @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                     RedirectAttributes ra) {
-        // Scope override: unbind every carrier-pool address from every user in a folder.
+        // Scope override: unbind every carrier-pool address from users in a folder.
+        // scopeLimit caps the batch size so the operator can clear large folders
+        // in 1K/2K chunks.
         if ("allInFolder".equals(scope)) {
             String src = sourceFolder == null ? null : sourceFolder.trim();
             if (src != null && src.isEmpty()) src = null;
-            int removed = bindingService.unbindAllInFolder(src);
+            int removed = bindingService.unbindAllInFolder(src, scopeLimit);
             String srcLabel = (src == null) ? "（未設定）" : src;
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内ユーザーのキャリア割り当てを全解除しました (" + removed + " 件)");
+                    "フォルダ「" + srcLabel + "」内ユーザーのキャリア割り当てを解除しました (" + removed + " 件)" + chunkNote);
             return "redirect:/manager/users";
         }
 
@@ -284,20 +288,29 @@ public class UserController {
                                  @RequestParam(name = "folder", required = false) String folder,
                                  @RequestParam(name = "scope", required = false) String scope,
                                  @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                 @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                  RedirectAttributes ra) {
         String target = folder == null ? null : folder.trim();
         if (target != null && target.isEmpty()) target = null;
         String label = (target == null) ? "（フォルダ解除）" : target;
 
         // Scope override: when scope=allInFolder, move EVERY user currently in
-        // sourceFolder (including users not on the current paginated view).
-        // Used by the user-list 「フォルダ内全件対象」 checkbox so an operator can
-        // re-classify hundreds of thousands of users without paging through them.
+        // sourceFolder. If scopeLimit > 0 is set, only the first N (by id ASC) are
+        // moved — lets operators run 15K-user reclassifies in 1K/2K-sized chunks.
         if ("allInFolder".equals(scope)) {
             String src = sourceFolder == null ? null : sourceFolder.trim();
             if (src != null && src.isEmpty()) src = null;
-            int n = userRepository.bulkUpdateFolderByFolder(src, target);
             String srcLabel = (src == null) ? "（未設定）" : src;
+            int n;
+            if (scopeLimit != null && scopeLimit > 0) {
+                java.util.List<Long> limitedIds = (src == null)
+                        ? userRepository.findIdsByFolderIsNull()
+                        : userRepository.findIdsByFolder(src);
+                if (limitedIds.size() > scopeLimit) limitedIds = limitedIds.subList(0, scopeLimit);
+                n = limitedIds.isEmpty() ? 0 : userRepository.bulkUpdateFolderForIds(limitedIds, target);
+            } else {
+                n = userRepository.bulkUpdateFolderByFolder(src, target);
+            }
             ra.addFlashAttribute("flashSuccess",
                     "フォルダ「" + srcLabel + "」内の " + n + " 名を " + label + " に移動しました");
             return "redirect:/manager/users";
@@ -493,6 +506,7 @@ public class UserController {
     public String bulkDelete(@RequestParam(name = "ids", required = false) List<Long> ids,
                               @RequestParam(name = "scope", required = false) String scope,
                               @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                              @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                               @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
                               javax.servlet.http.HttpSession session,
                               RedirectAttributes ra) {
@@ -502,14 +516,16 @@ public class UserController {
             return "redirect:/manager/users";
         }
 
-        // Scope override: delete every user in a folder, not just checkbox-selected.
+        // Scope override: delete users in a folder. scopeLimit caps the batch size
+        // so a 15K-user folder can be drained in 1K/2K chunks.
         if ("allInFolder".equals(scope)) {
             String src = sourceFolder == null ? null : sourceFolder.trim();
             if (src != null && src.isEmpty()) src = null;
-            int n = service.deleteAllInFolder(src);
+            int n = service.deleteAllInFolder(src, scopeLimit);
             String srcLabel = (src == null) ? "（未設定）" : src;
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内の " + n + " 名を削除しました");
+                    "フォルダ「" + srcLabel + "」内の " + n + " 名を削除しました" + chunkNote);
             return "redirect:/manager/users";
         }
 
