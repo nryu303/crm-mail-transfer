@@ -73,6 +73,12 @@
         reader.readAsText(file);
     }
 
+    // Whether we've ever seen running=true. Once true, a subsequent running=false
+    // means the server finished — at which point the form's normal POST response is
+    // about to navigate this page away, so we let polling stop naturally.
+    // Before that, running=false just means 'upload in flight or service hasn't been
+    // entered yet' — keep polling so we don't lose visibility on slow uploads.
+    var sawRunning = false;
     function poll() {
         fetch('/manager/users/import/progress', {credentials:'same-origin'})
             .then(function(r){ return r.json(); })
@@ -83,7 +89,13 @@
                     var pct = Math.min(100, (d.progress / parseInt(totalStr, 10)) * 100);
                     elBar.style.width = pct + '%';
                 }
-                if (d.running) setTimeout(poll, 2000);
+                if (d.running) sawRunning = true;
+                // Always re-poll unless the import has clearly completed (we saw it
+                // running and now it's not). Even then, the form-submit page reload
+                // will tear this script down — but stopping here is a polite cleanup.
+                if (!sawRunning || d.running) {
+                    setTimeout(poll, 2000);
+                }
             })
             .catch(function(){ setTimeout(poll, 3000); });
     }
