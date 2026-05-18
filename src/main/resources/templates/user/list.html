@@ -506,6 +506,19 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btnDelete)        btnDelete.disabled = !has;
         checkAll.indeterminate = has && checked.length < rows().length;
         checkAll.checked = rows().length > 0 && checked.length === rows().length;
+
+        // Scope override: when フォルダ内全件対象 is on with a folder selected,
+        // the bulk-move / unbind / delete buttons must stay enabled even with
+        // zero row checks. Apply the override AFTER the row-count logic above
+        // so it can't be re-disabled by a subsequent checkbox change event.
+        var scopeCb = document.getElementById('folderAllScope');
+        var filterSel = document.getElementById('folderFilterSelect');
+        if (scopeCb && scopeCb.checked && filterSel && filterSel.value !== '') {
+            btnMove.disabled = false;
+            if (folderSel) folderSel.disabled = false;
+            if (btnUnbindCarrier) btnUnbindCarrier.disabled = false;
+            if (btnDelete) btnDelete.disabled = false;
+        }
     }
     if (checkAll) checkAll.addEventListener('change', function () {
         [].forEach.call(rows(), function (c) {
@@ -709,6 +722,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Double-confirmation for bulk delete + admin-password prompt. Returns true to submit.
     window.confirmBulkDelete = function (btn, label) {
+        // フォルダ内全件対象モードのときは行チェックなしでも動作するように。
+        // 確認ダイアログ + 管理者パスワード入力は bulkForm の submit リスナ側で
+        // すでに処理しているので、ここでは「先に進ませる」だけにする。
+        var scope = document.getElementById('folderAllScope');
+        var filterSel = document.getElementById('folderFilterSelect');
+        if (scope && scope.checked && filterSel && filterSel.value !== '') {
+            return true;  // submit listener takes over with its own confirms/password
+        }
+
         var checked = [].filter.call(rows(), function (c) { return c.checked; });
         var n = checked.length;
         if (n === 0) return false;
