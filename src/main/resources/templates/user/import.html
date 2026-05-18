@@ -49,6 +49,7 @@
             処理中はこのページを閉じないでください。
             完了次第、結果が下に表示されます。<br/>
             ※カウンタはサーバ側の処理済み行数 (2秒ごとに更新)。
+            最終取得: <span id="impStamp" class="font-mono">—</span>
         </p>
     </div>
 
@@ -61,55 +62,94 @@
     var elProgress = document.getElementById('impProgress');
     var elTotal = document.getElementById('impTotal');
     var elBar = document.getElementById('impBar');
+    var elStamp = document.getElementById('impStamp');
 
     function countRowsLocally(file, cb) {
         var reader = new FileReader();
         reader.onload = function(e) {
             var n = (e.target.result.match(/\n/g) || []).length;
-            // Subtract 1 for the header row when present.
             cb(Math.max(0, n - 1));
         };
         reader.onerror = function() { cb(null); };
         reader.readAsText(file);
     }
 
-    // Whether we've ever seen running=true. Once true, a subsequent running=false
-    // means the server finished — at which point the form's normal POST response is
-    // about to navigate this page away, so we let polling stop naturally.
-    // Before that, running=false just means 'upload in flight or service hasn't been
-    // entered yet' — keep polling so we don't lose visibility on slow uploads.
-    var sawRunning = false;
+    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+    function nowHms() {
+        var d = new Date();
+        return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+    }
+
+    // Track whether the live import has started server-side. Keeps polling alive
+    // through the upload phase (importRunning=false) until the service actually
+    // enters importCsv(), and through the run, until completion.
+    var sawRunning = false, polling = false;
     function poll() {
+        polling = true;
         fetch('/manager/users/import/progress', {credentials:'same-origin'})
             .then(function(r){ return r.json(); })
             .then(function(d){
                 elProgress.textContent = d.progress;
+                if (elStamp) elStamp.textContent = nowHms();
                 var totalStr = elTotal.textContent;
                 if (totalStr !== '?' && parseInt(totalStr, 10) > 0) {
                     var pct = Math.min(100, (d.progress / parseInt(totalStr, 10)) * 100);
                     elBar.style.width = pct + '%';
                 }
                 if (d.running) sawRunning = true;
-                // Always re-poll unless the import has clearly completed (we saw it
-                // running and now it's not). Even then, the form-submit page reload
-                // will tear this script down — but stopping here is a polite cleanup.
                 if (!sawRunning || d.running) {
                     setTimeout(poll, 2000);
+                } else {
+                    polling = false;
                 }
             })
             .catch(function(){ setTimeout(poll, 3000); });
     }
 
-    form.addEventListener('submit', function(){
+    // Rewritten as an AJAX upload (XMLHttpRequest because we need the upload-progress
+    // callback). The previous version did a native form POST, which navigated the
+    // page away — the browser then suspended the in-page poller, so the counter
+    // stayed at 0 even though the server was busy inserting rows.
+    form.addEventListener('submit', function(ev) {
         var f = fileInput.files[0];
         if (!f) return;
+        ev.preventDefault();
         btn.disabled = true;
         btn.textContent = 'アップロード中...';
         panel.style.display = '';
-        countRowsLocally(f, function(n){
-            if (n != null) elTotal.textContent = n;
-        });
-        setTimeout(poll, 1500);
+        countRowsLocally(f, function(n){ if (n != null) elTotal.textContent = n; });
+        if (!polling) poll();
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action, true);
+        xhr.responseType = 'text';
+        // Show upload-bytes progress before the server-side import even starts.
+        xhr.upload.onprogress = function(e) {
+            if (e.lengthComputable) {
+                var pct = (e.loaded / e.total * 100).toFixed(1);
+                btn.textContent = 'アップロード中... ' + pct + '%';
+            }
+        };
+        xhr.onload = function() {
+            btn.textContent = 'インポート実行';
+            btn.disabled = false;
+            if (xhr.status >= 200 && xhr.status < 400) {
+                // Server returns the same import page with results embedded; replace
+                // the document so the result table renders, same as a native form POST.
+                document.open();
+                document.write(xhr.responseText);
+                document.close();
+            } else {
+                alert('アップロード失敗: HTTP ' + xhr.status);
+            }
+        };
+        xhr.onerror = function() {
+            btn.textContent = 'インポート実行';
+            btn.disabled = false;
+            alert('通信エラー — 接続を確認してください');
+        };
+        var fd = new FormData(form);
+        xhr.send(fd);
     });
 })();
 </script>
