@@ -30,6 +30,23 @@ public interface CrmUserRepository extends JpaRepository<CrmUser, Long>, JpaSpec
     @Query(value = "UPDATE CRM_USER SET AD_CODE = NULL WHERE AD_CODE = :code", nativeQuery = true)
     int clearAdCodeForCode(@org.springframework.data.repository.query.Param("code") String code);
 
+    /**
+     * Bulk-move every user currently in {@code fromFolder} into {@code toFolder}.
+     * Pass {@code null} for either to mean '未設定' (FOLDER IS NULL). One UPDATE
+     * statement — no paging, no entity load — so 100K-row moves stay fast even
+     * on the 4GB tier.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query(value =
+            "UPDATE CRM_USER " +
+            "SET FOLDER = :toFolder, UPDATED_AT = NOW() " +
+            "WHERE (:fromFolder IS NULL AND FOLDER IS NULL) " +
+            "   OR (:fromFolder IS NOT NULL AND FOLDER = :fromFolder)",
+            nativeQuery = true)
+    int bulkUpdateFolderByFolder(@org.springframework.data.repository.query.Param("fromFolder") String fromFolder,
+                                 @org.springframework.data.repository.query.Param("toFolder") String toFolder);
+
     /** Per-day signup counts for an ad code, returned as [yyyy-MM-dd, count] rows. */
     @Query(value = "SELECT DATE_FORMAT(CREATED_AT, '%Y-%m-%d') AS d, COUNT(*) " +
                    "FROM CRM_USER WHERE AD_CODE = :code AND CREATED_AT BETWEEN :start AND :end " +

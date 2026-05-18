@@ -269,20 +269,37 @@ public class UserController {
     @PostMapping("/bulk-move-folder")
     public String bulkMoveFolder(@RequestParam(name = "ids", required = false) java.util.List<Long> ids,
                                  @RequestParam(name = "folder", required = false) String folder,
+                                 @RequestParam(name = "scope", required = false) String scope,
+                                 @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
                                  RedirectAttributes ra) {
+        String target = folder == null ? null : folder.trim();
+        if (target != null && target.isEmpty()) target = null;
+        String label = (target == null) ? "（フォルダ解除）" : target;
+
+        // Scope override: when scope=allInFolder, move EVERY user currently in
+        // sourceFolder (including users not on the current paginated view).
+        // Used by the user-list 「フォルダ内全件対象」 checkbox so an operator can
+        // re-classify hundreds of thousands of users without paging through them.
+        if ("allInFolder".equals(scope)) {
+            String src = sourceFolder == null ? null : sourceFolder.trim();
+            if (src != null && src.isEmpty()) src = null;
+            int n = userRepository.bulkUpdateFolderByFolder(src, target);
+            String srcLabel = (src == null) ? "（未設定）" : src;
+            ra.addFlashAttribute("flashSuccess",
+                    "フォルダ「" + srcLabel + "」内の " + n + " 名を " + label + " に移動しました");
+            return "redirect:/manager/users";
+        }
+
         if (ids == null || ids.isEmpty()) {
             ra.addFlashAttribute("flashError", "ユーザーが選択されていません");
             return "redirect:/manager/users";
         }
-        String target = folder == null ? null : folder.trim();
-        if (target != null && target.isEmpty()) target = null;
         int n = 0;
         for (CrmUser u : userRepository.findAllById(ids)) {
             u.setFolder(target);
             userRepository.save(u);
             n++;
         }
-        String label = (target == null) ? "（フォルダ解除）" : target;
         ra.addFlashAttribute("flashSuccess", n + " 件のユーザーを " + label + " に移動しました");
         return "redirect:/manager/users";
     }

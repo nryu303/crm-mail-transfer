@@ -134,8 +134,19 @@
                     <div class="md:col-span-2">
                         <div class="flex items-end gap-2 flex-wrap">
                             <div class="min-w-0" style="flex:1 1 0;">
-                                <label class="block text-xs text-slate-500 mb-1">フォルダ</label>
-                                <select class="tw-input" th:field="*{folder}">
+                                <label class="block text-xs text-slate-500 mb-1">
+                                    フォルダ
+                                    <!-- Inline 'all-in-folder' scope toggle. Only meaningful when a specific
+                                         folder is selected (NOT 'すべて'). When checked + a bulk-folder move
+                                         is fired, the move targets every user currently in this folder
+                                         instead of just the visible 500-row page. -->
+                                    <label style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:.7rem;color:#475569;cursor:pointer;font-weight:normal;"
+                                           id="folderAllScopeLabel" title="チェック時、現在のフォルダ内の全ユーザーを移動対象に">
+                                        <input type="checkbox" id="folderAllScope" style="margin:0;"/>
+                                        フォルダ内全件対象
+                                    </label>
+                                </label>
+                                <select class="tw-input" id="folderFilterSelect" th:field="*{folder}">
                                     <option value="">すべて</option>
                                     <option value="__NONE__">（未設定）</option>
                                     <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
@@ -501,6 +512,66 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     // --- Live progress poller for /bulk-bind-all ---
+    // --- フォルダ内全件対象 toggle ---
+    // When checked + a folder is selected, the 選択フォルダ移動 button switches
+    // its semantics: instead of moving only the checked rows, it moves EVERY
+    // user currently in the chosen-source folder (regardless of pagination).
+    (function () {
+        var scope = document.getElementById('folderAllScope');
+        var filterSel = document.getElementById('folderFilterSelect');
+        var btnMove = document.getElementById('btnMove');
+        var folderSel = document.getElementById('folderSelect'); // the target-folder dropdown in the footer
+        if (!scope || !filterSel || !btnMove) return;
+
+        function refreshScope() {
+            // Only enable when a specific folder (or 未設定) is in the filter — 'すべて' is not a valid source
+            var hasFilter = filterSel.value !== '';
+            scope.disabled = !hasFilter;
+            if (!hasFilter) scope.checked = false;
+
+            // When the checkbox is on, the bulk-move button works WITHOUT row checkboxes.
+            if (scope.checked && hasFilter) {
+                btnMove.disabled = !folderSel || !folderSel.value && folderSel.value !== '';
+                if (folderSel) folderSel.disabled = false;
+                btnMove.textContent = 'フォルダ内全件移動';
+                btnMove.style.background = '#d97706';  // amber tint = scope override mode
+            } else {
+                btnMove.textContent = '選択フォルダ移動';
+                btnMove.style.background = '';
+            }
+        }
+        scope.addEventListener('change', refreshScope);
+        filterSel.addEventListener('change', refreshScope);
+        if (folderSel) folderSel.addEventListener('change', refreshScope);
+        refreshScope();
+
+        // Inject scope override into the submitted form just before POST
+        var bulkForm = document.getElementById('bulkForm');
+        if (bulkForm) {
+            bulkForm.addEventListener('submit', function (ev) {
+                // Only override for the bulk-move-folder action; leave delete/bind alone
+                var action = ev.submitter && ev.submitter.getAttribute('formaction');
+                if (action && action.indexOf('bulk-move-folder') >= 0 && scope.checked && filterSel.value !== '') {
+                    var srcVal = filterSel.value === '__NONE__' ? '' : filterSel.value;
+                    // Confirm because this can be a huge change
+                    var n = filterSel.options[filterSel.selectedIndex].text;
+                    var to = folderSel.options[folderSel.selectedIndex].text;
+                    if (!confirm('フォルダ「' + n + '」内の全ユーザーを「' + to + '」に移動します。\nよろしいですか?')) {
+                        ev.preventDefault();
+                        return;
+                    }
+                    function addHidden(name, value) {
+                        var i = document.createElement('input');
+                        i.type = 'hidden'; i.name = name; i.value = value;
+                        bulkForm.appendChild(i);
+                    }
+                    addHidden('scope', 'allInFolder');
+                    addHidden('sourceFolder', srcVal);
+                }
+            });
+        }
+    })();
+
     window.dismissBindAll = function () {
         fetch('/manager/users/bulk-bind-all/clear', {method:'POST', credentials:'same-origin'})
             .then(function(r){ return r.json(); })
