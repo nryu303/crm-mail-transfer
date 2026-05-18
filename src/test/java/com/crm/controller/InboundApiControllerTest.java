@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -54,16 +55,17 @@ class InboundApiControllerTest {
     }
 
     @Test
-    void emptyAllowList_acceptsAnyIp_devConvenience() {
-        // Production should always have a populated allow-list; the empty fallback exists for
-        // local dev/test convenience and is intentional. We assert it stays permissive so this
-        // contract is explicit.
+    void emptyAllowList_rejectsAllInbound_failClosed() {
+        // C4 hardening (2026-05-15): an empty AMG_IPS env now rejects every inbound
+        // call rather than silently permitting them. Production must explicitly
+        // configure the IPs; the previous 'dev convenience' fallback was a
+        // production foot-gun.
         InboundApiController c = new InboundApiController(svc, "");
-        when(svc.process(any())).thenReturn(InboundMailService.ProcessResult.accepted(1L, 7L));
         MockHttpServletRequest req = new MockHttpServletRequest();
         req.setRemoteAddr("203.0.113.99");
 
-        assertThat(c.receiveRaw(sampleDto(), req).getStatusCodeValue()).isEqualTo(200);
+        assertThat(c.receiveRaw(sampleDto(), req).getStatusCodeValue()).isEqualTo(403);
+        verifyNoInteractions(svc);
     }
 
     @Test
@@ -91,7 +93,10 @@ class InboundApiControllerTest {
 
     @Test
     void inboundService_rejectionReason_propagatedToResponse() {
-        InboundApiController c = new InboundApiController(svc, "");
+        // Post-C4 the controller no longer accepts when the allow-list is empty, so we
+        // must give it a populated allow-list AND request from an allowed IP to reach
+        // the service layer where the rejection-reason propagation is meaningful.
+        InboundApiController c = new InboundApiController(svc, "1.2.3.4");
         when(svc.process(any())).thenReturn(
                 InboundMailService.ProcessResult.rejected(InboundMailService.REASON_TO_NOT_IN_POOL));
         MockHttpServletRequest req = new MockHttpServletRequest();

@@ -59,6 +59,11 @@ class InboundMailServiceTest {
         when(messageRepo.existsByMessageIdHeader(anyString())).thenReturn(false);
         when(settings.getFromBaseDomain()).thenReturn(null);
         when(bindingService.isBound(anyLong(), anyLong())).thenReturn(false);
+        // Stale-mail guard (REASON_NO_OUT_HISTORY) requires at least one OUT message
+        // from the matched user. Default to 1 here so existing tests that assert
+        // 'accepts when from-user matches' continue to pass — tests specifically
+        // checking the no-OUT-history path can override.
+        when(messageRepo.countByUserIdAndDirection(anyLong(), anyString())).thenReturn(1L);
         when(messageRepo.save(any(Message.class))).thenAnswer(inv -> {
             Message m = inv.getArgument(0);
             m.setId(42L);
@@ -84,6 +89,10 @@ class InboundMailServiceTest {
         CrmUser u = new CrmUser();
         u.setId(id);
         u.setEmail(email);
+        // H2 guard rejects inbound when user.status != ACTIVE. In production
+        // CrmUser's @PrePersist sets status=ACTIVE when null, but unit tests skip
+        // the JPA lifecycle, so set it explicitly here.
+        u.setStatus(CrmUser.STATUS_ACTIVE);
         return u;
     }
 

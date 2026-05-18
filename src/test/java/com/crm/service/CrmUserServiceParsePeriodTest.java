@@ -43,10 +43,13 @@ class CrmUserServiceParsePeriodTest {
     }
 
     @Test
-    void parseEndExclusive_datetimeLocal_returnsExactInstant() throws Exception {
-        // Operator picked a precise cut-off minute — honour it exactly, no +1 day.
+    void parseEndExclusive_datetimeLocal_addsOneMinute_inclusiveSemantics() throws Exception {
+        // datetime-local inputs include the whole picked minute. parseEndExclusive
+        // adds 1 minute so a user typing 18:45 means 'up to and including 18:45:59',
+        // i.e. exclusive bound 18:46:00. Fixes the 2026-05-13 operator report where
+        // a user with createdAt 18:45:30 was missed by a 18:45 upper bound.
         assertThat(parseEndExclusive("2026-05-12T18:45"))
-                .isEqualTo(LocalDateTime.of(2026, 5, 12, 18, 45));
+                .isEqualTo(LocalDateTime.of(2026, 5, 12, 18, 46));
     }
 
     @Test

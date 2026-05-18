@@ -4,6 +4,12 @@
       layout:decorate="~{layout/default}">
 <head>
     <title>ユーザーCSVインポート</title>
+    <!-- Prevent browser caching of this page so the inline progress JS is always
+         the current version. Without this an operator who upgraded mid-import
+         can be left looking at the old (broken-poller) script for hours. -->
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate"/>
+    <meta http-equiv="Pragma" content="no-cache"/>
+    <meta http-equiv="Expires" content="0"/>
 </head>
 <body>
 <section layout:fragment="content">
