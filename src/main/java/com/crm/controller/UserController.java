@@ -185,6 +185,28 @@ public class UserController {
     }
 
     /**
+     * Dismiss the completion banner from /manager/users. Clears the cached result
+     * message so the live-progress poller stops re-rendering the green '完了' notice.
+     * Refuses to clear if a run is still in flight.
+     */
+    @PostMapping("/bulk-bind-all/clear")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public java.util.Map<String, Object> bulkBindAllClear() {
+        java.util.Map<String, Object> m = new java.util.HashMap<>();
+        if (bindAllRunning) {
+            m.put("ok", false);
+            m.put("reason", "still_running");
+            return m;
+        }
+        bindAllResultMsg = "";
+        bindAllProgress.set(0);
+        bindAllTotal.set(0);
+        bindAllCreated.set(0);
+        m.put("ok", true);
+        return m;
+    }
+
+    /**
      * Bulk-bind a single carrier-pool address (or all active pool addresses) to the selected users.
      * Called by the 「キャリア登録割り当て」 button on the user list page.
      * If poolId == null or empty, binds ALL active pool addresses to each selected user.

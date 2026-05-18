@@ -415,9 +415,12 @@
 
     <!-- Live progress banner for the all-users bind. Hidden when not running. -->
     <div id="bindAllProgress"
-         style="display:none;padding:10px 14px;background:#dbeafe;border-top:1px solid #bfdbfe;font-size:.85rem;color:#1e3a8a;">
+         style="display:none;padding:10px 14px;background:#dbeafe;border-top:1px solid #bfdbfe;font-size:.85rem;color:#1e3a8a;position:relative;">
         <strong>📌 全ユーザー割り当て進行中:</strong>
         <span id="bindAllText">準備中...</span>
+        <button type="button" id="bindAllClose" onclick="dismissBindAll()"
+                style="display:none;position:absolute;top:6px;right:8px;background:transparent;border:0;font-size:1.2rem;cursor:pointer;color:#1e3a8a;line-height:1;padding:0 6px;"
+                title="閉じる">×</button>
         <div style="margin-top:6px;background:#fff;height:8px;border-radius:4px;overflow:hidden;border:1px solid #bfdbfe;">
             <div id="bindAllBar" style="width:0%;height:100%;background:#3b82f6;transition:width .3s;"></div>
         </div>
@@ -498,10 +501,24 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     // --- Live progress poller for /bulk-bind-all ---
+    window.dismissBindAll = function () {
+        fetch('/manager/users/bulk-bind-all/clear', {method:'POST', credentials:'same-origin'})
+            .then(function(r){ return r.json(); })
+            .then(function(d){
+                if (d.ok) {
+                    document.getElementById('bindAllProgress').style.display = 'none';
+                } else {
+                    alert('処理がまだ実行中です。完了までお待ちください。');
+                }
+            })
+            .catch(function(){});
+    };
+
     (function () {
         var panel = document.getElementById('bindAllProgress');
         var txt   = document.getElementById('bindAllText');
         var bar   = document.getElementById('bindAllBar');
+        var btnClose = document.getElementById('bindAllClose');
         function poll() {
             fetch('/manager/users/bulk-bind-all/progress', {credentials:'same-origin'})
                 .then(function(r){ return r.json(); })
@@ -510,19 +527,20 @@ document.addEventListener('DOMContentLoaded', function () {
                     bar.style.width = pct + '%';
                     if (d.running) {
                         panel.style.display = '';
+                        btnClose.style.display = 'none';  // can't dismiss while running
                         txt.textContent = d.progress + ' / ' + d.total + ' 名処理済み (新規 ' + d.created + ' 件)';
                         setTimeout(poll, 2000);
                     } else if (d.message) {
                         panel.style.display = '';
+                        btnClose.style.display = '';      // show × so operator can dismiss
                         txt.textContent = '✅ 完了: ' + d.message;
-                        // Keep visible — operator can navigate away to clear.
                     } else {
                         panel.style.display = 'none';
                     }
                 })
                 .catch(function(){ setTimeout(poll, 5000); });
         }
-        poll();  // start on page load — banner shows automatically if a run is active
+        poll();
     })();
 
     window.goBroadcast = function () {

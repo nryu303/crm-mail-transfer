@@ -69,7 +69,11 @@
             </div>
             <div class="preview-pane header-preview">
                 <div class="preview-label">▶ ヘッダー プレビュー (sandboxed iframe — 上下スクロール可)</div>
-                <iframe id="headerPreview" sandbox="allow-same-origin"></iframe>
+                <!-- sandbox flags match the real reply page (/reply/{token} and
+                     /manager/users/{id}/reply-preview) so external fonts, JS animations,
+                     and embedded scripts behave the same here as in production. -->
+                <iframe id="headerPreview"
+                        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
             </div>
         </div>
 
@@ -97,7 +101,8 @@
             </div>
             <div class="preview-pane" style="min-height:220px;">
                 <div class="preview-label">▶ CSS プレビュー (ミニ返信フォームに適用)</div>
-                <iframe id="cssPreview" sandbox="allow-same-origin"></iframe>
+                <iframe id="cssPreview"
+                        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
             </div>
         </div>
 
