@@ -16,7 +16,7 @@
 
     <p class="text-sm text-slate-500 mb-4">
         個別送信および一斉送信の画面で、ここに登録した定型文を呼び出して件名・本文に差し込めます。
-        登録できる件数は最大<span th:text="${maxTemplates}">10</span>件です (現在<span th:text="${templates.size()}">0</span>件)。
+        登録できる件数は最大<span th:text="${maxTemplates}">25</span>件です (現在<span th:text="${templates.size()}">0</span>件)。
     </p>
 
     <form method="get" th:action="@{/manager/settings/message-templates}"
@@ -37,7 +37,7 @@
                 <th class="px-3 py-2 text-left" style="width: 60px;">ID</th>
                 <th class="px-3 py-2 text-left">名前</th>
                 <th class="px-3 py-2 text-left">件名</th>
-                <th class="px-3 py-2 text-left">本文プレビュー</th>
+                <th class="px-3 py-2 text-left">本文</th>
                 <th class="px-3 py-2 text-right" style="width: 170px;">操作</th>
             </tr>
             </thead>

@@ -52,6 +52,9 @@
         .hist-item { padding:8px 10px; border-radius:6px; margin-bottom:6px; font-size:.8rem; line-height:1.5; }
         .hist-item.out { background:#dbeafe; color:#1e3a8a; margin-left:20px; }
         .hist-item.in  { background:#e2e8f0; color:#1e293b; margin-right:20px; }
+        /* WEB_REPLY (user replied via the reply page) painted soft yellow-green so it's instantly
+         * distinguishable from carrier-mail replies (EMAIL channel keeps the default grey). */
+        .hist-item.in.web { background:#ecfccb; color:#365314; }
         .hist-item .meta { font-size:.66rem; color:#475569; margin-top:3px; }
 
         /* cmp-form: natural-flow column. Previously had height:100% + textarea flex:1 which
@@ -150,7 +153,7 @@
     <!-- ===== Top-left: Inbox list ===== -->
     <div class="pane pane-tl">
         <header>
-            <span>受信 (<span id="inboxCount" th:text="${#lists.size(inboxRows)}">0</span>)</span>
+            <span>受信ボックス (<span id="inboxCount" th:text="${#lists.size(inboxRows)}">0</span>)</span>
             <button class="btn-refresh ml-auto" type="button" onclick="location.reload()">更新</button>
         </header>
         <div class="body" id="inboxBody">
@@ -178,7 +181,7 @@
             <a class="font-semibold text-blue-700 hover:underline"
                th:href="@{'/manager/users/' + ${user.id}}"
                th:text="${user.displayName} ?: ${user.email}"></a>
-            <span>過去のやり取り</span>
+            <span>送受信履歴</span>
             <span class="text-slate-400">|</span>
             <span class="text-slate-500" th:if="${boundAddresses != null and !boundAddresses.empty}"
                   th:text="${boundAddresses[0].carrierDomain}"></span>
@@ -203,7 +206,7 @@
         <div class="body" id="historyBody">
             <div th:if="${thread.empty}" class="text-center text-xs text-slate-400 py-6">まだメッセージはありません</div>
             <div th:each="m : ${thread}" class="hist-item"
-                 th:classappend="${m.direction == 'OUT'} ? 'out' : 'in'">
+                 th:classappend="${m.direction == 'OUT'} ? 'out' : (${m.channel == 'WEB_REPLY'} ? 'in web' : 'in')">
                 <div class="font-medium" th:text="${m.subject} ?: '(件名なし)'"></div>
                 <div class="whitespace-pre-wrap" th:text="${m.bodyText}"></div>
                 <div class="meta">

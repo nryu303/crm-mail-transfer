@@ -12,7 +12,7 @@ import java.util.Optional;
 @Service
 public class MessageTemplateService {
 
-    public static final int MAX_TEMPLATES = 10;
+    public static final int MAX_TEMPLATES = 25;
 
     private final MessageTemplateRepository repository;
 
