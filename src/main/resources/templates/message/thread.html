@@ -184,9 +184,11 @@
                th:text="${user.displayName} ?: ${user.email}"></a>
             <span>送受信履歴</span>
             <span class="text-slate-400">|</span>
-            <span class="text-slate-500" th:if="${boundAddresses != null and !boundAddresses.empty}"
-                  th:text="${boundAddresses[0].carrierDomain}"></span>
-            <span class="text-slate-500" th:if="${boundAddresses == null or boundAddresses.empty}">-</span>
+            <!-- Previously read boundAddresses[0].carrierDomain — the FIRST AMG pool address
+                 bound to this user, which is the same address for everyone, so every thread
+                 wrongly displayed the pool's first carrier (i.softbank.jp). The carrier we
+                 actually want is the user's own (from the CSV import / detail form). -->
+            <span class="text-slate-500" th:text="${user.carrierDomain} ?: '-'"></span>
             <span class="text-slate-400">|</span>
             <span class="text-slate-500" th:text="'広告: ' + (${user.adCode} ?: '-')"></span>
             <span class="text-slate-400">|</span>
