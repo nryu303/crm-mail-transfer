@@ -455,7 +455,12 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-// --- Selection footer ---
+// --- Selection footer (unified row-check + folder-scope state) ---
+// Page-level snapshot of the committed folder filter — whatever Thymeleaf rendered into the
+// select on page load (i.e. the URL state after the operator's last 検索). Folder-scope mode
+// is keyed on this; changing the dropdown alone, without re-submitting, must NOT activate it.
+var committedFolderFilter = '';
+
 (function () {
     var checkAll = document.getElementById('checkAll');
     var countLabel = document.getElementById('selectedCount');
@@ -469,31 +474,71 @@ document.addEventListener('DOMContentLoaded', function () {
     var btnBindCarrier = document.getElementById('btnBindCarrier');
     var btnUnbindCarrier = document.getElementById('btnUnbindCarrier');
     var btnDelete = document.getElementById('btnDelete');
-    function refresh() {
-        var checked = [].filter.call(rows(), function (c) { return c.checked; });
-        var has = checked.length > 0;
-        countLabel.textContent = has ? (checked.length + ' 件選択中') : '';
-        folderSel.disabled = !has;
-        btnMove.disabled = !has;
-        btnBroad.disabled = !has;
-        if (poolSel)          poolSel.disabled = !has;
-        if (btnBindCarrier)   btnBindCarrier.disabled = !has;
-        if (btnUnbindCarrier) btnUnbindCarrier.disabled = !has;
-        if (btnDelete)        btnDelete.disabled = !has;
-        checkAll.indeterminate = has && checked.length < rows().length;
-        checkAll.checked = rows().length > 0 && checked.length === rows().length;
+    var filterSelEl = document.getElementById('folderFilterSelect');
+    var scopeFlag = document.getElementById('folderAllScope');
+    var limitWrap = document.getElementById('folderScopeLimitWrap');
+    if (filterSelEl) committedFolderFilter = filterSelEl.value;
 
-        // Scope override: when フォルダ内全件対象 is on with a folder selected,
-        // the bulk-move / unbind / delete buttons must stay enabled even with
-        // zero row checks. Apply the override AFTER the row-count logic above
-        // so it can't be re-disabled by a subsequent checkbox change event.
-        var scopeCb = document.getElementById('folderAllScope');
-        var filterSel = document.getElementById('folderFilterSelect');
-        if (scopeCb && scopeCb.checked && filterSel && filterSel.value !== '') {
-            btnMove.disabled = false;
-            if (folderSel) folderSel.disabled = false;
-            if (btnUnbindCarrier) btnUnbindCarrier.disabled = false;
-            if (btnDelete) btnDelete.disabled = false;
+    // Single source of truth for footer state — runs initially + every time row checks
+    // change. Resolves the three operating modes:
+    //   * folder-scope: committed folder filter set AND no rows checked
+    //       → buttons say "フォルダ内全○○" (orange), submit injects scope params, action
+    //         targets every user in the folder (capped by 対象件数選択：).
+    //   * row-selection: any rows are checked (folder filter irrelevant)
+    //       → buttons say "選択○○" (default colors), action targets only the checked ids.
+    //   * idle: no filter and no checks → buttons disabled.
+    // Row checks ALWAYS beat folder-scope. The client reported 2026-05-19 that checking a
+    // row inside a folder filter was being ignored; this mode-priority is the fix.
+    function refresh() {
+        var checkedList = [].filter.call(rows(), function (c) { return c.checked; });
+        var hasRows = checkedList.length > 0;
+        var hasFolderFilter = committedFolderFilter !== '';
+        var folderScopeMode = hasFolderFilter && !hasRows;
+
+        // Status label: "X 件選択中" wins when rows are checked; otherwise hint at folder mode.
+        if (hasRows) {
+            countLabel.textContent = checkedList.length + ' 件選択中';
+        } else if (folderScopeMode) {
+            countLabel.textContent = 'フォルダ全件対象';
+        } else {
+            countLabel.textContent = '';
+        }
+
+        // Hidden flag for the submit handler — only inject scope params in folder-scope mode.
+        if (scopeFlag) scopeFlag.checked = folderScopeMode;
+
+        // Enable buttons whenever EITHER mode is active.
+        var enable = hasRows || folderScopeMode;
+        if (folderSel) folderSel.disabled = !enable;
+        btnMove.disabled = !enable;
+        btnBroad.disabled = !enable;
+        if (poolSel)          poolSel.disabled = !enable;
+        if (btnBindCarrier)   btnBindCarrier.disabled = !enable;
+        if (btnUnbindCarrier) btnUnbindCarrier.disabled = !enable;
+        if (btnDelete)        btnDelete.disabled = !enable;
+
+        // checkAll indicator reflects ROW checks only, not folder scope.
+        checkAll.indeterminate = hasRows && checkedList.length < rows().length;
+        checkAll.checked = rows().length > 0 && checkedList.length === rows().length;
+
+        // "対象件数選択：" dropdown is meaningful only in folder-scope mode.
+        if (limitWrap) limitWrap.style.display = folderScopeMode ? '' : 'none';
+
+        // Button labels + colors switch with the mode.
+        if (folderScopeMode) {
+            btnMove.textContent = 'フォルダ内全件移動';
+            btnMove.style.background = '#d97706';
+            if (btnDelete)        { btnDelete.textContent = 'フォルダ内全削除'; btnDelete.style.background = '#7f1d1d'; }
+            if (btnUnbindCarrier) { btnUnbindCarrier.textContent = 'フォルダ内全割り当て削除'; btnUnbindCarrier.style.background = '#d97706'; }
+            if (btnBindCarrier)   { btnBindCarrier.textContent = 'フォルダ内全割り当て'; btnBindCarrier.style.background = '#d97706'; }
+            if (btnBroad)         { btnBroad.textContent = '対象件数一斉送信'; btnBroad.style.background = '#d97706'; }
+        } else {
+            btnMove.textContent = '選択フォルダ移動';
+            btnMove.style.background = '';
+            if (btnDelete)        { btnDelete.textContent = '選択削除'; btnDelete.style.background = '#dc2626'; }
+            if (btnUnbindCarrier) { btnUnbindCarrier.textContent = '選択キャリア解除'; btnUnbindCarrier.style.background = ''; }
+            if (btnBindCarrier)   { btnBindCarrier.textContent = '選択へキャリア割り当て'; btnBindCarrier.style.background = ''; }
+            if (btnBroad)         { btnBroad.textContent = '選択一斉送信'; btnBroad.style.background = ''; }
         }
     }
     if (checkAll) checkAll.addEventListener('change', function () {
@@ -508,87 +553,17 @@ document.addEventListener('DOMContentLoaded', function () {
         var tr = e.target.closest('tr'); if (tr) tr.classList.toggle('selected-row', e.target.checked);
         refresh();
     });
+    refresh();
 
-    // --- Folder-scope auto-toggle ---
-    // The visible "フォルダ内全件対象" checkbox was removed 2026-05-19; the underlying
-    // logic stays so a folder filter implies operating on the whole folder. Selecting any
-    // specific folder in the filter auto-checks the (hidden) scope checkbox; clearing the
-    // folder filter (back to "すべて") clears it. This keeps the existing scope-injection
-    // path in the submit handler working without operators needing to tick a box.
+    // Submit-handler block below still expects this IIFE-level scope handle.
     (function () {
         var scope = document.getElementById('folderAllScope');
         var filterSel = document.getElementById('folderFilterSelect');
         var btnMove = document.getElementById('btnMove');
-        var folderSel = document.getElementById('folderSelect'); // the target-folder dropdown in the footer
+        var folderSel = document.getElementById('folderSelect');
         if (!scope || !filterSel || !btnMove) return;
 
-        var btnDel = document.getElementById('btnDelete');
-        var btnUnbind = document.getElementById('btnUnbindCarrier');
-        var btnBind = document.getElementById('btnBindCarrier');
-        var poolSel = document.getElementById('poolSelect');
-        var limitWrap = document.getElementById('folderScopeLimitWrap');
         var limitSel = document.getElementById('folderScopeLimit');
-
-        // Snapshot the committed folder filter — the value Thymeleaf rendered into the <select>
-        // on page load (i.e. whatever was in the URL when the operator hit 検索). Folder-scope
-        // mode is keyed on THIS, not on the live dropdown value, so changing the dropdown alone
-        // (without clicking 検索) does NOT flip the page into folder-scope mode. Client request
-        // 2026-05-19: 「フォルダ を指定して検索ボタンを押したあとに 対象件数選択： を表示する」.
-        var committedFolderFilter = filterSel.value;
-
-        function refreshScope() {
-            // A committed folder filter (specific folder OR '未設定') auto-enables folder-scope.
-            // 'すべて' (empty committed value) leaves the page in plain row-selection mode.
-            var hasFilter = committedFolderFilter !== '';
-            scope.checked = hasFilter;     // hidden — drives the submit-time scope injection below
-            scope.disabled = !hasFilter;
-            if (limitWrap) limitWrap.style.display = hasFilter ? '' : 'none';
-
-            // In folder-scope mode, the bulk action buttons work WITHOUT row checkboxes and
-            // their labels switch to reflect the folder-wide semantics.
-            if (hasFilter) {
-                if (folderSel) {
-                    folderSel.disabled = false;
-                    btnMove.disabled = false;
-                }
-                btnMove.textContent = 'フォルダ内全件移動';
-                btnMove.style.background = '#d97706';
-
-                if (btnDel) {
-                    btnDel.disabled = false;
-                    btnDel.textContent = 'フォルダ内全削除';
-                    btnDel.style.background = '#7f1d1d';  // dark red — destructive scope-override mode
-                }
-                if (btnUnbind) {
-                    btnUnbind.disabled = false;
-                    btnUnbind.textContent = 'フォルダ内全割り当て削除';
-                    btnUnbind.style.background = '#d97706';
-                }
-                if (btnBind) {
-                    btnBind.disabled = false;
-                    btnBind.textContent = 'フォルダ内全割り当て';
-                    btnBind.style.background = '#d97706';
-                    if (poolSel) poolSel.disabled = false;
-                }
-                // Folder-scope broadcast: button stays enabled regardless of row checks.
-                if (btnBroad) {
-                    btnBroad.disabled = false;
-                    btnBroad.textContent = '対象件数一斉送信';
-                    btnBroad.style.background = '#d97706';
-                }
-            } else {
-                btnMove.textContent = '選択フォルダ移動';
-                btnMove.style.background = '';
-                if (btnDel) { btnDel.textContent = '選択削除'; btnDel.style.background = '#dc2626'; }
-                if (btnUnbind) { btnUnbind.textContent = '選択キャリア解除'; btnUnbind.style.background = ''; }
-                if (btnBind) { btnBind.textContent = '選択へキャリア割り当て'; btnBind.style.background = ''; }
-                if (btnBroad) { btnBroad.textContent = '選択一斉送信'; btnBroad.style.background = ''; }
-            }
-        }
-        // The dropdown-change listener was deliberately removed — the operator must click 検索
-        // (i.e. submit the form to re-render the page with the new ?folder=... URL) before
-        // folder-scope mode activates. This matches the client's 2026-05-19 request.
-        refreshScope();
 
         // Inject scope override into the submitted form just before POST.
         // Applies to bulk-move-folder, bulk-delete, and bulk-unbind-carrier when
@@ -662,16 +637,20 @@ document.addEventListener('DOMContentLoaded', function () {
     // restored from git history.
 
     window.goBroadcast = function () {
-        // Two paths, decided by committedFolderFilter:
-        //   * Folder-scope on (URL was already submitted with a folder filter): POST
-        //     {sourceFolder, scopeLimit} → /broadcast/new-from-folder. Server resolves
-        //     the folder→user-id list and stashes it in session, then redirects.
-        //   * No folder filter: classic row-checks path — POST userIds[] → /broadcast/new.
-        // Both use POST so we never blow past Tomcat's 8KB GET URL limit on big lists.
+        // Mode priority matches the unified refresh() above:
+        //   1. ROW SELECTION wins when any row is checked — even with a folder filter in
+        //      the URL. (Client request 2026-05-19: 「フォルダ を選択した場合でも 左側のチェック
+        //      欄を チェックすると個別で」.)
+        //   2. Folder-scope only fires when the URL has a committed folder filter AND no
+        //      rows are checked.
+        //   3. Otherwise fall through to /broadcast/new with no preselected users.
+        // Always POSTed so big id lists never exceed Tomcat's 8KB GET-URL limit.
         var filterSelEl = document.getElementById('folderFilterSelect');
         var committed = (typeof committedFolderFilter !== 'undefined')
                 ? committedFolderFilter
                 : (filterSelEl ? filterSelEl.value : '');
+        var rowEls = document.querySelectorAll('.row-item');
+        var ids = [].filter.call(rowEls, function (c) { return c.checked; }).map(function (c) { return c.value; });
         var f = document.createElement('form');
         f.method = 'POST';
 
@@ -687,8 +666,17 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
-        if (committed !== '') {
-            // Folder-scope broadcast.
+        if (ids.length > 0) {
+            // Row-selection broadcast (wins over folder filter).
+            f.action = '/manager/messages/broadcast/new';
+            copyCsrf();
+            ids.forEach(function (id) {
+                var i = document.createElement('input');
+                i.type = 'hidden'; i.name = 'userIds'; i.value = id;
+                f.appendChild(i);
+            });
+        } else if (committed !== '') {
+            // Folder-scope broadcast (no row checks, folder filter committed).
             var srcVal = committed === '__NONE__' ? '' : committed;
             var limitEl = document.getElementById('folderScopeLimit');
             var lim = limitEl && limitEl.value ? parseInt(limitEl.value, 10) : 0;
@@ -704,19 +692,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 var sl = document.createElement('input'); sl.type='hidden'; sl.name='scopeLimit'; sl.value=String(lim); f.appendChild(sl);
             }
         } else {
-            // Row-selection broadcast (existing behaviour).
-            var ids = [].filter.call(rows(), function (c) { return c.checked; }).map(function (c) { return c.value; });
-            if (ids.length === 0) {
-                window.location.href = '/manager/messages/broadcast/new';
-                return;
-            }
-            f.action = '/manager/messages/broadcast/new';
-            copyCsrf();
-            ids.forEach(function (id) {
-                var i = document.createElement('input');
-                i.type = 'hidden'; i.name = 'userIds'; i.value = id;
-                f.appendChild(i);
-            });
+            // No selection, no folder — visit the empty broadcast form.
+            window.location.href = '/manager/messages/broadcast/new';
+            return;
         }
         document.body.appendChild(f);
         f.submit();
