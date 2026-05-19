@@ -27,60 +27,64 @@ public class HomeHtmlService {
         this.repository = repository;
     }
 
-    public List<HomeHtml> listAll() {
-        return repository.findAllByOrderByUpdatedAtDesc();
+    /** Number of fixed slots shown on the settings page (パターン1〜N). */
+    public static final int SLOT_COUNT = 3;
+
+    /**
+     * Ensure exactly {@link #SLOT_COUNT} rows exist and return them in stable id-ASC order
+     * (パターン1 = oldest id, パターン2 = next, etc.). On first load this seeds three blank
+     * "パターン{n}" rows; existing rows are reused so admins never lose previously-saved HTML
+     * because of a reseed. The settings page edits these in place rather than CRUDing new
+     * records, so the on-screen slot count stays fixed at three.
+     */
+    @Transactional
+    public List<HomeHtml> listSlots() {
+        List<HomeHtml> existing = repository.findAll(org.springframework.data.domain.Sort.by("id"));
+        while (existing.size() < SLOT_COUNT) {
+            HomeHtml h = new HomeHtml();
+            h.setName("パターン" + (existing.size() + 1));
+            h.setHtmlContent("");
+            h.setIsActive(Boolean.FALSE);
+            existing.add(repository.save(h));
+        }
+        return existing.subList(0, SLOT_COUNT);
     }
 
-    public Optional<HomeHtml> findById(Long id) {
-        return repository.findById(id);
+    /**
+     * Bulk-save the three editable slots from the settings page. Each (id, name, htmlContent)
+     * triple updates the matching row in place; {@code activeId} (nullable) marks which row
+     * should be marked is_active=true — every other row's flag is cleared in the same tx, so
+     * the "one active row" invariant holds. id values that don't belong to an existing row
+     * are ignored, so a stale form POST after an admin manually deleted a row can't corrupt
+     * data.
+     */
+    @Transactional
+    public void saveSlots(List<Long> ids, List<String> names, List<String> htmlContents, Long activeId) {
+        if (ids == null) return;
+        int n = ids.size();
+        for (int i = 0; i < n; i++) {
+            Long id = ids.get(i);
+            if (id == null) continue;
+            Optional<HomeHtml> opt = repository.findById(id);
+            if (!opt.isPresent()) continue;
+            HomeHtml h = opt.get();
+            if (names != null && i < names.size()) {
+                String name = names.get(i);
+                h.setName((name == null || name.trim().isEmpty()) ? ("パターン" + (i + 1)) : name.trim());
+            }
+            if (htmlContents != null && i < htmlContents.size()) {
+                h.setHtmlContent(htmlContents.get(i) == null ? "" : htmlContents.get(i));
+            }
+            h.setIsActive(activeId != null && activeId.equals(id));
+            repository.save(h);
+        }
+        // Belt-and-braces: if activeId points to a row we DID see, make sure every other
+        // row is cleared even if it wasn't in this submit (e.g. a manually-created 4th row
+        // outside the 3-slot UI).
+        if (activeId != null) repository.clearActiveExcept(activeId);
     }
 
     public Optional<HomeHtml> findActive() {
         return repository.findFirstByIsActiveTrue();
-    }
-
-    @Transactional
-    public HomeHtml create(String name, String htmlContent, boolean active) {
-        HomeHtml h = new HomeHtml();
-        h.setName(name);
-        h.setHtmlContent(htmlContent);
-        h.setIsActive(active);
-        HomeHtml saved = repository.save(h);
-        if (active) repository.clearActiveExcept(saved.getId());
-        return saved;
-    }
-
-    @Transactional
-    public HomeHtml update(Long id, String name, String htmlContent) {
-        HomeHtml h = repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("home html not found: " + id));
-        h.setName(name);
-        h.setHtmlContent(htmlContent);
-        return repository.save(h);
-    }
-
-    @Transactional
-    public void activate(Long id) {
-        HomeHtml h = repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("home html not found: " + id));
-        h.setIsActive(true);
-        repository.save(h);
-        repository.clearActiveExcept(id);
-    }
-
-    /** Clear every active flag — used by "現在のホームを使わない (管理画面にリダイレクト)" toggle. */
-    @Transactional
-    public void deactivateAll() {
-        for (HomeHtml h : repository.findAll()) {
-            if (Boolean.TRUE.equals(h.getIsActive())) {
-                h.setIsActive(false);
-                repository.save(h);
-            }
-        }
-    }
-
-    @Transactional
-    public void delete(Long id) {
-        repository.deleteById(id);
     }
 }

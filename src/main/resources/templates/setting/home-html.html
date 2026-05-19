@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>本ドメイン表示設定</title>
+    <style>
+        .slot-block {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .slot-block.active-slot { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, .12); }
+        .slot-head {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+            padding-bottom: 10px; border-bottom: 1px solid #e2e8f0;
+        }
+        .slot-head .slot-num {
+            font-weight: 700; color: #1e293b; min-width: 70px; font-size: .95rem;
+        }
+        .slot-head input[type="text"] {
+            flex: 1; padding: 5px 10px; font-size: .85rem;
+            border: 1px solid #cbd5e1; border-radius: 5px; outline: none;
+        }
+        .slot-head input[type="text"]:focus { border-color: #2563eb; }
+        .slot-head .active-toggle {
+            display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: #475569;
+            padding: 4px 12px; border: 1px solid #cbd5e1; border-radius: 5px; background: #f8fafc;
+            cursor: pointer; user-select: none; white-space: nowrap;
+        }
+        .slot-head .active-toggle:hover { background: #f1f5f9; }
+        .slot-head .active-toggle.is-active {
+            background: #d1fae5; border-color: #10b981; color: #065f46; font-weight: 700;
+        }
+        .field-row {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+        }
+        .field-row > .editor-side > textarea { width: 100%; }
+        .preview-pane {
+            border: 1px solid #cbd5e1;
+            border-radius: 6px; background: #fff; overflow: hidden;
+            display: flex; flex-direction: column;
+            min-height: 360px;
+        }
+        .preview-pane .preview-label {
+            background: #f1f5f9; color: #475569; font-size: .68rem; font-weight: 600;
+            padding: 4px 8px; border-bottom: 1px solid #cbd5e1; letter-spacing: .05em;
+        }
+        .preview-pane iframe { flex: 1; border: 0; width: 100%; background: #fff; min-height: 360px; }
+        @media (max-width: 1100px) {
+            .field-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">本ドメイン表示設定</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">設定に戻る</a>
+    </div>
+
+    <div class="max-w-5xl rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-4">
+        <p class="font-semibold mb-1">本ドメイン (<code>https://avu74g.jp/</code>) のトップに表示するHTML</p>
+        <p class="text-xs">
+            3つのパターンを保存編集できます。「現在表示」にチェックを入れたパターンが、ルートURLへのアクセス時に配信されます。
+            どのパターンにもチェックを入れない場合は、管理画面ログインへのリダイレクトに戻ります（現状の動作）。
+            右側のプレビューは入力中に自動更新されます（保存不要）。
+        </p>
+    </div>
+
+    <form method="post" th:action="@{/manager/settings/home-html}">
+        <!-- Iterate the three fixed slots. Each row submits its id/name/htmlContent in the
+             same array index so the controller can pair them back up. activeId is a
+             single-pick group (JS enforced) — at most one checkbox is sent on submit. -->
+        <div th:each="slot,it : ${slots}" class="slot-block"
+             th:classappend="${slot.isActive} ? 'active-slot'">
+            <input type="hidden" name="ids" th:value="${slot.id}"/>
+
+            <div class="slot-head">
+                <span class="slot-num" th:text="'パターン' + ${it.count}">パターン1</span>
+                <input type="text" name="names" th:value="${slot.name}" placeholder="名前 (例: ランディングA)"/>
+                <label class="active-toggle" th:classappend="${slot.isActive} ? 'is-active'">
+                    <input type="checkbox" name="activeId" th:value="${slot.id}"
+                           th:checked="${slot.isActive}" class="js-active-pick"/>
+                    現在表示
+                </label>
+            </div>
+
+            <div class="field-row">
+                <div class="editor-side">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">HTML本体</label>
+                    <textarea name="htmlContents" rows="14"
+                              class="tw-input font-mono js-html-editor"
+                              style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:360px;"
+                              th:text="${slot.htmlContent}"
+                              placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html lang=&quot;ja&quot;&gt;..."></textarea>
+                </div>
+                <div class="preview-pane">
+                    <div class="preview-label">▶ プレビュー (sandboxed iframe)</div>
+                    <!-- sandbox flags match the production root iframe / reply preview so external
+                         fonts, scripts and embeds behave identically here. -->
+                    <iframe class="js-html-preview"
+                            sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3 mt-2">
+            <button type="submit"
+                    class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm">
+                保存する
+            </button>
+            <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
+               th:href="@{/manager/settings}">キャンセル</a>
+            <span class="text-xs text-slate-500 ml-2">
+                ※ 「現在表示」チェックは一つだけONにできます。すべてOFFにすると、ルートURLは管理画面リダイレクトに戻ります。
+            </span>
+        </div>
+    </form>
+
+    <script>
+    // Two responsibilities:
+    //   1. checkbox-as-radio: only one .js-active-pick can be checked at a time.
+    //      Click on an already-checked box to uncheck (= "none active").
+    //   2. live preview: each .js-html-editor renders into its sibling .js-html-preview
+    //      iframe via srcdoc on input. Reuses the reply-page settings pattern.
+    (function () {
+        var pickers = document.querySelectorAll('input.js-active-pick');
+        function syncToggleLabels() {
+            pickers.forEach(function (cb) {
+                var lbl = cb.closest('.active-toggle');
+                if (lbl) lbl.classList.toggle('is-active', cb.checked);
+                var block = cb.closest('.slot-block');
+                if (block) block.classList.toggle('active-slot', cb.checked);
+            });
+        }
+        pickers.forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                if (cb.checked) {
+                    pickers.forEach(function (o) { if (o !== cb) o.checked = false; });
+                }
+                syncToggleLabels();
+            });
+        });
+        syncToggleLabels();
+    })();
+
+    (function () {
+        document.querySelectorAll('.slot-block').forEach(function (block) {
+            var ed = block.querySelector('.js-html-editor');
+            var pv = block.querySelector('.js-html-preview');
+            if (!ed || !pv) return;
+            function render() {
+                pv.srcdoc = ed.value || '<em style="color:#94a3b8;font-family:sans-serif;padding:16px;display:block;">プレビューは入力後に表示されます</em>';
+            }
+            ed.addEventListener('input', render);
+            render();
+        });
+    })();
+    </script>
+</section>
+</body>
+</html>

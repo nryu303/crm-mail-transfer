@@ -39,6 +39,14 @@
             <p class="text-sm text-slate-500">返信URLと送信元ドメインを設定します。ワイルドカードドメイン + ランダム文字列に対応。</p>
         </a>
 
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/home-html}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">本ドメイン表示設定</h2>
+            <p class="text-sm text-slate-500">
+                本ドメイントップ (<code>/</code>) に表示するHTMLを3パターン保存し、チェックで切替できます。
+                未設定の場合は管理画面ログインへリダイレクトされます。
+            </p>
+        </a>
+
         <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/sender-names}">
             <h2 class="text-base font-semibold text-slate-800 mb-2">送信者名設定</h2>
             <p class="text-sm text-slate-500">

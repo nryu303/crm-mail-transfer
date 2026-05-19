@@ -3,13 +3,9 @@ package com.crm.repository;
 import com.crm.entity.HomeHtml;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface HomeHtmlRepository extends JpaRepository<HomeHtml, Long> {
-
-    /** Newest first so the management list shows recent variants near the top. */
-    List<HomeHtml> findAllByOrderByUpdatedAtDesc();
 
     Optional<HomeHtml> findFirstByIsActiveTrue();
 

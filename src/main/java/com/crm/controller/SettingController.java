@@ -414,95 +414,22 @@ public class SettingController {
         }
     }
 
-    // ====== Home HTML variants (root path / landing) ======
+    // ====== 本ドメイン表示設定 (root path / landing HTML — 3 fixed slots) ======
 
     @GetMapping("/home-html")
-    public String homeHtmlList(Model model) {
-        model.addAttribute("variants", homeHtmlService.listAll());
-        return "setting/home-html-list";
-    }
-
-    @GetMapping("/home-html/new")
-    public String homeHtmlNew(Model model) {
-        com.crm.entity.HomeHtml blank = new com.crm.entity.HomeHtml();
-        blank.setName("");
-        blank.setHtmlContent("");
-        blank.setIsActive(Boolean.FALSE);
-        model.addAttribute("variant", blank);
-        model.addAttribute("isNew", Boolean.TRUE);
-        return "setting/home-html-form";
-    }
-
-    @GetMapping("/home-html/{id}/edit")
-    public String homeHtmlEdit(@PathVariable Long id, Model model, RedirectAttributes ra) {
-        java.util.Optional<com.crm.entity.HomeHtml> v = homeHtmlService.findById(id);
-        if (!v.isPresent()) {
-            ra.addFlashAttribute("flashError", "HTMLが見つかりません");
-            return "redirect:/manager/settings/home-html";
-        }
-        model.addAttribute("variant", v.get());
-        model.addAttribute("isNew", Boolean.FALSE);
-        return "setting/home-html-form";
+    public String homeHtmlForm(Model model) {
+        model.addAttribute("slots", homeHtmlService.listSlots());
+        return "setting/home-html";
     }
 
     @PostMapping("/home-html")
-    public String homeHtmlCreate(@RequestParam("name") String name,
-                                  @RequestParam(name = "htmlContent", required = false) String htmlContent,
-                                  @RequestParam(name = "activateNow", required = false) String activateNow,
-                                  RedirectAttributes ra) {
-        String trimmedName = name == null ? "" : name.trim();
-        if (trimmedName.isEmpty()) {
-            ra.addFlashAttribute("flashError", "名前を入力してください");
-            return "redirect:/manager/settings/home-html/new";
-        }
-        homeHtmlService.create(trimmedName, htmlContent == null ? "" : htmlContent,
-                "on".equals(activateNow) || "true".equals(activateNow));
-        ra.addFlashAttribute("flashSuccess", "ホームHTMLを保存しました");
-        return "redirect:/manager/settings/home-html";
-    }
-
-    @PostMapping("/home-html/{id}")
-    public String homeHtmlUpdate(@PathVariable Long id,
-                                  @RequestParam("name") String name,
-                                  @RequestParam(name = "htmlContent", required = false) String htmlContent,
-                                  RedirectAttributes ra) {
-        String trimmedName = name == null ? "" : name.trim();
-        if (trimmedName.isEmpty()) {
-            ra.addFlashAttribute("flashError", "名前を入力してください");
-            return "redirect:/manager/settings/home-html/" + id + "/edit";
-        }
-        try {
-            homeHtmlService.update(id, trimmedName, htmlContent == null ? "" : htmlContent);
-            ra.addFlashAttribute("flashSuccess", "ホームHTMLを更新しました");
-        } catch (IllegalArgumentException e) {
-            ra.addFlashAttribute("flashError", "更新できませんでした: " + e.getMessage());
-        }
-        return "redirect:/manager/settings/home-html";
-    }
-
-    @PostMapping("/home-html/{id}/activate")
-    public String homeHtmlActivate(@PathVariable Long id, RedirectAttributes ra) {
-        try {
-            homeHtmlService.activate(id);
-            ra.addFlashAttribute("flashSuccess", "現在表示するHTMLを切り替えました");
-        } catch (IllegalArgumentException e) {
-            ra.addFlashAttribute("flashError", "切り替えできませんでした: " + e.getMessage());
-        }
-        return "redirect:/manager/settings/home-html";
-    }
-
-    @PostMapping("/home-html/deactivate-all")
-    public String homeHtmlDeactivateAll(RedirectAttributes ra) {
-        homeHtmlService.deactivateAll();
-        ra.addFlashAttribute("flashSuccess",
-                "現在表示HTMLを解除しました。ルートURLは管理画面へのリダイレクトに戻ります");
-        return "redirect:/manager/settings/home-html";
-    }
-
-    @PostMapping("/home-html/{id}/delete")
-    public String homeHtmlDelete(@PathVariable Long id, RedirectAttributes ra) {
-        homeHtmlService.delete(id);
-        ra.addFlashAttribute("flashSuccess", "ホームHTMLを削除しました");
+    public String homeHtmlSave(@RequestParam(name = "ids", required = false) java.util.List<Long> ids,
+                                @RequestParam(name = "names", required = false) java.util.List<String> names,
+                                @RequestParam(name = "htmlContents", required = false) java.util.List<String> htmlContents,
+                                @RequestParam(name = "activeId", required = false) Long activeId,
+                                RedirectAttributes ra) {
+        homeHtmlService.saveSlots(ids, names, htmlContents, activeId);
+        ra.addFlashAttribute("flashSuccess", "本ドメイン表示設定を保存しました");
         return "redirect:/manager/settings/home-html";
     }
 }
