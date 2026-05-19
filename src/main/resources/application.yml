@@ -24,6 +24,14 @@ server:
   error:
     include-stacktrace: never
     include-message: never
+    # Strip the requested URI from every error response so JSON 404s no longer echo back
+    # the attacker's probe path. Belt-and-braces — MinimalErrorController already returns
+    # a minimal body, but this protects the default path if it's ever wired back in.
+    include-path: never
+    # We render error pages ourselves via MinimalErrorController; Spring's whitelabel page
+    # would otherwise reveal stack traces in some failure modes.
+    whitelabel:
+      enabled: false
   forward-headers-strategy: framework  # honour X-Forwarded-* from nginx
 
 spring:

@@ -11,8 +11,14 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 import javax.servlet.http.HttpServletRequest;
 
 /**
- * Catches anything uncaught by controller-local handlers and renders a friendly
- * Japanese error page. Stack traces go to the log, not the browser.
+ * Catches anything uncaught by controller-local handlers. The user-facing pages here
+ * deliberately do NOT echo the requested URI back to the browser and do NOT link to
+ * any admin URL — those were both information leaks an attacker probing for paths
+ * like /html or /admin could use to confirm a CRM panel exists at this host. The
+ * stack trace and any path/method details still go to the log, just not to the page.
+ *
+ * Spring's own BasicErrorController is replaced by {@link MinimalErrorController},
+ * which covers the path-not-handler case (404s that don't reach this advice).
  */
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -21,9 +27,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoHandlerFoundException.class)
     public ModelAndView handle404(NoHandlerFoundException ex, HttpServletRequest req) {
+        // The path is logged (for ops debugging) but never reflected to the browser.
+        log.warn("404 NoHandlerFound: {} {}", req.getMethod(), req.getRequestURI());
         ModelAndView mv = new ModelAndView("error/404");
         mv.setStatus(HttpStatus.NOT_FOUND);
-        mv.addObject("path", req.getRequestURI());
         return mv;
     }
 
@@ -33,7 +40,6 @@ public class GlobalExceptionHandler {
                 req.getMethod(), req.getRequestURI(), ex.toString(), ex);
         ModelAndView mv = new ModelAndView("error/500");
         mv.setStatus(HttpStatus.INTERNAL_SERVER_ERROR);
-        mv.addObject("path", req.getRequestURI());
         return mv;
     }
 }

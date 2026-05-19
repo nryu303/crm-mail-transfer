@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<html lang="ja">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>404 | CRM</title>
+    <title>404</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="min-h-screen bg-slate-100 flex items-start justify-center pt-24">
@@ -11,11 +11,9 @@
     <div class="bg-white rounded-lg shadow p-8 text-center">
         <div class="text-6xl font-bold text-slate-300 mb-4">404</div>
         <h1 class="text-xl font-semibold text-slate-800 mb-3">ページが見つかりません</h1>
-        <p class="text-sm text-slate-500 mb-6" th:if="${path}">
-            リクエストされたパス: <code class="bg-slate-100 px-2 py-0.5 rounded text-slate-700" th:text="${path}"></code>
+        <p class="text-sm text-slate-500">
+            お探しのページは存在しないか、移動された可能性があります。
         </p>
-        <a class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm"
-           th:href="@{/manager/dashboard}">ダッシュボードへ戻る</a>
     </div>
 </div>
 </body>
