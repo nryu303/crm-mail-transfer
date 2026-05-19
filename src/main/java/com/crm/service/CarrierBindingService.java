@@ -95,6 +95,37 @@ public class CarrierBindingService {
         return bindingRepository.deleteByUserIdIn(ids);
     }
 
+    /**
+     * Bind every active pool entry to every user currently in {@code folder}
+     * (null = '未設定'). Mirror of {@link #unbindAllInFolder} so the user-list
+     * "フォルダ内全割り当て" button can target a whole folder without the
+     * operator having to select every row by hand. Each user-level bind runs
+     * in its own short transaction via {@link #bindAllAvailable}; a failure
+     * on one user doesn't abort the rest.
+     */
+    public int bindAllAvailableInFolder(String folder, Integer limit) {
+        java.util.List<Long> ids = (folder == null)
+                ? userRepository.findIdsByFolderIsNull()
+                : userRepository.findIdsByFolder(folder);
+        if (limit != null && limit > 0 && ids.size() > limit) {
+            ids = ids.subList(0, limit);
+        }
+        if (ids.isEmpty()) return 0;
+        int created = 0;
+        for (int i = 0; i < ids.size(); i++) {
+            Long uid = ids.get(i);
+            if (uid != null) {
+                try { created += bindAllAvailable(uid); } catch (Exception ignored) {}
+            }
+            // Same yield pattern as the all-users variant so a 5K-row folder
+            // bind doesn't starve the request thread pool.
+            if ((i + 1) % 200 == 0) {
+                try { Thread.sleep(20); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+            }
+        }
+        return created;
+    }
+
     /** Bind every active pool entry to many users. Used by the user-list bulk action. */
     @Transactional
     public int bindAllAvailableToMany(java.util.List<Long> userIds) {

@@ -214,7 +214,24 @@ public class UserController {
     @PostMapping("/bulk-bind-carrier")
     public String bulkBindCarrier(@RequestParam(name = "ids", required = false) java.util.List<Long> ids,
                                   @RequestParam(name = "poolId", required = false) Long poolId,
+                                  @RequestParam(name = "scope", required = false) String scope,
+                                  @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                  @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                   RedirectAttributes ra) {
+        // Folder-scope override: assign every active carrier-pool address to every user in
+        // a folder, capped by scopeLimit. Symmetric with bulk-unbind-carrier's
+        // allInFolder branch; powers the "フォルダ内全割り当て" button on the user list page.
+        if ("allInFolder".equals(scope)) {
+            String src = sourceFolder == null ? null : sourceFolder.trim();
+            if (src != null && src.isEmpty()) src = null;
+            int created = bindingService.bindAllAvailableInFolder(src, scopeLimit);
+            String srcLabel = (src == null) ? "（未設定）" : src;
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
+            ra.addFlashAttribute("flashSuccess",
+                    "フォルダ「" + srcLabel + "」内ユーザーへキャリアアドレスを一括割当しました（新規 " + created + " 件）" + chunkNote);
+            return "redirect:/manager/users";
+        }
+
         if (ids == null || ids.isEmpty()) {
             ra.addFlashAttribute("flashError", "ユーザーが選択されていません");
             return "redirect:/manager/users";

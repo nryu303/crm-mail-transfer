@@ -136,22 +136,17 @@
                             <div class="min-w-0" style="flex:1 1 0;">
                                 <label class="block text-xs text-slate-500 mb-1">
                                     フォルダ
-                                    <!-- Inline 'all-in-folder' scope toggle. Only meaningful when a specific
-                                         folder is selected (NOT 'すべて'). When checked + a bulk-folder move
-                                         is fired, the move targets every user currently in this folder
-                                         instead of just the visible 500-row page. -->
-                                    <label style="display:inline-flex;align-items:center;gap:3px;margin-left:8px;font-size:.7rem;color:#475569;cursor:pointer;font-weight:normal;"
-                                           id="folderAllScopeLabel" title="チェック時、現在のフォルダ内の全ユーザーを移動対象に">
-                                        <input type="checkbox" id="folderAllScope" style="margin:0;"/>
-                                        フォルダ内全件対象
-                                    </label>
-                                    <!-- Optional per-batch cap. Empty = process the whole folder; 1000/2000/5000
-                                         = process only the first N (by id ASC) so the operator can run a 15K
-                                         delete/move in 1K-size chunks without locking the server up. -->
+                                    <!-- The "フォルダ内全件対象" checkbox was retired 2026-05-19; selecting a
+                                         specific folder now implies operating on the whole folder. The hidden
+                                         input below preserves the existing JS scope-injection path. -->
+                                    <input type="checkbox" id="folderAllScope" style="display:none;"/>
+                                    <!-- Always-visible scope-count selector. Appears when a specific folder
+                                         (not 'すべて') is in the filter. "全件" = the whole folder; 500/1K/2K/5K
+                                         = first N by id ASC so the operator can run a 15K-row job in chunks. -->
                                     <span id="folderScopeLimitWrap"
                                           style="display:none;margin-left:8px;font-size:.7rem;color:#475569;">
-                                        件数上限:
-                                        <select id="folderScopeLimit" style="font-size:.7rem;padding:1px 4px;border:1px solid #cbd5e1;border-radius:3px;">
+                                        対象件数選択：
+                                        <select id="folderScopeLimit" style="font-size:.72rem;padding:2px 6px;border:1px solid #cbd5e1;border-radius:3px;background:#fff;">
                                             <option value="">全件</option>
                                             <option value="500">500</option>
                                             <option value="1000" selected>1,000</option>
@@ -399,7 +394,7 @@
                     th:text="${p.address} + ' (' + ${p.carrierCode} + ')'"></option>
         </select>
         <button type="submit" class="btn-move" id="btnBindCarrier" disabled
-                formaction="/manager/users/bulk-bind-carrier">キャリア登録割り当て</button>
+                formaction="/manager/users/bulk-bind-carrier">フォルダ内全割り当て</button>
         <button type="submit" class="btn-move btn-bulk-unbind" id="btnUnbindCarrier" disabled
                 formaction="/manager/users/bulk-unbind-carrier"
                 onclick="return confirm('選択したユーザーの割り当てを解除します。よろしいですか?');">割り当て削除</button>
@@ -427,29 +422,10 @@
     </div>
     </form>
 
-    <!-- All-users carrier-assign (independent of selection — explicit confirmation required) -->
-    <form id="bindAllForm" method="post" th:action="@{/manager/users/bulk-bind-all}"
-          style="display:flex;align-items:center;gap:10px;padding:8px 14px;border-top:1px solid #e2e8f0;background:#fffbeb;"
-          onsubmit="return confirmBindAll();">
-        <span style="font-size:.85rem;font-weight:700;color:#92400e;">⚠ 全ユーザーへ一括割り当て:</span>
-        <span style="font-size:.78rem;color:#78350f;flex:1;">
-            登録済み全ユーザーに、有効な全キャリアアドレスを割り当てます (処理時間: 数分〜十数分)。
-        </span>
-        <button type="submit" class="btn-broadcast" style="background:#d97706;">全ユーザー割り当て</button>
-    </form>
-
-    <!-- Live progress banner for the all-users bind. Hidden when not running. -->
-    <div id="bindAllProgress"
-         style="display:none;padding:10px 14px;background:#dbeafe;border-top:1px solid #bfdbfe;font-size:.85rem;color:#1e3a8a;position:relative;">
-        <strong>📌 全ユーザー割り当て進行中:</strong>
-        <span id="bindAllText">準備中...</span>
-        <button type="button" id="bindAllClose" onclick="dismissBindAll()"
-                style="display:none;position:absolute;top:6px;right:8px;background:transparent;border:0;font-size:1.2rem;cursor:pointer;color:#1e3a8a;line-height:1;padding:0 6px;"
-                title="閉じる">×</button>
-        <div style="margin-top:6px;background:#fff;height:8px;border-radius:4px;overflow:hidden;border:1px solid #bfdbfe;">
-            <div id="bindAllBar" style="width:0%;height:100%;background:#3b82f6;transition:width .3s;"></div>
-        </div>
-    </div>
+    <!-- The yellow "全ユーザー割り当て" footer form was removed 2026-05-19 per client request:
+         the same outcome is now reachable by selecting each folder and clicking the renamed
+         "フォルダ内全割り当て" button. The /manager/users/bulk-bind-all endpoint is left in
+         place on the server in case ops scripts still call it, but no longer surfaced in the UI. -->
 </div>
 
 <script>
@@ -533,16 +509,12 @@ document.addEventListener('DOMContentLoaded', function () {
         refresh();
     });
 
-    window.confirmBindAll = function () {
-        if (!confirm('登録済みの全ユーザーへ全キャリアアドレスを一括割り当てします。\n処理に数分〜十数分かかります。\nよろしいですか?')) return false;
-        return confirm('本当に実行しますか? メモリ負荷の高い処理のため、終わるまで一斉送信などの操作は控えてください。');
-    };
-
-    // --- Live progress poller for /bulk-bind-all ---
-    // --- フォルダ内全件対象 toggle ---
-    // When checked + a folder is selected, the 選択フォルダ移動 button switches
-    // its semantics: instead of moving only the checked rows, it moves EVERY
-    // user currently in the chosen-source folder (regardless of pagination).
+    // --- Folder-scope auto-toggle ---
+    // The visible "フォルダ内全件対象" checkbox was removed 2026-05-19; the underlying
+    // logic stays so a folder filter implies operating on the whole folder. Selecting any
+    // specific folder in the filter auto-checks the (hidden) scope checkbox; clearing the
+    // folder filter (back to "すべて") clears it. This keeps the existing scope-injection
+    // path in the submit handler working without operators needing to tick a box.
     (function () {
         var scope = document.getElementById('folderAllScope');
         var filterSel = document.getElementById('folderFilterSelect');
@@ -552,18 +524,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var btnDel = document.getElementById('btnDelete');
         var btnUnbind = document.getElementById('btnUnbindCarrier');
+        var btnBind = document.getElementById('btnBindCarrier');
+        var poolSel = document.getElementById('poolSelect');
         var limitWrap = document.getElementById('folderScopeLimitWrap');
         var limitSel = document.getElementById('folderScopeLimit');
 
         function refreshScope() {
-            // Only enable when a specific folder (or 未設定) is in the filter — 'すべて' is not a valid source
+            // A folder filter (specific folder OR '未設定') auto-enables folder-scope mode.
+            // 'すべて' (empty value) leaves the page in plain row-selection mode.
             var hasFilter = filterSel.value !== '';
+            scope.checked = hasFilter;     // hidden — drives the submit-time scope injection below
             scope.disabled = !hasFilter;
-            if (!hasFilter) scope.checked = false;
-            if (limitWrap) limitWrap.style.display = (scope.checked && hasFilter) ? '' : 'none';
+            if (limitWrap) limitWrap.style.display = hasFilter ? '' : 'none';
 
-            // When the checkbox is on, the bulk-move / delete / unbind buttons work WITHOUT row checkboxes.
-            if (scope.checked && hasFilter) {
+            // In folder-scope mode, the bulk action buttons work WITHOUT row checkboxes and
+            // their labels switch to reflect the folder-wide semantics.
+            if (hasFilter) {
                 if (folderSel) {
                     folderSel.disabled = false;
                     btnMove.disabled = false;
@@ -581,11 +557,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     btnUnbind.textContent = 'フォルダ内全割り当て削除';
                     btnUnbind.style.background = '#d97706';
                 }
+                if (btnBind) {
+                    btnBind.disabled = false;
+                    btnBind.textContent = 'フォルダ内全割り当て';
+                    btnBind.style.background = '#d97706';
+                    if (poolSel) poolSel.disabled = false;
+                }
             } else {
                 btnMove.textContent = '選択フォルダ移動';
                 btnMove.style.background = '';
                 if (btnDel) { btnDel.textContent = '選択削除'; btnDel.style.background = '#dc2626'; }
                 if (btnUnbind) { btnUnbind.textContent = '選択キャリア解除'; btnUnbind.style.background = ''; }
+                if (btnBind) { btnBind.textContent = '選択へキャリア割り当て'; btnBind.style.background = ''; }
             }
         }
         scope.addEventListener('change', refreshScope);
@@ -635,6 +618,18 @@ document.addEventListener('DOMContentLoaded', function () {
                     addHidden('scope', 'allInFolder');
                     addHidden('sourceFolder', srcVal);
                     if (lim > 0) addHidden('scopeLimit', lim);
+                } else if (action.indexOf('bulk-bind-carrier') >= 0) {
+                    // poolSel.value === '' means "all active pool addresses"; the controller
+                    // already handles that branch in bindAllAvailableInFolder. Show the operator
+                    // exactly which pool target they're committing to before we POST.
+                    var poolLabel = (poolSel && poolSel.selectedIndex >= 0)
+                            ? poolSel.options[poolSel.selectedIndex].text : '全キャリア（一括）';
+                    if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'へ「' + poolLabel + '」を割り当てます。\nよろしいですか?')) {
+                        ev.preventDefault(); return;
+                    }
+                    addHidden('scope', 'allInFolder');
+                    addHidden('sourceFolder', srcVal);
+                    if (lim > 0) addHidden('scopeLimit', lim);
                 } else if (action.indexOf('bulk-unbind-carrier') >= 0) {
                     if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'のキャリア割り当てを解除します。\nよろしいですか?')) {
                         ev.preventDefault(); return;
@@ -647,47 +642,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     })();
 
-    window.dismissBindAll = function () {
-        fetch('/manager/users/bulk-bind-all/clear', {method:'POST', credentials:'same-origin'})
-            .then(function(r){ return r.json(); })
-            .then(function(d){
-                if (d.ok) {
-                    document.getElementById('bindAllProgress').style.display = 'none';
-                } else {
-                    alert('処理がまだ実行中です。完了までお待ちください。');
-                }
-            })
-            .catch(function(){});
-    };
-
-    (function () {
-        var panel = document.getElementById('bindAllProgress');
-        var txt   = document.getElementById('bindAllText');
-        var bar   = document.getElementById('bindAllBar');
-        var btnClose = document.getElementById('bindAllClose');
-        function poll() {
-            fetch('/manager/users/bulk-bind-all/progress', {credentials:'same-origin'})
-                .then(function(r){ return r.json(); })
-                .then(function(d){
-                    var pct = d.total > 0 ? Math.min(100, (d.progress / d.total) * 100) : 0;
-                    bar.style.width = pct + '%';
-                    if (d.running) {
-                        panel.style.display = '';
-                        btnClose.style.display = 'none';  // can't dismiss while running
-                        txt.textContent = d.progress + ' / ' + d.total + ' 名処理済み (新規 ' + d.created + ' 件)';
-                        setTimeout(poll, 2000);
-                    } else if (d.message) {
-                        panel.style.display = '';
-                        btnClose.style.display = '';      // show × so operator can dismiss
-                        txt.textContent = '✅ 完了: ' + d.message;
-                    } else {
-                        panel.style.display = 'none';
-                    }
-                })
-                .catch(function(){ setTimeout(poll, 5000); });
-        }
-        poll();
-    })();
+    // The dismissBindAll() helper + /bulk-bind-all/progress poller were removed 2026-05-19
+    // when the yellow "全ユーザー割り当て" form was retired from this page. The server-side
+    // endpoint stays in place; if it's ever resurrected for an ops script, the poller can be
+    // restored from git history.
 
     window.goBroadcast = function () {
         // POST-then-redirect because at 500+ selected users the GET URL exceeded

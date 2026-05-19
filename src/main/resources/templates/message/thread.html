@@ -52,9 +52,11 @@
         .hist-item { padding:8px 10px; border-radius:6px; margin-bottom:6px; font-size:.8rem; line-height:1.5; }
         .hist-item.out { background:#dbeafe; color:#1e3a8a; margin-left:20px; }
         .hist-item.in  { background:#e2e8f0; color:#1e293b; margin-right:20px; }
-        /* WEB_REPLY (user replied via the reply page) painted soft yellow-green so it's instantly
-         * distinguishable from carrier-mail replies (EMAIL channel keeps the default grey). */
-        .hist-item.in.web { background:#ecfccb; color:#365314; }
+        /* WEB_REPLY (user replied via the reply page) — very pale yellow-green so it's still
+         * distinguishable from carrier-mail replies (default grey) but easier on the eye for
+         * pages with many WEB replies in a row. Client asked for a softer tone than the
+         * earlier lime-100. */
+        .hist-item.in.web { background:#f7fee7; color:#3f6212; }
         .hist-item .meta { font-size:.66rem; color:#475569; margin-top:3px; }
 
         /* cmp-form: natural-flow column. Previously had height:100% + textarea flex:1 which
