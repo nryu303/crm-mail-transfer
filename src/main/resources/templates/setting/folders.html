@@ -4,6 +4,44 @@
       layout:decorate="~{layout/default}">
 <head>
     <title>フォルダ設定</title>
+    <style>
+        .folder-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #fff;
+            margin-bottom: 6px;
+        }
+        .folder-row .seq {
+            min-width: 32px; text-align: right; font-size: .72rem;
+            color: #94a3b8; font-family: monospace;
+        }
+        .folder-row input[type="text"] {
+            flex: 1; min-width: 0;
+            padding: 5px 9px; font-size: .85rem;
+            border: 1px solid #cbd5e1; border-radius: 4px; outline: none;
+        }
+        .folder-row input[type="text"]:focus { border-color: #2563eb; }
+        .folder-row .count {
+            min-width: 80px; text-align: right;
+            font-size: .72rem; font-family: monospace;
+            color: #475569;
+            padding: 2px 8px;
+            background: #f1f5f9; border-radius: 10px;
+        }
+        .folder-row .count.zero { color: #94a3b8; background: transparent; }
+        .folder-row .del-btn {
+            font-size: .85rem; line-height: 1; padding: 4px 9px;
+            border: 1px solid #cbd5e1; background: #fff; color: #94a3b8;
+            border-radius: 4px; cursor: pointer;
+        }
+        .folder-row .del-btn:hover { color: #b91c1c; border-color: #fca5a5; }
+        .folder-row.unset-row { background: #f8fafc; }
+        .folder-row.unset-row .name-label {
+            flex: 1; padding: 5px 9px; font-size: .85rem; color: #64748b;
+        }
+    </style>
 </head>
 <body>
 <section layout:fragment="content">
@@ -12,66 +50,66 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">設定トップへ</a>
     </div>
 
-    <!-- ===== Folder name editor ===== -->
-    <form method="post" th:action="@{/manager/settings/folders}"
-          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-2xl mb-6">
-        <div class="mb-4">
-            <label class="block text-sm font-medium text-slate-700 mb-1">
-                フォルダ名 <span class="text-xs text-slate-500 font-normal">（1行に1つ / カンマ区切り可）</span>
+    <!-- ===== Folder name editor (row-based) ===== -->
+    <form method="post" th:action="@{/manager/settings/folders}" id="foldersForm"
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-3xl mb-6">
+        <div class="flex items-center mb-3">
+            <label class="block text-sm font-semibold text-slate-800 flex-1">
+                フォルダ名 <span class="text-xs text-slate-500 font-normal">（1行1フォルダ、上から表示順）</span>
             </label>
-            <textarea name="folderText" rows="8" class="tw-input"
-                      placeholder="フォルダA&#10;フォルダB&#10;フォルダC" th:text="${folderText}"></textarea>
-            <p class="mt-1 text-xs text-slate-500">
-                現在 <strong th:text="${folderCount}">0</strong> 個のフォルダが登録されています。<br/>
-                ここで名前を追加・削除することでフォルダ個数を変更できます。一覧で未設定（フォルダなし）のユーザーはフィルタで別途絞り込めます。
-            </p>
-            <p class="mt-1 text-xs text-amber-700">
-                ⚠ フォルダ名を変更しても、既に各ユーザーに保存されている旧フォルダ名は自動更新されません。
-                旧名のままになっているユーザーは下記「未登録フォルダ名のユーザー」に表示され、ここから移行できます。
-            </p>
+            <span class="text-xs text-slate-500">
+                登録数: <strong id="folderRowCount" th:text="${folderCount}">0</strong>
+            </span>
         </div>
-        <div class="flex items-center gap-3">
-            <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md">保存</button>
+
+        <p class="text-xs text-amber-700 mb-3">
+            ⚠ フォルダ名を変更しても、既に各ユーザーに保存されている旧フォルダ名は自動更新されません。
+            旧名のままになっているユーザーは下記「未登録フォルダ名のユーザー」に表示され、ここから移行できます。
+        </p>
+
+        <div id="folderRows">
+            <div th:each="r,it : ${configuredRows}" class="folder-row"
+                 th:attr="data-original-name=${r.name},data-original-count=${r.count}">
+                <span class="seq" th:text="${it.count}">1</span>
+                <input type="text" name="folderName" th:value="${r.name}" maxlength="120"/>
+                <span class="count" th:classappend="${r.count == 0} ? 'zero'"
+                      th:text="${#numbers.formatInteger(r.count, 1, 'COMMA')} + ' 件'">0 件</span>
+                <button type="button" class="del-btn" title="この行を削除">×</button>
+            </div>
+            <!-- 未設定 row is read-only — operators can't remove the NULL bucket; it just
+                 reports how many users currently have FOLDER IS NULL. -->
+            <div class="folder-row unset-row">
+                <span class="seq">—</span>
+                <span class="name-label">（未設定）</span>
+                <span class="count" th:classappend="${unsetCount == 0} ? 'zero'"
+                      th:text="${#numbers.formatInteger(unsetCount, 1, 'COMMA')} + ' 件'">0 件</span>
+                <span style="width: 33px;"></span>
+            </div>
+        </div>
+
+        <div class="mt-3 flex items-center gap-2">
+            <button type="button" id="addRowBtn"
+                    class="inline-flex items-center px-3 py-1.5 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded">
+                ＋ フォルダを追加
+            </button>
+            <span class="text-xs text-slate-400">最大 120 文字 / 行</span>
+        </div>
+
+        <div class="flex items-center gap-3 mt-6">
+            <button type="submit"
+                    class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md">保存</button>
             <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">キャンセル</a>
         </div>
     </form>
 
-    <!-- ===== Configured-folder counts ===== -->
-    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-2xl mb-6">
-        <h2 class="text-base font-semibold text-slate-800 mb-3">登録済みフォルダの件数</h2>
-        <table class="w-full text-sm">
-            <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
-                <tr>
-                    <th class="px-3 py-2 text-left">フォルダ名</th>
-                    <th class="px-3 py-2 text-right" style="width: 140px;">登録ユーザー数</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-                <tr th:if="${configuredRows == null or configuredRows.empty}">
-                    <td colspan="2" class="px-3 py-4 text-center text-slate-400">フォルダが登録されていません</td>
-                </tr>
-                <tr th:each="r : ${configuredRows}" class="hover:bg-slate-50">
-                    <td class="px-3 py-2 text-slate-800" th:text="${r.name}"></td>
-                    <td class="px-3 py-2 text-right font-mono text-slate-700"
-                        th:text="${#numbers.formatInteger(r.count, 1, 'COMMA')} + ' 件'">0 件</td>
-                </tr>
-                <tr class="bg-slate-50">
-                    <td class="px-3 py-2 text-slate-500">（未設定）</td>
-                    <td class="px-3 py-2 text-right font-mono text-slate-500"
-                        th:text="${#numbers.formatInteger(unsetCount, 1, 'COMMA')} + ' 件'">0 件</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
     <!-- ===== Stranded folders (DB values not in the configured list) ===== -->
     <div th:if="${strandedRows != null and !strandedRows.empty}"
-         class="bg-amber-50 rounded-lg shadow-sm border border-amber-300 p-6 max-w-2xl">
+         class="bg-amber-50 rounded-lg shadow-sm border border-amber-300 p-6 max-w-3xl">
         <h2 class="text-base font-semibold text-amber-900 mb-2">⚠ 未登録フォルダ名のユーザー</h2>
         <p class="text-xs text-amber-800 mb-4">
             下記のフォルダ名は、ユーザー側に残っているものの上記の登録リストに存在しません（過去にリネーム・削除された名前など）。
             このままだとユーザー管理画面のフォルダフィルタで検索できません。
-            「移行先」を選んで「移行」ボタンを押すと、該当ユーザー全員が選んだフォルダに移動します（一覧の登録名以外も入力可）。
+            「移行先」を選んで「移行」ボタンを押すと、該当ユーザー全員が選んだフォルダに移動します。
         </p>
         <table class="w-full text-sm">
             <thead class="bg-amber-100 text-xs text-amber-900 uppercase">
@@ -106,6 +144,84 @@
     </div>
 
     <script>
+    (function () {
+        var rowsContainer = document.getElementById('folderRows');
+        var countLabel = document.getElementById('folderRowCount');
+        var form = document.getElementById('foldersForm');
+
+        function renumber() {
+            var rows = rowsContainer.querySelectorAll('.folder-row:not(.unset-row)');
+            rows.forEach(function (r, i) {
+                var seq = r.querySelector('.seq');
+                if (seq) seq.textContent = String(i + 1);
+            });
+            if (countLabel) countLabel.textContent = String(rows.length);
+        }
+
+        function attachRowHandlers(row) {
+            var del = row.querySelector('.del-btn');
+            if (!del) return;
+            del.addEventListener('click', function () {
+                row.parentNode.removeChild(row);
+                renumber();
+            });
+        }
+
+        // Wire existing rows (server-rendered).
+        rowsContainer.querySelectorAll('.folder-row:not(.unset-row)').forEach(attachRowHandlers);
+
+        // ＋ フォルダを追加 — appends a new empty row right before the 未設定 row.
+        document.getElementById('addRowBtn').addEventListener('click', function () {
+            var row = document.createElement('div');
+            row.className = 'folder-row';
+            row.innerHTML =
+                '<span class="seq">?</span>' +
+                '<input type="text" name="folderName" maxlength="120" placeholder="例: 新しいフォルダ"/>' +
+                '<span class="count zero">— 件</span>' +
+                '<button type="button" class="del-btn" title="この行を削除">×</button>';
+            var unsetRow = rowsContainer.querySelector('.folder-row.unset-row');
+            if (unsetRow) {
+                rowsContainer.insertBefore(row, unsetRow);
+            } else {
+                rowsContainer.appendChild(row);
+            }
+            attachRowHandlers(row);
+            renumber();
+            row.querySelector('input').focus();
+        });
+
+        // Pre-submit safety: warn if any removed-or-renamed folder still has users.
+        // Compares the current input values with the data-original-name / data-original-count
+        // attributes set by Thymeleaf at page load. If a name with users disappears, confirm.
+        form.addEventListener('submit', function (ev) {
+            var currentNames = {};
+            rowsContainer.querySelectorAll('input[name="folderName"]').forEach(function (inp) {
+                var v = (inp.value || '').trim();
+                if (v) currentNames[v] = true;
+            });
+            var removed = [];
+            rowsContainer.querySelectorAll('.folder-row[data-original-name]').forEach(function (r) {
+                var name = r.getAttribute('data-original-name');
+                var count = parseInt(r.getAttribute('data-original-count') || '0', 10);
+                if (count > 0 && !currentNames[name]) {
+                    removed.push({name: name, count: count});
+                }
+            });
+            if (removed.length > 0) {
+                var msg = '次のフォルダがリストから外されますが、登録ユーザーが残っています:\n\n' +
+                          removed.map(function (r) { return '・' + r.name + ' (' + r.count.toLocaleString() + ' 件)'; }).join('\n') +
+                          '\n\n登録ユーザーは旧フォルダ名のまま残り、下記「未登録フォルダ名のユーザー」セクションから後ほど移行できます。\nこのまま保存しますか?';
+                if (!confirm(msg)) {
+                    ev.preventDefault();
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        renumber();
+    })();
+
     function confirmRebind(form) {
         var from = form.getAttribute('data-from') || '';
         var count = form.getAttribute('data-count') || '?';

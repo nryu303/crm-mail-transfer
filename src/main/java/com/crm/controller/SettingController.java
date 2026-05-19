@@ -106,7 +106,6 @@ public class SettingController {
         // sees the urgent ones at the top.
         strandedRows.sort((a, b) -> Long.compare((Long) b.get("count"), (Long) a.get("count")));
 
-        model.addAttribute("folderText", String.join("\n", folders));
         model.addAttribute("folderCount", folders.size());
         model.addAttribute("configuredRows", configuredRows);
         model.addAttribute("strandedRows", strandedRows);
@@ -115,12 +114,12 @@ public class SettingController {
     }
 
     @PostMapping("/folders")
-    public String foldersSave(@RequestParam(name = "folderText", required = false) String folderText,
+    public String foldersSave(@RequestParam(name = "folderName", required = false) java.util.List<String> folderNames,
                               RedirectAttributes ra) {
         java.util.List<String> parsed = new java.util.ArrayList<>();
-        if (folderText != null) {
-            for (String line : folderText.split("[\\r\\n,]+")) {
-                String t = line.trim();
+        if (folderNames != null) {
+            for (String name : folderNames) {
+                String t = name == null ? "" : name.trim();
                 if (!t.isEmpty()) parsed.add(t);
             }
         }
