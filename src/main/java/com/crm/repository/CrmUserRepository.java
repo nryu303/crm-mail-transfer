@@ -61,6 +61,15 @@ public interface CrmUserRepository extends JpaRepository<CrmUser, Long>, JpaSpec
     int bulkUpdateFolderForIds(@org.springframework.data.repository.query.Param("ids") java.util.List<Long> ids,
                                @org.springframework.data.repository.query.Param("toFolder") String toFolder);
 
+    /**
+     * One row per distinct FOLDER value with its user count — {@code [folder, count]}.
+     * NULL folder rows come back with folder=NULL. Powers the per-folder count display +
+     * stranded-folder detection on /manager/settings/folders. Native SQL because JPQL's
+     * GROUP BY on a nullable string returns the NULL bucket as zero hits instead of a row.
+     */
+    @Query(value = "SELECT FOLDER, COUNT(*) FROM CRM_USER GROUP BY FOLDER", nativeQuery = true)
+    List<Object[]> countGroupByFolder();
+
     /** Per-day signup counts for an ad code, returned as [yyyy-MM-dd, count] rows. */
     @Query(value = "SELECT DATE_FORMAT(CREATED_AT, '%Y-%m-%d') AS d, COUNT(*) " +
                    "FROM CRM_USER WHERE AD_CODE = :code AND CREATED_AT BETWEEN :start AND :end " +

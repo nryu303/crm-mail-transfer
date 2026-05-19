@@ -180,6 +180,37 @@ public class CrmUserService {
      * the broadcast controller resolves the folder snapshot at click time and stashes the
      * IDs in the session so the broadcast form behaves identically to the row-selected case.
      */
+    /**
+     * folder → user-count map across CRM_USER. The empty-string key bucket carries the
+     * count of users with FOLDER IS NULL. Used by the folder settings page to display the
+     * current distribution and to surface "stranded" folder names (values present here but
+     * no longer in the configured FolderSetting list).
+     */
+    public java.util.Map<String, Long> countByFolder() {
+        java.util.Map<String, Long> out = new java.util.LinkedHashMap<>();
+        for (Object[] row : repository.countGroupByFolder()) {
+            String folder = row[0] == null ? "" : (String) row[0];
+            long n = ((Number) row[1]).longValue();
+            out.put(folder, n);
+        }
+        return out;
+    }
+
+    /**
+     * Bulk-rename the folder value on every user currently in {@code oldFolder} so that
+     * they show up under {@code newFolder} instead. Used by the stranded-folder rescue UI
+     * on the folder settings page — when an admin renames a folder name in the configured
+     * list, the per-user CRM_USER.FOLDER strings stay on the OLD value (5,001 users were
+     * stranded on 2026-05-19 in folders "5000件切り分け" and "フォルダD" because of this).
+     * Empty string maps to NULL on both sides so 未設定 ↔ named-folder migrations work too.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public int renameFolderValue(String oldFolder, String newFolder) {
+        String from = (oldFolder == null || oldFolder.isEmpty()) ? null : oldFolder;
+        String to   = (newFolder == null || newFolder.isEmpty()) ? null : newFolder;
+        return repository.bulkUpdateFolderByFolder(from, to);
+    }
+
     public java.util.List<Long> findIdsInFolder(String folder, Integer limit) {
         java.util.List<Long> ids = (folder == null)
                 ? repository.findIdsByFolderIsNull()

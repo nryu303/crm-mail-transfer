@@ -41,6 +41,7 @@ public class SettingController {
     private final com.crm.service.FolderSettingService folderSettingService;
     private final com.crm.service.HttpRelayOutboundMailService httpRelayOutboundMailService;
     private final com.crm.service.HomeHtmlService homeHtmlService;
+    private final com.crm.service.CrmUserService crmUserService;
 
     public SettingController(RelayServerService relayServerService,
                              MessageTemplateService templateService,
@@ -50,7 +51,8 @@ public class SettingController {
                              DomainSettingService domainSettingService,
                              com.crm.service.FolderSettingService folderSettingService,
                              org.springframework.beans.factory.ObjectProvider<com.crm.service.HttpRelayOutboundMailService> httpRelayProvider,
-                             com.crm.service.HomeHtmlService homeHtmlService) {
+                             com.crm.service.HomeHtmlService homeHtmlService,
+                             com.crm.service.CrmUserService crmUserService) {
         this.relayServerService = relayServerService;
         this.templateService = templateService;
         this.replyPageSettingService = replyPageSettingService;
@@ -62,15 +64,53 @@ public class SettingController {
         // In stub/test profiles the controller still loads but activeRelayHost stays empty.
         this.httpRelayOutboundMailService = httpRelayProvider.getIfAvailable();
         this.homeHtmlService = homeHtmlService;
+        this.crmUserService = crmUserService;
     }
 
     // ====== Folder settings ======
     @GetMapping("/folders")
     public String foldersForm(Model model) {
         java.util.List<String> folders = folderSettingService.listFolders();
-        // Join as newline-separated text for the editor (one name per line).
+        java.util.Map<String, Long> counts = crmUserService.countByFolder();
+
+        // Build the per-configured-folder count list (preserves operator's ordering).
+        java.util.List<java.util.Map<String, Object>> configuredRows = new java.util.ArrayList<>();
+        for (String name : folders) {
+            java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+            row.put("name", name);
+            row.put("count", counts.getOrDefault(name, 0L));
+            configuredRows.add(row);
+        }
+
+        // Stranded = folder values present in CRM_USER but NOT in the configured list.
+        // This is where the 2026-05-19 "5,001 users stranded under 5000件切り分け / フォルダD"
+        // incident showed up: renaming a folder name in the textarea above does NOT touch
+        // CRM_USER.FOLDER strings, so the old name lingers on the user rows.
+        java.util.Set<String> configuredSet = new java.util.HashSet<>(folders);
+        java.util.List<java.util.Map<String, Object>> strandedRows = new java.util.ArrayList<>();
+        long unsetCount = 0L;
+        for (java.util.Map.Entry<String, Long> e : counts.entrySet()) {
+            String name = e.getKey();
+            if (name == null || name.isEmpty()) {
+                unsetCount = e.getValue();
+                continue;
+            }
+            if (!configuredSet.contains(name)) {
+                java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+                row.put("name", name);
+                row.put("count", e.getValue());
+                strandedRows.add(row);
+            }
+        }
+        // Stable, count-descending order — biggest stranded groups first so the admin
+        // sees the urgent ones at the top.
+        strandedRows.sort((a, b) -> Long.compare((Long) b.get("count"), (Long) a.get("count")));
+
         model.addAttribute("folderText", String.join("\n", folders));
         model.addAttribute("folderCount", folders.size());
+        model.addAttribute("configuredRows", configuredRows);
+        model.addAttribute("strandedRows", strandedRows);
+        model.addAttribute("unsetCount", unsetCount);
         return "setting/folders";
     }
 
@@ -86,6 +126,29 @@ public class SettingController {
         }
         folderSettingService.save(parsed);
         ra.addFlashAttribute("flashSuccess", parsed.size() + " 個のフォルダを保存しました");
+        return "redirect:/manager/settings/folders";
+    }
+
+    /**
+     * Rescue route for users stranded on an old folder name. Migrates every CRM_USER row
+     * whose FOLDER equals {@code from} to {@code to}, in a single bulk UPDATE inside one
+     * transaction. {@code to} may equal an existing configured folder (merge) or a brand
+     * new name (which the admin should also add to the configured list separately).
+     */
+    @PostMapping("/folders/rebind")
+    public String foldersRebind(@RequestParam("fromFolder") String fromFolder,
+                                 @RequestParam("toFolder") String toFolder,
+                                 RedirectAttributes ra) {
+        String from = fromFolder == null ? "" : fromFolder.trim();
+        String to   = toFolder   == null ? "" : toFolder.trim();
+        if (from.isEmpty()) {
+            ra.addFlashAttribute("flashError", "移行元のフォルダ名が指定されていません");
+            return "redirect:/manager/settings/folders";
+        }
+        int moved = crmUserService.renameFolderValue(from, to);
+        String toLabel = to.isEmpty() ? "（未設定）" : to;
+        ra.addFlashAttribute("flashSuccess",
+                "フォルダ「" + from + "」の " + moved + " 名を「" + toLabel + "」に移行しました");
         return "redirect:/manager/settings/folders";
     }
 

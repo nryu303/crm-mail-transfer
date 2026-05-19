@@ -12,8 +12,9 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">設定トップへ</a>
     </div>
 
+    <!-- ===== Folder name editor ===== -->
     <form method="post" th:action="@{/manager/settings/folders}"
-          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-2xl">
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-2xl mb-6">
         <div class="mb-4">
             <label class="block text-sm font-medium text-slate-700 mb-1">
                 フォルダ名 <span class="text-xs text-slate-500 font-normal">（1行に1つ / カンマ区切り可）</span>
@@ -24,12 +25,95 @@
                 現在 <strong th:text="${folderCount}">0</strong> 個のフォルダが登録されています。<br/>
                 ここで名前を追加・削除することでフォルダ個数を変更できます。一覧で未設定（フォルダなし）のユーザーはフィルタで別途絞り込めます。
             </p>
+            <p class="mt-1 text-xs text-amber-700">
+                ⚠ フォルダ名を変更しても、既に各ユーザーに保存されている旧フォルダ名は自動更新されません。
+                旧名のままになっているユーザーは下記「未登録フォルダ名のユーザー」に表示され、ここから移行できます。
+            </p>
         </div>
         <div class="flex items-center gap-3">
             <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md">保存</button>
             <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">キャンセル</a>
         </div>
     </form>
+
+    <!-- ===== Configured-folder counts ===== -->
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-2xl mb-6">
+        <h2 class="text-base font-semibold text-slate-800 mb-3">登録済みフォルダの件数</h2>
+        <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
+                <tr>
+                    <th class="px-3 py-2 text-left">フォルダ名</th>
+                    <th class="px-3 py-2 text-right" style="width: 140px;">登録ユーザー数</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                <tr th:if="${configuredRows == null or configuredRows.empty}">
+                    <td colspan="2" class="px-3 py-4 text-center text-slate-400">フォルダが登録されていません</td>
+                </tr>
+                <tr th:each="r : ${configuredRows}" class="hover:bg-slate-50">
+                    <td class="px-3 py-2 text-slate-800" th:text="${r.name}"></td>
+                    <td class="px-3 py-2 text-right font-mono text-slate-700"
+                        th:text="${#numbers.formatInteger(r.count, 1, 'COMMA')} + ' 件'">0 件</td>
+                </tr>
+                <tr class="bg-slate-50">
+                    <td class="px-3 py-2 text-slate-500">（未設定）</td>
+                    <td class="px-3 py-2 text-right font-mono text-slate-500"
+                        th:text="${#numbers.formatInteger(unsetCount, 1, 'COMMA')} + ' 件'">0 件</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ===== Stranded folders (DB values not in the configured list) ===== -->
+    <div th:if="${strandedRows != null and !strandedRows.empty}"
+         class="bg-amber-50 rounded-lg shadow-sm border border-amber-300 p-6 max-w-2xl">
+        <h2 class="text-base font-semibold text-amber-900 mb-2">⚠ 未登録フォルダ名のユーザー</h2>
+        <p class="text-xs text-amber-800 mb-4">
+            下記のフォルダ名は、ユーザー側に残っているものの上記の登録リストに存在しません（過去にリネーム・削除された名前など）。
+            このままだとユーザー管理画面のフォルダフィルタで検索できません。
+            「移行先」を選んで「移行」ボタンを押すと、該当ユーザー全員が選んだフォルダに移動します（一覧の登録名以外も入力可）。
+        </p>
+        <table class="w-full text-sm">
+            <thead class="bg-amber-100 text-xs text-amber-900 uppercase">
+                <tr>
+                    <th class="px-3 py-2 text-left">旧フォルダ名</th>
+                    <th class="px-3 py-2 text-right" style="width: 110px;">件数</th>
+                    <th class="px-3 py-2 text-left" style="width: 320px;">移行先</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-amber-100">
+                <tr th:each="r : ${strandedRows}" class="hover:bg-amber-100/30">
+                    <td class="px-3 py-2 text-amber-900 font-medium" th:text="${r.name}"></td>
+                    <td class="px-3 py-2 text-right font-mono text-amber-900"
+                        th:text="${#numbers.formatInteger(r.count, 1, 'COMMA')} + ' 件'">0 件</td>
+                    <td class="px-3 py-2">
+                        <form method="post" th:action="@{/manager/settings/folders/rebind}"
+                              class="flex items-center gap-2"
+                              th:attr="data-from=${r.name},data-count=${r.count}"
+                              onsubmit="return confirmRebind(this);">
+                            <input type="hidden" name="fromFolder" th:value="${r.name}"/>
+                            <select name="toFolder" class="tw-input text-xs" style="flex:1; min-width:0;">
+                                <option value="">（未設定に戻す）</option>
+                                <option th:each="cf : ${configuredRows}"
+                                        th:value="${cf.name}" th:text="${cf.name}"></option>
+                            </select>
+                            <button type="submit" class="px-3 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded whitespace-nowrap">移行</button>
+                        </form>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+    function confirmRebind(form) {
+        var from = form.getAttribute('data-from') || '';
+        var count = form.getAttribute('data-count') || '?';
+        var sel = form.querySelector('select[name="toFolder"]');
+        var to = sel && sel.value ? sel.value : '（未設定）';
+        return confirm('フォルダ「' + from + '」の ' + count + ' 名を「' + to + '」に移行します。\nよろしいですか?');
+    }
+    </script>
 </section>
 </body>
 </html>
