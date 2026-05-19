@@ -40,6 +40,7 @@ public class SettingController {
     private final DomainSettingService domainSettingService;
     private final com.crm.service.FolderSettingService folderSettingService;
     private final com.crm.service.HttpRelayOutboundMailService httpRelayOutboundMailService;
+    private final com.crm.service.HomeHtmlService homeHtmlService;
 
     public SettingController(RelayServerService relayServerService,
                              MessageTemplateService templateService,
@@ -48,7 +49,8 @@ public class SettingController {
                              AuditLogService auditLog,
                              DomainSettingService domainSettingService,
                              com.crm.service.FolderSettingService folderSettingService,
-                             org.springframework.beans.factory.ObjectProvider<com.crm.service.HttpRelayOutboundMailService> httpRelayProvider) {
+                             org.springframework.beans.factory.ObjectProvider<com.crm.service.HttpRelayOutboundMailService> httpRelayProvider,
+                             com.crm.service.HomeHtmlService homeHtmlService) {
         this.relayServerService = relayServerService;
         this.templateService = templateService;
         this.replyPageSettingService = replyPageSettingService;
@@ -59,6 +61,7 @@ public class SettingController {
         // ObjectProvider — the relay bean only exists when app.outbound.adapter=relay.
         // In stub/test profiles the controller still loads but activeRelayHost stays empty.
         this.httpRelayOutboundMailService = httpRelayProvider.getIfAvailable();
+        this.homeHtmlService = homeHtmlService;
     }
 
     // ====== Folder settings ======
@@ -409,5 +412,97 @@ public class SettingController {
             model.addAttribute("errorMessage", e.getMessage());
             return "setting/admin-password";
         }
+    }
+
+    // ====== Home HTML variants (root path / landing) ======
+
+    @GetMapping("/home-html")
+    public String homeHtmlList(Model model) {
+        model.addAttribute("variants", homeHtmlService.listAll());
+        return "setting/home-html-list";
+    }
+
+    @GetMapping("/home-html/new")
+    public String homeHtmlNew(Model model) {
+        com.crm.entity.HomeHtml blank = new com.crm.entity.HomeHtml();
+        blank.setName("");
+        blank.setHtmlContent("");
+        blank.setIsActive(Boolean.FALSE);
+        model.addAttribute("variant", blank);
+        model.addAttribute("isNew", Boolean.TRUE);
+        return "setting/home-html-form";
+    }
+
+    @GetMapping("/home-html/{id}/edit")
+    public String homeHtmlEdit(@PathVariable Long id, Model model, RedirectAttributes ra) {
+        java.util.Optional<com.crm.entity.HomeHtml> v = homeHtmlService.findById(id);
+        if (!v.isPresent()) {
+            ra.addFlashAttribute("flashError", "HTMLが見つかりません");
+            return "redirect:/manager/settings/home-html";
+        }
+        model.addAttribute("variant", v.get());
+        model.addAttribute("isNew", Boolean.FALSE);
+        return "setting/home-html-form";
+    }
+
+    @PostMapping("/home-html")
+    public String homeHtmlCreate(@RequestParam("name") String name,
+                                  @RequestParam(name = "htmlContent", required = false) String htmlContent,
+                                  @RequestParam(name = "activateNow", required = false) String activateNow,
+                                  RedirectAttributes ra) {
+        String trimmedName = name == null ? "" : name.trim();
+        if (trimmedName.isEmpty()) {
+            ra.addFlashAttribute("flashError", "名前を入力してください");
+            return "redirect:/manager/settings/home-html/new";
+        }
+        homeHtmlService.create(trimmedName, htmlContent == null ? "" : htmlContent,
+                "on".equals(activateNow) || "true".equals(activateNow));
+        ra.addFlashAttribute("flashSuccess", "ホームHTMLを保存しました");
+        return "redirect:/manager/settings/home-html";
+    }
+
+    @PostMapping("/home-html/{id}")
+    public String homeHtmlUpdate(@PathVariable Long id,
+                                  @RequestParam("name") String name,
+                                  @RequestParam(name = "htmlContent", required = false) String htmlContent,
+                                  RedirectAttributes ra) {
+        String trimmedName = name == null ? "" : name.trim();
+        if (trimmedName.isEmpty()) {
+            ra.addFlashAttribute("flashError", "名前を入力してください");
+            return "redirect:/manager/settings/home-html/" + id + "/edit";
+        }
+        try {
+            homeHtmlService.update(id, trimmedName, htmlContent == null ? "" : htmlContent);
+            ra.addFlashAttribute("flashSuccess", "ホームHTMLを更新しました");
+        } catch (IllegalArgumentException e) {
+            ra.addFlashAttribute("flashError", "更新できませんでした: " + e.getMessage());
+        }
+        return "redirect:/manager/settings/home-html";
+    }
+
+    @PostMapping("/home-html/{id}/activate")
+    public String homeHtmlActivate(@PathVariable Long id, RedirectAttributes ra) {
+        try {
+            homeHtmlService.activate(id);
+            ra.addFlashAttribute("flashSuccess", "現在表示するHTMLを切り替えました");
+        } catch (IllegalArgumentException e) {
+            ra.addFlashAttribute("flashError", "切り替えできませんでした: " + e.getMessage());
+        }
+        return "redirect:/manager/settings/home-html";
+    }
+
+    @PostMapping("/home-html/deactivate-all")
+    public String homeHtmlDeactivateAll(RedirectAttributes ra) {
+        homeHtmlService.deactivateAll();
+        ra.addFlashAttribute("flashSuccess",
+                "現在表示HTMLを解除しました。ルートURLは管理画面へのリダイレクトに戻ります");
+        return "redirect:/manager/settings/home-html";
+    }
+
+    @PostMapping("/home-html/{id}/delete")
+    public String homeHtmlDelete(@PathVariable Long id, RedirectAttributes ra) {
+        homeHtmlService.delete(id);
+        ra.addFlashAttribute("flashSuccess", "ホームHTMLを削除しました");
+        return "redirect:/manager/settings/home-html";
     }
 }

@@ -12,6 +12,21 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">設定に戻る</a>
     </div>
 
+    <!-- Root-path HTML manager (separate page so editor + preview have plenty of room) -->
+    <a th:href="@{/manager/settings/home-html}"
+       class="block max-w-3xl rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition px-4 py-3 mb-4">
+        <div class="flex items-center gap-3">
+            <div class="flex-1">
+                <p class="text-sm font-semibold text-emerald-900">ホームHTML（本ドメインのトップページ）</p>
+                <p class="text-xs text-emerald-800 mt-1">
+                    <code>https://avu74g.jp/</code> のトップに表示するHTMLを複数保存し、チェックで切り替えできます。
+                    未設定の場合は管理画面ログインへリダイレクトされます。
+                </p>
+            </div>
+            <span class="text-xs font-semibold text-emerald-900">管理 →</span>
+        </div>
+    </a>
+
     <div class="max-w-3xl rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 mb-4">
         <p class="font-semibold mb-2">本番運用時の手順</p>
         <ol class="list-decimal list-inside space-y-1 mb-2">

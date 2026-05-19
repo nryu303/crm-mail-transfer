@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>ホームHTML管理</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">ホームHTML管理</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2"
+           th:href="@{/manager/settings/domain}">ドメイン設定に戻る</a>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm"
+           th:href="@{/manager/settings/home-html/new}">新規HTMLを追加</a>
+    </div>
+
+    <div class="max-w-4xl rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-4">
+        <p class="font-semibold mb-1">本ドメイン (<code>https://avu74g.jp/</code>) のトップに表示するHTML</p>
+        <p class="text-xs">
+            複数のHTMLを保存しておき、「現在表示」のチェックを入れたものだけがルートURLで実際に配信されます。
+            どれにもチェックを入れない場合、ルートURLは管理画面ログインへリダイレクトされます。
+        </p>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto max-w-5xl">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left" style="width: 110px;">現在表示</th>
+                <th class="px-3 py-2 text-left">名前</th>
+                <th class="px-3 py-2 text-left">更新日時</th>
+                <th class="px-3 py-2 text-right" style="width: 240px;">操作</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${variants.empty}">
+                <td colspan="4" class="px-3 py-6 text-center text-slate-400">
+                    まだHTMLが登録されていません。「新規HTMLを追加」から最初の1件を作成してください。
+                </td>
+            </tr>
+            <tr th:each="v : ${variants}" class="hover:bg-slate-50">
+                <td class="px-3 py-2">
+                    <!-- Each row gets its own tiny activate-form so checking it instantly POSTs.
+                         A single radio across rows would have been nicer UX but each radio click
+                         would still need a submit anyway — so we just show a check + button for clarity. -->
+                    <form th:if="${!v.isActive}" method="post"
+                          th:action="@{'/manager/settings/home-html/' + ${v.id} + '/activate'}">
+                        <button type="submit"
+                                class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-slate-300 bg-white text-slate-600 rounded hover:bg-slate-50">
+                            <span class="inline-block w-3 h-3 border border-slate-400 rounded-full"></span>
+                            このHTMLを表示
+                        </button>
+                    </form>
+                    <span th:if="${v.isActive}" class="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 rounded">
+                        <span class="inline-block w-3 h-3 bg-emerald-600 rounded-full"></span>
+                        表示中
+                    </span>
+                </td>
+                <td class="px-3 py-2 text-slate-800 font-medium" th:text="${v.name}"></td>
+                <td class="px-3 py-2 text-xs text-slate-500"
+                    th:text="${#temporals.format(v.updatedAt, 'yyyy-MM-dd HH:mm')}"></td>
+                <td class="px-3 py-2 text-right">
+                    <a class="inline-flex items-center px-3 py-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded mr-1"
+                       th:href="@{'/manager/settings/home-html/' + ${v.id} + '/edit'}">編集</a>
+                    <form method="post"
+                          th:action="@{'/manager/settings/home-html/' + ${v.id} + '/delete'}"
+                          class="inline-block"
+                          onsubmit="return confirm('このHTMLを削除します。よろしいですか?');">
+                        <button type="submit"
+                                class="inline-flex items-center px-3 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 rounded">削除</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <form th:if="${!variants.empty}" method="post" th:action="@{/manager/settings/home-html/deactivate-all}"
+          class="mt-4 max-w-5xl"
+          onsubmit="return confirm('現在表示しているHTMLを解除します。\nルートURLは管理画面ログインへのリダイレクトに戻ります。\nよろしいですか?');">
+        <button type="submit"
+                class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-600 hover:bg-slate-50 rounded">
+            現在表示HTMLを解除（管理画面リダイレクトに戻す）
+        </button>
+    </form>
+</section>
+</body>
+</html>

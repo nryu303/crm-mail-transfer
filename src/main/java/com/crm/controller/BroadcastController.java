@@ -136,6 +136,30 @@ public class BroadcastController {
     }
 
     /**
+     * Folder-scope broadcast entry: the user list 「対象件数一斉送信」 button POSTs here when
+     * a folder filter is committed. We resolve the folder→IDs server-side (capped by
+     * scopeLimit), stash the result in session, and redirect to /broadcast/new — same
+     * downstream flow as {@link #selectUsersForBroadcast}. Doing the resolution here means
+     * the form sees a stable snapshot even if a user is moved into/out of the folder while
+     * the operator is still composing the message.
+     */
+    @PostMapping("/new-from-folder")
+    public String selectFolderForBroadcast(@RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                            @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
+                                            HttpSession session,
+                                            RedirectAttributes ra) {
+        String folder = (sourceFolder == null || sourceFolder.trim().isEmpty()) ? null : sourceFolder.trim();
+        java.util.List<Long> userIds = userService.findIdsInFolder(folder, scopeLimit);
+        if (userIds == null || userIds.isEmpty()) {
+            session.removeAttribute("broadcastSelectedUserIds");
+            ra.addFlashAttribute("flashError", "対象フォルダにユーザーがいません");
+            return "redirect:/manager/users";
+        }
+        session.setAttribute("broadcastSelectedUserIds", new java.util.ArrayList<>(userIds));
+        return "redirect:/manager/messages/broadcast/new";
+    }
+
+    /**
      * Accept selected user IDs via POST and stash them in the HTTP session, then redirect
      * to the form. Used by /manager/users 「選択一斉送信」 when many users are selected —
      * a GET with 500+ ?userIds=... pairs hits browser/server URL-length limits (~8KB Tomcat

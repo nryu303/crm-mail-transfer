@@ -174,6 +174,22 @@ public class CrmUserService {
      * transaction so JPA cascades fire correctly and a single failure doesn't
      * roll back the rest. Returns the number of users actually deleted.
      */
+    /**
+     * Resolve a folder filter (null = '未設定') to a list of user IDs, optionally capped to
+     * the first {@code limit} (by id ASC). Shared by the user list "対象件数一斉送信" path:
+     * the broadcast controller resolves the folder snapshot at click time and stashes the
+     * IDs in the session so the broadcast form behaves identically to the row-selected case.
+     */
+    public java.util.List<Long> findIdsInFolder(String folder, Integer limit) {
+        java.util.List<Long> ids = (folder == null)
+                ? repository.findIdsByFolderIsNull()
+                : repository.findIdsByFolder(folder);
+        if (limit != null && limit > 0 && ids.size() > limit) {
+            return new java.util.ArrayList<>(ids.subList(0, limit));
+        }
+        return ids;
+    }
+
     @org.springframework.transaction.annotation.Transactional(propagation =
             org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public int deleteAllInFolder(String folder, Integer limit) {

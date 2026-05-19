@@ -529,10 +529,17 @@ document.addEventListener('DOMContentLoaded', function () {
         var limitWrap = document.getElementById('folderScopeLimitWrap');
         var limitSel = document.getElementById('folderScopeLimit');
 
+        // Snapshot the committed folder filter — the value Thymeleaf rendered into the <select>
+        // on page load (i.e. whatever was in the URL when the operator hit 検索). Folder-scope
+        // mode is keyed on THIS, not on the live dropdown value, so changing the dropdown alone
+        // (without clicking 検索) does NOT flip the page into folder-scope mode. Client request
+        // 2026-05-19: 「フォルダ を指定して検索ボタンを押したあとに 対象件数選択： を表示する」.
+        var committedFolderFilter = filterSel.value;
+
         function refreshScope() {
-            // A folder filter (specific folder OR '未設定') auto-enables folder-scope mode.
-            // 'すべて' (empty value) leaves the page in plain row-selection mode.
-            var hasFilter = filterSel.value !== '';
+            // A committed folder filter (specific folder OR '未設定') auto-enables folder-scope.
+            // 'すべて' (empty committed value) leaves the page in plain row-selection mode.
+            var hasFilter = committedFolderFilter !== '';
             scope.checked = hasFilter;     // hidden — drives the submit-time scope injection below
             scope.disabled = !hasFilter;
             if (limitWrap) limitWrap.style.display = hasFilter ? '' : 'none';
@@ -563,17 +570,24 @@ document.addEventListener('DOMContentLoaded', function () {
                     btnBind.style.background = '#d97706';
                     if (poolSel) poolSel.disabled = false;
                 }
+                // Folder-scope broadcast: button stays enabled regardless of row checks.
+                if (btnBroad) {
+                    btnBroad.disabled = false;
+                    btnBroad.textContent = '対象件数一斉送信';
+                    btnBroad.style.background = '#d97706';
+                }
             } else {
                 btnMove.textContent = '選択フォルダ移動';
                 btnMove.style.background = '';
                 if (btnDel) { btnDel.textContent = '選択削除'; btnDel.style.background = '#dc2626'; }
                 if (btnUnbind) { btnUnbind.textContent = '選択キャリア解除'; btnUnbind.style.background = ''; }
                 if (btnBind) { btnBind.textContent = '選択へキャリア割り当て'; btnBind.style.background = ''; }
+                if (btnBroad) { btnBroad.textContent = '選択一斉送信'; btnBroad.style.background = ''; }
             }
         }
-        scope.addEventListener('change', refreshScope);
-        filterSel.addEventListener('change', refreshScope);
-        if (folderSel) folderSel.addEventListener('change', refreshScope);
+        // The dropdown-change listener was deliberately removed — the operator must click 検索
+        // (i.e. submit the form to re-render the page with the new ?folder=... URL) before
+        // folder-scope mode activates. This matches the client's 2026-05-19 request.
         refreshScope();
 
         // Inject scope override into the submitted form just before POST.
@@ -648,20 +662,23 @@ document.addEventListener('DOMContentLoaded', function () {
     // restored from git history.
 
     window.goBroadcast = function () {
-        // POST-then-redirect because at 500+ selected users the GET URL exceeded
-        // Tomcat's default 8KB header limit and the browser navigation silently failed.
-        // The server stashes the IDs in the HTTP session and redirects to the form.
-        var ids = [].filter.call(rows(), function (c) { return c.checked; }).map(function (c) { return c.value; });
-        if (ids.length === 0) {
-            window.location.href = '/manager/messages/broadcast/new';
-            return;
-        }
+        // Two paths, decided by committedFolderFilter:
+        //   * Folder-scope on (URL was already submitted with a folder filter): POST
+        //     {sourceFolder, scopeLimit} → /broadcast/new-from-folder. Server resolves
+        //     the folder→user-id list and stashes it in session, then redirects.
+        //   * No folder filter: classic row-checks path — POST userIds[] → /broadcast/new.
+        // Both use POST so we never blow past Tomcat's 8KB GET URL limit on big lists.
+        var filterSelEl = document.getElementById('folderFilterSelect');
+        var committed = (typeof committedFolderFilter !== 'undefined')
+                ? committedFolderFilter
+                : (filterSelEl ? filterSelEl.value : '');
         var f = document.createElement('form');
         f.method = 'POST';
-        f.action = '/manager/messages/broadcast/new';
-        // CSRF token: pick it up from the existing bulkForm so the request is accepted.
-        var bulk = document.getElementById('bulkForm');
-        if (bulk) {
+
+        // CSRF token from the existing bulkForm so the request is accepted.
+        function copyCsrf() {
+            var bulk = document.getElementById('bulkForm');
+            if (!bulk) return;
             var csrf = bulk.querySelector('input[name="_csrf"]');
             if (csrf) {
                 var h = document.createElement('input');
@@ -669,11 +686,38 @@ document.addEventListener('DOMContentLoaded', function () {
                 f.appendChild(h);
             }
         }
-        ids.forEach(function (id) {
-            var i = document.createElement('input');
-            i.type = 'hidden'; i.name = 'userIds'; i.value = id;
-            f.appendChild(i);
-        });
+
+        if (committed !== '') {
+            // Folder-scope broadcast.
+            var srcVal = committed === '__NONE__' ? '' : committed;
+            var limitEl = document.getElementById('folderScopeLimit');
+            var lim = limitEl && limitEl.value ? parseInt(limitEl.value, 10) : 0;
+            var srcLabel = filterSelEl
+                    ? filterSelEl.options[filterSelEl.selectedIndex].text
+                    : srcVal;
+            var limitText = lim > 0 ? '上限 ' + lim.toLocaleString() + ' 名' : '全件';
+            if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'に一斉送信します。\n次の画面で本文を作成後に確定送信となります。よろしいですか?')) return;
+            f.action = '/manager/messages/broadcast/new-from-folder';
+            copyCsrf();
+            var sf = document.createElement('input'); sf.type='hidden'; sf.name='sourceFolder'; sf.value=srcVal; f.appendChild(sf);
+            if (lim > 0) {
+                var sl = document.createElement('input'); sl.type='hidden'; sl.name='scopeLimit'; sl.value=String(lim); f.appendChild(sl);
+            }
+        } else {
+            // Row-selection broadcast (existing behaviour).
+            var ids = [].filter.call(rows(), function (c) { return c.checked; }).map(function (c) { return c.value; });
+            if (ids.length === 0) {
+                window.location.href = '/manager/messages/broadcast/new';
+                return;
+            }
+            f.action = '/manager/messages/broadcast/new';
+            copyCsrf();
+            ids.forEach(function (id) {
+                var i = document.createElement('input');
+                i.type = 'hidden'; i.name = 'userIds'; i.value = id;
+                f.appendChild(i);
+            });
+        }
         document.body.appendChild(f);
         f.submit();
     };
