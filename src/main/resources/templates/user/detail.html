@@ -157,7 +157,10 @@
 
             <!-- Carrier bindings -->
             <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-5">
-                <h2 class="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2 mb-3">割当中キャリアアドレス</h2>
+                <h2 class="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2 mb-3">
+                    割当中キャリアアドレス
+                    <span class="text-xs font-normal text-slate-500" th:text="'(' + ${#lists.size(boundAddresses)} + ' 件)'">(0 件)</span>
+                </h2>
                 <div th:if="${boundAddresses.empty}" class="text-slate-400 text-sm">未割当</div>
                 <div th:unless="${boundAddresses.empty}" class="space-y-1 text-sm">
                     <div th:each="p : ${boundAddresses}" class="flex items-center gap-2">
@@ -188,15 +191,15 @@
                 <!-- Top row: 3 count tiles (送信 / 返信 / 入金額) — main KPIs -->
                 <div class="grid grid-cols-3 gap-3 mb-4">
                     <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 text-center">
-                        <div class="text-xs text-blue-700 font-medium mb-1">total送信数</div>
+                        <div class="text-xs text-blue-700 font-medium mb-1">累計送信数</div>
                         <div class="text-2xl font-bold text-blue-700 leading-tight" th:text="${statTotalOut}">0</div>
                     </div>
                     <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-center">
-                        <div class="text-xs text-emerald-700 font-medium mb-1">total返信数</div>
+                        <div class="text-xs text-emerald-700 font-medium mb-1">累計返信数</div>
                         <div class="text-2xl font-bold text-emerald-700 leading-tight" th:text="${statTotalIn}">0</div>
                     </div>
                     <div class="bg-amber-50 border border-amber-100 rounded-lg p-3 text-center">
-                        <div class="text-xs text-amber-800 font-medium mb-1">total入金額</div>
+                        <div class="text-xs text-amber-800 font-medium mb-1">累計入金額</div>
                         <div class="text-xl font-bold text-amber-700 leading-tight"
                              th:text="'¥' + ${#numbers.formatInteger(statTotalPaid, 1, 'COMMA')}">¥0</div>
                     </div>
