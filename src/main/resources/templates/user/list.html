@@ -158,6 +158,13 @@
                                 <select class="tw-input" id="folderFilterSelect" th:field="*{folder}">
                                     <option value="">すべて</option>
                                     <option value="__NONE__">（未設定）</option>
+                                    <!-- If the URL's ?folder=... value isn't in the configured list (folder
+                                         was renamed) the operator would otherwise see "すべて" and assume the
+                                         filter wasn't applied. Render the stranded value as an option so the
+                                         dropdown reflects the actual URL state. -->
+                                    <option th:if="${searchForm.folder != null and searchForm.folder != '' and searchForm.folder != '__NONE__' and !#lists.contains(folders, searchForm.folder)}"
+                                            th:value="${searchForm.folder}"
+                                            th:text="${searchForm.folder} + ' （旧名）'"></option>
                                     <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
                                 </select>
                             </div>

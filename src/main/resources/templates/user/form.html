@@ -44,6 +44,10 @@
             <label class="block text-sm font-medium text-slate-700 mb-1">フォルダ</label>
             <select class="tw-input" th:field="*{folder}">
                 <option value="">（未設定）</option>
+                <!-- Same orphan-value safeguard as on the detail page — see comment there. -->
+                <option th:if="${form.folder != null and form.folder != '' and !#lists.contains(folders, form.folder)}"
+                        th:value="${form.folder}"
+                        th:text="${form.folder} + ' （旧名 — 要移行）'"></option>
                 <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
             </select>
             <p class="mt-1 text-xs text-slate-500">フォルダ名は管理者設定で変更できます。</p>

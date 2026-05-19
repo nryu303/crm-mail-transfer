@@ -62,6 +62,14 @@
                     <label class="block text-xs text-slate-500 mb-1">フォルダ</label>
                     <select class="tw-input" th:field="*{folder}">
                         <option value="">（未設定）</option>
+                        <!-- Fallback for users whose folder was renamed in settings: their saved
+                             value no longer matches any configured option, which would otherwise
+                             make the browser show "（未設定）" while the DB still held the old name —
+                             saving without noticing would then silently blank the folder. Render
+                             the orphan value as an extra option so it stays visible and selected. -->
+                        <option th:if="${form.folder != null and form.folder != '' and !#lists.contains(folders, form.folder)}"
+                                th:value="${form.folder}"
+                                th:text="${form.folder} + ' （旧名 — 要移行）'"></option>
                         <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
                     </select>
                 </div>
