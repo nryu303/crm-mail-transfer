@@ -16,6 +16,10 @@ public class MessageTemplateForm {
 
     private String body;
 
+    /** One of the preset color names — see template-form.html for the palette. Blank = no color. */
+    @Size(max = 16)
+    private String color;
+
     private Integer displayOrder = 0;
 
     public String getName() { return name; }
@@ -24,6 +28,8 @@ public class MessageTemplateForm {
     public void setSubject(String subject) { this.subject = subject; }
     public String getBody() { return body; }
     public void setBody(String body) { this.body = body; }
+    public String getColor() { return color; }
+    public void setColor(String color) { this.color = color; }
     public Integer getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(Integer displayOrder) { this.displayOrder = displayOrder; }
 
@@ -32,6 +38,7 @@ public class MessageTemplateForm {
         f.name = t.getName();
         f.subject = t.getSubject();
         f.body = t.getBody();
+        f.color = t.getColor();
         f.displayOrder = t.getDisplayOrder();
         return f;
     }
@@ -40,6 +47,7 @@ public class MessageTemplateForm {
         t.setName(name == null ? null : name.trim());
         t.setSubject(subject);
         t.setBody(body);
+        t.setColor((color == null || color.isEmpty()) ? null : color);
         t.setDisplayOrder(displayOrder == null ? 0 : displayOrder);
     }
 }

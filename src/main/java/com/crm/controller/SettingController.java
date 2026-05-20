@@ -388,6 +388,16 @@ public class SettingController {
         return "redirect:/manager/settings/message-templates";
     }
 
+    /** Receive a new top-to-bottom ID list from the drag-and-drop UI on the templates list page.
+     *  Returns 204 on success so the in-page JS can keep the DOM as-is (no reload flash). */
+    @PostMapping("/message-templates/reorder")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public org.springframework.http.ResponseEntity<Void> templateReorder(
+            @RequestParam(name = "ids", required = false) java.util.List<Long> ids) {
+        templateService.reorder(ids);
+        return org.springframework.http.ResponseEntity.noContent().build();
+    }
+
     // ====== Domain settings (reply URL + FROM address generation) ======
     @GetMapping("/domain")
     public String domainForm(Model model) {

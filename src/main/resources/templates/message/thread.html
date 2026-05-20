@@ -125,8 +125,22 @@
         .tag-panel .btn-tag-save.saved { background:#94a3b8; }
 
         .tpl-item { padding:7px 9px; border-radius:5px; border:1px solid #e2e8f0; background:#f8fafc;
-                    margin-bottom:6px; font-size:.78rem; display:flex; align-items:center; gap:8px; }
+                    margin-bottom:6px; font-size:.78rem; display:flex; align-items:center; gap:8px;
+                    border-left-width: 4px; }
         .tpl-item:hover { background:#eff6ff; border-color:#2563eb; }
+        /* Per-template accent colors. The configured color name maps to a Tailwind-200/-400
+         * pair: light fill, slightly darker left-border. Lets the operator spot a specific
+         * template at a glance even with 50 entries stacked. */
+        .tpl-item.color-slate   { border-left-color:#94a3b8; background:#f1f5f9; }
+        .tpl-item.color-blue    { border-left-color:#60a5fa; background:#dbeafe; }
+        .tpl-item.color-sky     { border-left-color:#38bdf8; background:#e0f2fe; }
+        .tpl-item.color-cyan    { border-left-color:#22d3ee; background:#cffafe; }
+        .tpl-item.color-emerald { border-left-color:#34d399; background:#d1fae5; }
+        .tpl-item.color-lime    { border-left-color:#a3e635; background:#ecfccb; }
+        .tpl-item.color-amber   { border-left-color:#fbbf24; background:#fef3c7; }
+        .tpl-item.color-rose    { border-left-color:#fb7185; background:#ffe4e6; }
+        .tpl-item.color-pink    { border-left-color:#f472b6; background:#fce7f3; }
+        .tpl-item.color-violet  { border-left-color:#a78bfa; background:#ede9fe; }
         .tpl-item .txt { flex:1; min-width:0; cursor:pointer; display:flex; gap:10px; align-items:center; }
         .tpl-item .name {
             font-weight:700; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
@@ -326,7 +340,8 @@
         </header>
         <div class="body">
             <div th:if="${templates.empty}" class="text-xs text-slate-400 p-2">定型文はまだ登録されていません</div>
-            <div th:each="t : ${templates}" class="tpl-item">
+            <div th:each="t : ${templates}" class="tpl-item"
+                 th:classappend="${t.color != null and t.color != ''} ? 'color-' + ${t.color} : ''">
                 <div class="txt"
                      th:attr="data-subject=${t.subject},data-body=${t.body}"
                      onclick="applyTemplateFromElement(this)"

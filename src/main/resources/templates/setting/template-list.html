@@ -16,7 +16,7 @@
 
     <p class="text-sm text-slate-500 mb-4">
         個別送信および一斉送信の画面で、ここに登録した定型文を呼び出して件名・本文に差し込めます。
-        登録できる件数は最大<span th:text="${maxTemplates}">25</span>件です (現在<span th:text="${templates.size()}">0</span>件)。
+        登録できる件数は最大<span th:text="${maxTemplates}">50</span>件です (現在<span th:text="${templates.size()}">0</span>件)。
     </p>
 
     <form method="get" th:action="@{/manager/settings/message-templates}"
@@ -34,6 +34,7 @@
         <table class="min-w-full divide-y divide-slate-200 text-sm">
             <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
             <tr>
+                <th class="px-3 py-2 text-center" style="width: 36px;" title="ドラッグして並び替え">⋮⋮</th>
                 <th class="px-3 py-2 text-left" style="width: 60px;">ID</th>
                 <th class="px-3 py-2 text-left">名前</th>
                 <th class="px-3 py-2 text-left">件名</th>
@@ -41,13 +42,22 @@
                 <th class="px-3 py-2 text-right" style="width: 170px;">操作</th>
             </tr>
             </thead>
-            <tbody class="divide-y divide-slate-100">
+            <tbody class="divide-y divide-slate-100" id="tplTbody">
             <tr th:if="${templates.empty}">
-                <td colspan="5" class="px-3 py-6 text-center text-slate-400">定型文はまだ登録されていません</td>
+                <td colspan="6" class="px-3 py-6 text-center text-slate-400">定型文はまだ登録されていません</td>
             </tr>
-            <tr th:each="t,it : ${templates}" class="hover:bg-slate-50">
+            <tr th:each="t,it : ${templates}" class="hover:bg-slate-50 tpl-row"
+                th:attr="data-id=${t.id}" draggable="true">
+                <td class="px-3 py-2 text-center text-slate-400 cursor-grab select-none drag-handle"
+                    title="ドラッグして並び替え" style="font-family: monospace; font-size: 16px;">⋮⋮</td>
                 <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
-                <td class="px-3 py-2 text-slate-700" th:text="${t.name}"></td>
+                <td class="px-3 py-2 text-slate-700">
+                    <span th:if="${t.color != null and t.color != ''}"
+                          class="inline-block w-3 h-3 rounded-full align-middle mr-1.5 border"
+                          th:classappend="'border-' + ${t.color} + '-400 bg-' + ${t.color} + '-200'"
+                          th:title="'枠色: ' + ${t.color}"></span>
+                    <span th:text="${t.name}"></span>
+                </td>
                 <td class="px-3 py-2 text-xs text-slate-600 truncate" style="max-width: 260px;" th:text="${t.subject}"></td>
                 <td class="px-3 py-2 text-xs text-slate-500 truncate" style="max-width: 320px;" th:text="${t.body}"></td>
                 <td class="px-3 py-2 text-right">
@@ -62,7 +72,79 @@
             </tr>
             </tbody>
         </table>
+        <div id="reorderStatus" class="px-3 py-2 text-xs text-slate-500 border-t border-slate-100 hidden">
+            並び順を保存しています…
+        </div>
     </div>
+
+    <script>
+    // Native HTML5 drag-and-drop reordering. No external library. Drop fires the POST to
+    // /reorder which updates DISPLAY_ORDER on every row in the new sequence.
+    (function () {
+        var tbody = document.getElementById('tplTbody');
+        if (!tbody) return;
+        var status = document.getElementById('reorderStatus');
+        var dragged = null;
+
+        function rows() { return tbody.querySelectorAll('tr.tpl-row'); }
+
+        rows().forEach(function (row) {
+            row.addEventListener('dragstart', function (e) {
+                dragged = row;
+                row.classList.add('opacity-50');
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'move';
+                    // Required by Firefox to actually start the drag.
+                    try { e.dataTransfer.setData('text/plain', row.getAttribute('data-id')); } catch (_) {}
+                }
+            });
+            row.addEventListener('dragend', function () {
+                if (dragged) dragged.classList.remove('opacity-50');
+                dragged = null;
+            });
+            row.addEventListener('dragover', function (e) {
+                e.preventDefault();
+                if (!dragged || dragged === row) return;
+                var rect = row.getBoundingClientRect();
+                var midY = rect.top + rect.height / 2;
+                if (e.clientY < midY) {
+                    tbody.insertBefore(dragged, row);
+                } else {
+                    tbody.insertBefore(dragged, row.nextSibling);
+                }
+            });
+            row.addEventListener('drop', function (e) {
+                e.preventDefault();
+                commitOrder();
+            });
+        });
+
+        function commitOrder() {
+            var ids = Array.prototype.map.call(rows(), function (r) {
+                return r.getAttribute('data-id');
+            }).filter(Boolean);
+            if (status) { status.classList.remove('hidden'); status.textContent = '並び順を保存しています…'; }
+            var fd = new FormData();
+            ids.forEach(function (id) { fd.append('ids', id); });
+            fetch('/manager/settings/message-templates/reorder', {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: fd
+            }).then(function (r) {
+                if (status) {
+                    if (r.ok) {
+                        status.textContent = '✓ 並び順を保存しました';
+                        setTimeout(function () { status.classList.add('hidden'); }, 1500);
+                    } else {
+                        status.textContent = '✗ 並び順の保存に失敗しました (HTTP ' + r.status + ')';
+                    }
+                }
+            }).catch(function (e) {
+                if (status) status.textContent = '✗ 通信エラー: ' + e.message;
+            });
+        }
+    })();
+    </script>
 </section>
 </body>
 </html>

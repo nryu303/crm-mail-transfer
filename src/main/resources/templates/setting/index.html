@@ -18,9 +18,9 @@
 
         <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/message-templates}">
             <h2 class="text-base font-semibold text-slate-800 mb-2">定型文</h2>
-            <p class="text-sm text-slate-500 mb-3">個別送信、一斉送信、返信画面で再利用する件名・本文をあらかじめ登録できます (最大<span th:text="${maxTemplates}">25</span>件)。</p>
+            <p class="text-sm text-slate-500 mb-3">個別送信、一斉送信、返信画面で再利用する件名・本文をあらかじめ登録できます (最大<span th:text="${maxTemplates}">50</span>件)。</p>
             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">
-                登録数: <span th:text="${templateCount}">0</span> / <span th:text="${maxTemplates}">25</span>
+                登録数: <span th:text="${templateCount}">0</span> / <span th:text="${maxTemplates}">50</span>
             </span>
         </a>
 

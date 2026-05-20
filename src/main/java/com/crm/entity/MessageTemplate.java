@@ -27,6 +27,12 @@ public class MessageTemplate {
     @Column(name = "BODY", columnDefinition = "LONGTEXT")
     private String body;
 
+    /** Accent color name (slate/blue/emerald/amber/rose/violet/sky/lime, or null = no color).
+     *  Applied as a left-border on the template panel of the thread page so when many
+     *  templates are stacked, the operator can scan them by color rather than reading names. */
+    @Column(name = "COLOR", length = 16)
+    private String color;
+
     @Column(name = "DISPLAY_ORDER")
     private Integer displayOrder;
 
@@ -57,6 +63,8 @@ public class MessageTemplate {
     public void setSubject(String subject) { this.subject = subject; }
     public String getBody() { return body; }
     public void setBody(String body) { this.body = body; }
+    public String getColor() { return color; }
+    public void setColor(String color) { this.color = color; }
     public Integer getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(Integer displayOrder) { this.displayOrder = displayOrder; }
     public LocalDateTime getCreatedAt() { return createdAt; }

@@ -268,6 +268,8 @@ CREATE TABLE IF NOT EXISTS MESSAGE_TEMPLATE (
   NAME          VARCHAR(255) NOT NULL,
   SUBJECT       TEXT         DEFAULT NULL,
   BODY          LONGTEXT     DEFAULT NULL,
+  COLOR         VARCHAR(16)  DEFAULT NULL
+    COMMENT 'accent color name (slate/blue/sky/cyan/emerald/lime/amber/rose/pink/violet) — shown as a left-border on the thread template panel for visual distinction',
   DISPLAY_ORDER INT          DEFAULT 0,
   CREATED_AT    DATETIME     NOT NULL,
   UPDATED_AT    DATETIME     NOT NULL,

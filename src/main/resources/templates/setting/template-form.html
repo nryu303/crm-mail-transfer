@@ -43,10 +43,34 @@
             </div>
 
             <div class="mb-4">
+                <label class="block text-sm font-medium text-slate-700 mb-1">枠色 (省略可)</label>
+                <!-- One radio per preset. Tailwind isn't tree-shaken on this page so the
+                     bg-/border- classes resolve at runtime. "なし" is the explicit null option. -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <label class="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="radio" name="color" value="" th:checked="${form.color == null or form.color == ''}"/>
+                        <span class="inline-block w-6 h-6 rounded border border-slate-300 bg-white" title="なし"></span>
+                    </label>
+                    <label th:each="c : ${ {'slate','blue','sky','cyan','emerald','lime','amber','rose','pink','violet'} }"
+                           class="inline-flex items-center gap-1 cursor-pointer">
+                        <input type="radio" name="color" th:value="${c}" th:checked="${form.color == c}"/>
+                        <span class="inline-block w-6 h-6 rounded border-2"
+                              th:classappend="'border-' + ${c} + '-400 bg-' + ${c} + '-100'"
+                              th:title="${c}"></span>
+                    </label>
+                </div>
+                <p class="mt-1 text-xs text-slate-500">
+                    返信画面 ([[#{nothing} ?: '/manager/users/{id}/thread']]) の右下「定型文」パネルで、この色の枠線で表示されます。多数の定型文を見分けやすくするための目印です。
+                </p>
+            </div>
+
+            <div class="mb-4">
                 <label class="block text-sm font-medium text-slate-700 mb-1">表示順 (省略可)</label>
                 <input type="number" class="tw-input" th:field="*{displayOrder}"
                        style="max-width: 180px;" placeholder="0"/>
-                <p class="mt-1 text-xs text-slate-500">数字が小さいほど上に表示されます。</p>
+                <p class="mt-1 text-xs text-slate-500">
+                    数字が小さいほど上に表示されます。一覧画面の <span class="font-mono">⋮⋮</span> ハンドルをドラッグして並び替えも可能です。
+                </p>
             </div>
 
             <div class="flex items-center gap-2 pt-3 border-t border-slate-100">
