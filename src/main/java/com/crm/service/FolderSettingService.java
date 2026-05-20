@@ -19,11 +19,8 @@ import java.util.stream.Collectors;
 public class FolderSettingService {
 
     public static final String KEY = "folder.names";
-    /**
-     * Permanent system folder used as the archive destination for inactive users.
-     * Always appended to the folder list (even if the operator removed it from the
-     * settings save), so 全ユーザー移動先として常時利用可能。
-     */
+    /** Suggested archive folder name — seeded on first install (empty CRM_SETTING) but the
+     *  operator can rename or delete it freely afterwards. No code depends on its presence. */
     public static final String ARCHIVE_FOLDER = "退避";
     public static final List<String> DEFAULT_FOLDERS =
             Collections.unmodifiableList(java.util.Arrays.asList("A", "B", "C", "D", ARCHIVE_FOLDER));
@@ -40,21 +37,19 @@ public class FolderSettingService {
             String t = part.trim();
             if (!t.isEmpty()) out.add(t);
         }
-        if (out.isEmpty()) return DEFAULT_FOLDERS;
-        // Always ensure the system archive folder is present (operator can re-order
-        // but never delete it). Appended at the end of the operator's list.
-        if (!out.contains(ARCHIVE_FOLDER)) out.add(ARCHIVE_FOLDER);
+        // Empty list (the operator explicitly cleared every row) is a valid state and is
+        // returned as-is. Falling back to DEFAULT_FOLDERS here would mask the operator's
+        // delete-all action and confuse the count display.
         return out;
     }
 
-    /** Replace the whole folder list. Pass a list or comma-separated string.
-     *  The system 退避 folder is always re-injected if the caller omitted it. */
+    /** Replace the whole folder list with whatever the operator saved. No auto-injection
+     *  of any "system" folder — the operator has full control over the list. */
     @Transactional
     public void save(List<String> folders) {
         List<String> cleaned = folders == null ? new ArrayList<>() :
                 folders.stream().map(String::trim).filter(s -> !s.isEmpty())
                        .collect(Collectors.toList());
-        if (!cleaned.contains(ARCHIVE_FOLDER)) cleaned.add(ARCHIVE_FOLDER);
         String value = String.join(",", cleaned);
         CrmSetting s = repo.findBySettingKey(KEY).orElseGet(() -> {
             CrmSetting ns = new CrmSetting();
