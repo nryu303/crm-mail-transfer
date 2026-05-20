@@ -49,6 +49,7 @@ public class UserController {
     private final com.crm.service.AdminAuthService adminAuthService;
     private final com.crm.service.AdCodeService adCodeService;
     private final com.crm.service.ReplyPageSettingService replyPageSettingService;
+    private final com.crm.service.AuditLogService auditLog;
 
     public UserController(CrmUserService service,
                           CarrierBindingService bindingService,
@@ -59,7 +60,8 @@ public class UserController {
                           com.crm.service.FolderSettingService folderSettingService,
                           com.crm.service.AdminAuthService adminAuthService,
                           com.crm.service.AdCodeService adCodeService,
-                          com.crm.service.ReplyPageSettingService replyPageSettingService) {
+                          com.crm.service.ReplyPageSettingService replyPageSettingService,
+                          com.crm.service.AuditLogService auditLog) {
         this.service = service;
         this.bindingService = bindingService;
         this.placeholderService = placeholderService;
@@ -70,6 +72,7 @@ public class UserController {
         this.adminAuthService = adminAuthService;
         this.adCodeService = adCodeService;
         this.replyPageSettingService = replyPageSettingService;
+        this.auditLog = auditLog;
     }
 
     /** Active ad-code choices for autocomplete on the user-detail form. */
@@ -428,7 +431,10 @@ public class UserController {
             ra.addFlashAttribute("flashError", msg);
             return "redirect:/manager/users/" + id;
         }
-        paymentService.create(form);
+        com.crm.entity.Payment created = paymentService.create(form);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_PAYMENT_CREATE,
+                "Payment", created == null ? null : created.getId(),
+                "userId=" + id + " amount=" + form.getAmount());
         ra.addFlashAttribute("flashSuccess", "入金を登録しました");
         return "redirect:/manager/users/" + id;
     }
@@ -436,6 +442,8 @@ public class UserController {
     @PostMapping("/{id}/payments/{pid}/mark-paid")
     public String markPaymentPaid(@PathVariable Long id, @PathVariable Long pid, RedirectAttributes ra) {
         paymentService.markPaid(pid);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_PAYMENT_MARK_PAID,
+                "Payment", pid, "userId=" + id);
         ra.addFlashAttribute("flashSuccess", "入金済にしました");
         return "redirect:/manager/users/" + id;
     }
@@ -452,6 +460,8 @@ public class UserController {
             return "redirect:/manager/users/" + id;
         }
         paymentService.delete(pid);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_PAYMENT_DELETE,
+                "Payment", pid, "userId=" + id);
         ra.addFlashAttribute("flashSuccess", "入金を削除しました");
         return "redirect:/manager/users/" + id;
     }
@@ -515,6 +525,8 @@ public class UserController {
             return "redirect:/manager/users/" + id;
         }
         service.delete(id);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_USER_DELETE,
+                "CrmUser", id, "single");
         ra.addFlashAttribute("flashSuccess", "ユーザーを削除しました");
         return "redirect:/manager/users";
     }
@@ -541,6 +553,8 @@ public class UserController {
             int n = service.deleteAllInFolder(src, scopeLimit);
             String srcLabel = (src == null) ? "（未設定）" : src;
             String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
+            auditLog.record(com.crm.service.AuditLogService.ACTION_USER_DELETE,
+                    "CrmUser", null, "bulk folder=" + srcLabel + " count=" + n + chunkNote);
             ra.addFlashAttribute("flashSuccess",
                     "フォルダ「" + srcLabel + "」内の " + n + " 名を削除しました" + chunkNote);
             return "redirect:/manager/users";
@@ -555,6 +569,8 @@ public class UserController {
                 catch (Exception e) { failures.add("ID=" + id + ": " + e.getMessage()); }
             }
         }
+        auditLog.record(com.crm.service.AuditLogService.ACTION_USER_DELETE,
+                "CrmUser", null, "bulk count=" + n + (failures.isEmpty() ? "" : " failures=" + failures.size()));
         ra.addFlashAttribute("flashSuccess", n + " 件のユーザーを削除しました");
         if (!failures.isEmpty()) {
             ra.addFlashAttribute("flashError",
@@ -603,6 +619,8 @@ public class UserController {
     public String bindAllCarriers(@PathVariable Long id, RedirectAttributes ra) {
         int bound = bindingService.bindAllAvailable(id);
         if (bound > 0) {
+            auditLog.record(com.crm.service.AuditLogService.ACTION_CARRIER_BIND,
+                    "CrmUser", id, "bindAllAvailable count=" + bound);
             ra.addFlashAttribute("flashSuccess",
                     "AMGに登録されている空きキャリアアドレスを " + bound + " 件、このユーザーに割り当てました");
         } else {
@@ -615,6 +633,8 @@ public class UserController {
     @PostMapping("/{id}/unbind-carrier/{poolId}")
     public String unbindOneCarrier(@PathVariable Long id, @PathVariable Long poolId, RedirectAttributes ra) {
         if (bindingService.unbindOne(id, poolId)) {
+            auditLog.record(com.crm.service.AuditLogService.ACTION_CARRIER_UNBIND,
+                    "CrmUser", id, "poolId=" + poolId);
             ra.addFlashAttribute("flashSuccess", "キャリアアドレスを解除しました");
         } else {
             ra.addFlashAttribute("flashError", "解除できませんでした");
@@ -625,6 +645,8 @@ public class UserController {
     @PostMapping("/{id}/unbind-carrier")
     public String unbindCarrier(@PathVariable Long id, RedirectAttributes ra) {
         int n = bindingService.unbindAll(id);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_CARRIER_UNBIND,
+                "CrmUser", id, "unbindAll count=" + n);
         ra.addFlashAttribute("flashSuccess", n + " 件のキャリアアドレスを解除しました");
         return "redirect:/manager/users/" + id;
     }

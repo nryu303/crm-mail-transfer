@@ -35,6 +35,7 @@ public class BroadcastController {
     private final com.crm.service.AdminAuthService adminAuthService;
     private final com.crm.service.DomainSettingService settingService;
     private final com.crm.service.MessageService messageService;
+    private final com.crm.service.AuditLogService auditLog;
 
     public BroadcastController(BroadcastService broadcastService,
                                MessageTemplateService templateService,
@@ -42,7 +43,8 @@ public class BroadcastController {
                                com.crm.repository.MessageRepository messageRepository,
                                com.crm.service.AdminAuthService adminAuthService,
                                com.crm.service.DomainSettingService settingService,
-                               com.crm.service.MessageService messageService) {
+                               com.crm.service.MessageService messageService,
+                               com.crm.service.AuditLogService auditLog) {
         this.broadcastService = broadcastService;
         this.templateService = templateService;
         this.userService = userService;
@@ -50,6 +52,7 @@ public class BroadcastController {
         this.adminAuthService = adminAuthService;
         this.settingService = settingService;
         this.messageService = messageService;
+        this.auditLog = auditLog;
     }
 
     /** Email-domain choices for the broadcast filter (replaces old carrierCode dropdown). */
@@ -231,6 +234,11 @@ public class BroadcastController {
         try {
             Broadcast b = broadcastService.createAndQueue(form, adminId);
             String kind = Broadcast.STATUS_SCHEDULED.equals(b.getStatus()) ? "予約登録" : "送信開始";
+            auditLog.record(com.crm.service.AuditLogService.ACTION_BROADCAST_CREATE,
+                    "Broadcast", b.getId(),
+                    "subject=" + (b.getSubject() == null ? "" : b.getSubject())
+                    + " total=" + b.getTotalCount()
+                    + " unsendable=" + (b.getUnsendableCount() == null ? 0 : b.getUnsendableCount()));
             ra.addFlashAttribute("flashSuccess",
                     "一斉送信を" + kind + "しました (対象: " + b.getTotalCount() + "件)");
             return "redirect:/manager/messages/broadcast/" + b.getId();
@@ -277,6 +285,8 @@ public class BroadcastController {
     @PostMapping("/{id}/cancel")
     public String cancel(@PathVariable Long id, RedirectAttributes ra) {
         broadcastService.cancel(id);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_BROADCAST_CANCEL,
+                "Broadcast", id, null);
         ra.addFlashAttribute("flashSuccess", "一斉送信をキャンセルしました");
         return "redirect:/manager/messages/broadcast/" + id;
     }

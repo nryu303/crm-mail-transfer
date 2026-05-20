@@ -41,50 +41,93 @@
         <button type="submit" class="ml-auto inline-flex items-center px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm">保存</button>
     </form>
 
-    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
-            <tr>
-                <th class="px-3 py-2 text-left" style="width: 60px;">No</th>
-                <th class="px-3 py-2 text-left">名前</th>
-                <th class="px-3 py-2 text-left">IPアドレス</th>
-                <th class="px-3 py-2 text-left" style="width: 110px;">ポート</th>
-                <th class="px-3 py-2 text-left" style="width: 130px;">有効</th>
-                <th class="px-3 py-2 text-left">メモ</th>
-                <th class="px-3 py-2 text-right" style="width: 180px;">操作</th>
-            </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-            <tr th:if="${relays.empty}">
-                <td colspan="7" class="px-3 py-6 text-center text-slate-400">
-                    リレーサーバーは登録されていません — 本サーバの postfix から直接配信します
-                </td>
-            </tr>
-            <tr th:each="r,it : ${relays}" class="hover:bg-slate-50">
-                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
-                <td class="px-3 py-2 text-slate-700" th:text="${r.name}"></td>
-                <td class="px-3 py-2"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${r.ipAddress}"></code></td>
-                <td class="px-3 py-2"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${r.port}"></code></td>
-                <td class="px-3 py-2">
-                    <span th:if="${r.isActive}"
-                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">有効・使用中</span>
-                    <span th:unless="${r.isActive}"
-                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-600">無効</span>
-                </td>
-                <td class="px-3 py-2 text-xs text-slate-500" th:text="${r.memo}"></td>
-                <td class="px-3 py-2 text-right">
-                    <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
-                       th:href="@{'/manager/settings/relay-servers/' + ${r.id} + '/edit'}">編集</a>
-                    <form method="post" th:action="@{'/manager/settings/relay-servers/' + ${r.id} + '/delete'}"
-                          class="inline-block ml-1"
-                          onsubmit="return confirm('このリレーサーバーを削除します。よろしいですか?');">
-                        <button type="submit" class="inline-flex items-center px-3 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 rounded">削除</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
+    <!-- bulk-delete form wraps the table so the checkbox-driven 選択削除 footer can
+         post all selected IDs in one shot, matching the user-list pattern. -->
+    <form id="bulkForm" method="post" th:action="@{/manager/settings/relay-servers/bulk-delete}"
+          onsubmit="return confirmBulkDelete();">
+        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+        <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-3 py-2 text-center" style="width: 36px;">
+                        <input type="checkbox" id="checkAll" title="全選択"/>
+                    </th>
+                    <th class="px-3 py-2 text-left" style="width: 60px;">No</th>
+                    <th class="px-3 py-2 text-left">名前</th>
+                    <th class="px-3 py-2 text-left">IPアドレス</th>
+                    <th class="px-3 py-2 text-left" style="width: 110px;">ポート</th>
+                    <th class="px-3 py-2 text-left" style="width: 130px;">有効</th>
+                    <th class="px-3 py-2 text-left">メモ</th>
+                    <th class="px-3 py-2 text-right" style="width: 90px;">操作</th>
+                </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                <tr th:if="${relays.empty}">
+                    <td colspan="8" class="px-3 py-6 text-center text-slate-400">
+                        リレーサーバーは登録されていません — 本サーバの postfix から直接配信します
+                    </td>
+                </tr>
+                <tr th:each="r,it : ${relays}" class="hover:bg-slate-50">
+                    <td class="px-3 py-2 text-center">
+                        <input type="checkbox" class="row-item" name="ids" th:value="${r.id}"/>
+                    </td>
+                    <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                    <td class="px-3 py-2 text-slate-700" th:text="${r.name}"></td>
+                    <td class="px-3 py-2"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${r.ipAddress}"></code></td>
+                    <td class="px-3 py-2"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${r.port}"></code></td>
+                    <td class="px-3 py-2">
+                        <span th:if="${r.isActive}"
+                              class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">有効・使用中</span>
+                        <span th:unless="${r.isActive}"
+                              class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-600">無効</span>
+                    </td>
+                    <td class="px-3 py-2 text-xs text-slate-500" th:text="${r.memo}"></td>
+                    <td class="px-3 py-2 text-right">
+                        <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
+                           th:href="@{'/manager/settings/relay-servers/' + ${r.id} + '/edit'}">編集</a>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+            <div class="flex items-center justify-end gap-2 px-3 py-3 border-t border-slate-100 bg-slate-50">
+                <span id="selectedCount" class="text-xs text-slate-500 mr-2"></span>
+                <button type="submit" id="btnBulkDelete" disabled
+                        class="inline-flex items-center px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-md disabled:bg-slate-300 disabled:cursor-not-allowed">選択削除</button>
+            </div>
+        </div>
+    </form>
+
+    <script>
+    (function () {
+        var checkAll = document.getElementById('checkAll');
+        var btn = document.getElementById('btnBulkDelete');
+        var count = document.getElementById('selectedCount');
+        function rows() { return document.querySelectorAll('.row-item'); }
+        function refresh() {
+            var ck = [].filter.call(rows(), function (c) { return c.checked; });
+            btn.disabled = ck.length === 0;
+            count.textContent = ck.length > 0 ? (ck.length + ' 件選択中') : '';
+            if (checkAll) {
+                checkAll.indeterminate = ck.length > 0 && ck.length < rows().length;
+                checkAll.checked = rows().length > 0 && ck.length === rows().length;
+            }
+        }
+        if (checkAll) checkAll.addEventListener('change', function () {
+            [].forEach.call(rows(), function (c) { c.checked = checkAll.checked; });
+            refresh();
+        });
+        document.addEventListener('change', function (e) {
+            if (e.target.classList && e.target.classList.contains('row-item')) refresh();
+        });
+        refresh();
+    })();
+    window.confirmBulkDelete = function () {
+        var n = document.querySelectorAll('.row-item:checked').length;
+        if (n === 0) return false;
+        return confirm(n + ' 件のリレーサーバーを削除します。よろしいですか?');
+    };
+    </script>
 </section>
 </body>
 </html>

@@ -30,52 +30,92 @@
            th:href="@{/manager/settings/message-templates}">クリア</a>
     </form>
 
-    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
-            <tr>
-                <th class="px-3 py-2 text-center" style="width: 36px;" title="ドラッグして並び替え">⋮⋮</th>
-                <th class="px-3 py-2 text-left" style="width: 60px;">ID</th>
-                <th class="px-3 py-2 text-left">名前</th>
-                <th class="px-3 py-2 text-left">件名</th>
-                <th class="px-3 py-2 text-left">本文</th>
-                <th class="px-3 py-2 text-right" style="width: 170px;">操作</th>
-            </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100" id="tplTbody">
-            <tr th:if="${templates.empty}">
-                <td colspan="6" class="px-3 py-6 text-center text-slate-400">定型文はまだ登録されていません</td>
-            </tr>
-            <tr th:each="t,it : ${templates}" class="hover:bg-slate-50 tpl-row"
-                th:attr="data-id=${t.id}" draggable="true">
-                <td class="px-3 py-2 text-center text-slate-400 cursor-grab select-none drag-handle"
-                    title="ドラッグして並び替え" style="font-family: monospace; font-size: 16px;">⋮⋮</td>
-                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
-                <td class="px-3 py-2 text-slate-700">
-                    <span th:if="${t.color != null and t.color != ''}"
-                          class="inline-block w-3 h-3 rounded-full align-middle mr-1.5 border"
-                          th:classappend="'border-' + ${t.color} + '-400 bg-' + ${t.color} + '-200'"
-                          th:title="'枠色: ' + ${t.color}"></span>
-                    <span th:text="${t.name}"></span>
-                </td>
-                <td class="px-3 py-2 text-xs text-slate-600 truncate" style="max-width: 260px;" th:text="${t.subject}"></td>
-                <td class="px-3 py-2 text-xs text-slate-500 truncate" style="max-width: 320px;" th:text="${t.body}"></td>
-                <td class="px-3 py-2 text-right">
-                    <a class="inline-flex items-center px-3 py-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded"
-                       th:href="@{'/manager/settings/message-templates/' + ${t.id} + '/edit'}">編集</a>
-                    <form method="post" th:action="@{'/manager/settings/message-templates/' + ${t.id} + '/delete'}"
-                          class="inline-block ml-1"
-                          onsubmit="return confirm('この定型文を削除します。よろしいですか?');">
-                        <button type="submit" class="inline-flex items-center px-3 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 rounded">削除</button>
-                    </form>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-        <div id="reorderStatus" class="px-3 py-2 text-xs text-slate-500 border-t border-slate-100 hidden">
-            並び順を保存しています…
+    <form id="bulkForm" method="post" th:action="@{/manager/settings/message-templates/bulk-delete}"
+          onsubmit="return confirmBulkDelete();">
+        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+        <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-3 py-2 text-center" style="width: 36px;" title="ドラッグして並び替え">⋮⋮</th>
+                    <th class="px-3 py-2 text-center" style="width: 36px;">
+                        <input type="checkbox" id="checkAll" title="全選択"/>
+                    </th>
+                    <th class="px-3 py-2 text-left" style="width: 60px;">ID</th>
+                    <th class="px-3 py-2 text-left">名前</th>
+                    <th class="px-3 py-2 text-left">件名</th>
+                    <th class="px-3 py-2 text-left">本文</th>
+                    <th class="px-3 py-2 text-right" style="width: 90px;">操作</th>
+                </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100" id="tplTbody">
+                <tr th:if="${templates.empty}">
+                    <td colspan="7" class="px-3 py-6 text-center text-slate-400">定型文はまだ登録されていません</td>
+                </tr>
+                <tr th:each="t,it : ${templates}" class="hover:bg-slate-50 tpl-row"
+                    th:attr="data-id=${t.id}" draggable="true">
+                    <td class="px-3 py-2 text-center text-slate-400 cursor-grab select-none drag-handle"
+                        title="ドラッグして並び替え" style="font-family: monospace; font-size: 16px;">⋮⋮</td>
+                    <td class="px-3 py-2 text-center">
+                        <input type="checkbox" class="row-item" name="ids" th:value="${t.id}"/>
+                    </td>
+                    <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                    <td class="px-3 py-2 text-slate-700">
+                        <span th:if="${t.color != null and t.color != ''}"
+                              class="inline-block w-3 h-3 rounded-full align-middle mr-1.5 border"
+                              th:classappend="'border-' + ${t.color} + '-400 bg-' + ${t.color} + '-200'"
+                              th:title="'枠色: ' + ${t.color}"></span>
+                        <span th:text="${t.name}"></span>
+                    </td>
+                    <td class="px-3 py-2 text-xs text-slate-600 truncate" style="max-width: 260px;" th:text="${t.subject}"></td>
+                    <td class="px-3 py-2 text-xs text-slate-500 truncate" style="max-width: 320px;" th:text="${t.body}"></td>
+                    <td class="px-3 py-2 text-right">
+                        <a class="inline-flex items-center px-3 py-1 text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded"
+                           th:href="@{'/manager/settings/message-templates/' + ${t.id} + '/edit'}">編集</a>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+            <div id="reorderStatus" class="px-3 py-2 text-xs text-slate-500 border-t border-slate-100 hidden">
+                並び順を保存しています…
+            </div>
+            <div class="flex items-center justify-end gap-2 px-3 py-3 border-t border-slate-100 bg-slate-50">
+                <span id="selectedCount" class="text-xs text-slate-500 mr-2"></span>
+                <button type="submit" id="btnBulkDelete" disabled
+                        class="inline-flex items-center px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-md disabled:bg-slate-300 disabled:cursor-not-allowed">選択削除</button>
+            </div>
         </div>
-    </div>
+    </form>
+    <script>
+    (function () {
+        var checkAll = document.getElementById('checkAll');
+        var btn = document.getElementById('btnBulkDelete');
+        var count = document.getElementById('selectedCount');
+        function rows() { return document.querySelectorAll('.row-item'); }
+        function refresh() {
+            var ck = [].filter.call(rows(), function (c) { return c.checked; });
+            btn.disabled = ck.length === 0;
+            count.textContent = ck.length > 0 ? (ck.length + ' 件選択中') : '';
+            if (checkAll) {
+                checkAll.indeterminate = ck.length > 0 && ck.length < rows().length;
+                checkAll.checked = rows().length > 0 && ck.length === rows().length;
+            }
+        }
+        if (checkAll) checkAll.addEventListener('change', function () {
+            [].forEach.call(rows(), function (c) { c.checked = checkAll.checked; });
+            refresh();
+        });
+        document.addEventListener('change', function (e) {
+            if (e.target.classList && e.target.classList.contains('row-item')) refresh();
+        });
+        refresh();
+    })();
+    window.confirmBulkDelete = function () {
+        var n = document.querySelectorAll('.row-item:checked').length;
+        if (n === 0) return false;
+        return confirm(n + ' 件の定型文を削除します。よろしいですか?');
+    };
+    </script>
 
     <script>
     // Native HTML5 drag-and-drop reordering. No external library. Drop fires the POST to

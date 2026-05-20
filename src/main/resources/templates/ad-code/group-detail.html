@@ -52,56 +52,102 @@
         </p>
     </div>
 
-    <!-- Codes within this group -->
+    <!-- Codes within this group — same bulk-delete pattern as /manager/ad-codes codes view. -->
     <h2 class="text-lg font-semibold text-slate-800 mb-2">所属広告コード一覧</h2>
-    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
-            <tr>
-                <th class="px-3 py-2 text-left" style="width: 50px;">No</th>
-                <th class="px-3 py-2 text-left">広告コード</th>
-                <th class="px-3 py-2 text-left">登録人数</th>
-                <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性</th>
-                <th class="px-3 py-2 text-left" style="color:#dc2626;">女性</th>
-                <th class="px-3 py-2 text-left">入金額 (累計)</th>
-                <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性課金</th>
-                <th class="px-3 py-2 text-left" style="color:#dc2626;">女性課金</th>
-                <th class="px-3 py-2 text-left">登録日</th>
-                <th class="px-3 py-2 text-left">メモ</th>
-                <th class="px-3 py-2 text-left" style="width: 70px;">状態</th>
-                <th class="px-3 py-2 text-right" style="width: 90px;">操作</th>
-            </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-            <tr th:if="${summaries.empty}">
-                <td colspan="12" class="px-3 py-6 text-center text-slate-400">このグループに属する広告コードはまだありません</td>
-            </tr>
-            <tr th:each="s,it : ${summaries}" class="hover:bg-slate-50">
-                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
-                <td class="px-3 py-2"><a class="text-blue-600 hover:underline" th:href="@{'/manager/ad-codes/' + ${s.adCode.id}}">
-                    <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${s.adCode.code}"></code></a></td>
-                <td class="px-3 py-2 text-slate-700" th:text="${s.signupCount} + ' 人'"></td>
-                <td class="px-3 py-2" style="color:#1d4ed8;" th:text="${s.signupMale} + ' 人'"></td>
-                <td class="px-3 py-2" style="color:#dc2626;" th:text="${s.signupFemale} + ' 人'"></td>
-                <td class="px-3 py-2 text-slate-700" th:text="'¥ ' + ${#numbers.formatInteger(s.paidTotal, 1, 'COMMA')}"></td>
-                <td class="px-3 py-2" style="color:#1d4ed8;" th:text="'¥ ' + ${#numbers.formatInteger(s.paidMale, 1, 'COMMA')}"></td>
-                <td class="px-3 py-2" style="color:#dc2626;" th:text="'¥ ' + ${#numbers.formatInteger(s.paidFemale, 1, 'COMMA')}"></td>
-                <td class="px-3 py-2 text-xs text-slate-500"
-                    th:text="${#temporals.format(s.adCode.createdAt, 'yyyy-MM-dd')}"></td>
-                <td class="px-3 py-2 text-xs text-slate-500" style="max-width:200px; word-break:break-word;" th:text="${s.adCode.memo}"></td>
-                <td class="px-3 py-2">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                          th:classappend="${s.adCode.isActive} ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'"
-                          th:text="${s.adCode.isActive} ? '有効' : '無効'"></span>
-                </td>
-                <td class="px-3 py-2 text-right">
-                    <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
-                       th:href="@{'/manager/ad-codes/' + ${s.adCode.id}}">詳細</a>
-                </td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
+    <form id="bulkForm" method="post"
+          th:action="@{/manager/ad-codes/bulk-delete}"
+          onsubmit="return confirmBulkDelete();">
+        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+        <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-3 py-2 text-center" style="width: 36px;">
+                        <input type="checkbox" id="checkAll" title="全選択"/>
+                    </th>
+                    <th class="px-3 py-2 text-left" style="width: 50px;">No</th>
+                    <th class="px-3 py-2 text-left">広告コード</th>
+                    <th class="px-3 py-2 text-left">登録人数</th>
+                    <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性</th>
+                    <th class="px-3 py-2 text-left" style="color:#dc2626;">女性</th>
+                    <th class="px-3 py-2 text-left">入金額 (累計)</th>
+                    <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性課金</th>
+                    <th class="px-3 py-2 text-left" style="color:#dc2626;">女性課金</th>
+                    <th class="px-3 py-2 text-left">登録日</th>
+                    <th class="px-3 py-2 text-left">メモ</th>
+                    <th class="px-3 py-2 text-left" style="width: 70px;">状態</th>
+                    <th class="px-3 py-2 text-right" style="width: 90px;">操作</th>
+                </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                <tr th:if="${summaries.empty}">
+                    <td colspan="13" class="px-3 py-6 text-center text-slate-400">このグループに属する広告コードはまだありません</td>
+                </tr>
+                <tr th:each="s,it : ${summaries}" class="hover:bg-slate-50">
+                    <td class="px-3 py-2 text-center">
+                        <input type="checkbox" class="row-item" name="ids" th:value="${s.adCode.id}"/>
+                    </td>
+                    <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                    <td class="px-3 py-2"><a class="text-blue-600 hover:underline" th:href="@{'/manager/ad-codes/' + ${s.adCode.id}}">
+                        <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${s.adCode.code}"></code></a></td>
+                    <td class="px-3 py-2 text-slate-700" th:text="${s.signupCount} + ' 人'"></td>
+                    <td class="px-3 py-2" style="color:#1d4ed8;" th:text="${s.signupMale} + ' 人'"></td>
+                    <td class="px-3 py-2" style="color:#dc2626;" th:text="${s.signupFemale} + ' 人'"></td>
+                    <td class="px-3 py-2 text-slate-700" th:text="'¥ ' + ${#numbers.formatInteger(s.paidTotal, 1, 'COMMA')}"></td>
+                    <td class="px-3 py-2" style="color:#1d4ed8;" th:text="'¥ ' + ${#numbers.formatInteger(s.paidMale, 1, 'COMMA')}"></td>
+                    <td class="px-3 py-2" style="color:#dc2626;" th:text="'¥ ' + ${#numbers.formatInteger(s.paidFemale, 1, 'COMMA')}"></td>
+                    <td class="px-3 py-2 text-xs text-slate-500"
+                        th:text="${#temporals.format(s.adCode.createdAt, 'yyyy-MM-dd')}"></td>
+                    <td class="px-3 py-2 text-xs text-slate-500" style="max-width:200px; word-break:break-word;" th:text="${s.adCode.memo}"></td>
+                    <td class="px-3 py-2">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                              th:classappend="${s.adCode.isActive} ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'"
+                              th:text="${s.adCode.isActive} ? '有効' : '無効'"></span>
+                    </td>
+                    <td class="px-3 py-2 text-right">
+                        <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
+                           th:href="@{'/manager/ad-codes/' + ${s.adCode.id}}">詳細</a>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+            <div class="flex items-center justify-end gap-2 px-3 py-3 border-t border-slate-100 bg-slate-50">
+                <span id="selectedCount" class="text-xs text-slate-500 mr-2"></span>
+                <button type="submit" id="btnBulkDelete" disabled
+                        class="inline-flex items-center px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white font-medium rounded-md disabled:bg-slate-300 disabled:cursor-not-allowed">選択削除</button>
+            </div>
+        </div>
+    </form>
+    <script>
+    (function () {
+        var checkAll = document.getElementById('checkAll');
+        var btn = document.getElementById('btnBulkDelete');
+        var count = document.getElementById('selectedCount');
+        function rows() { return document.querySelectorAll('.row-item'); }
+        function refresh() {
+            var ck = [].filter.call(rows(), function (c) { return c.checked; });
+            btn.disabled = ck.length === 0;
+            count.textContent = ck.length > 0 ? (ck.length + ' 件選択中') : '';
+            if (checkAll) {
+                checkAll.indeterminate = ck.length > 0 && ck.length < rows().length;
+                checkAll.checked = rows().length > 0 && ck.length === rows().length;
+            }
+        }
+        if (checkAll) checkAll.addEventListener('change', function () {
+            [].forEach.call(rows(), function (c) { c.checked = checkAll.checked; });
+            refresh();
+        });
+        document.addEventListener('change', function (e) {
+            if (e.target.classList && e.target.classList.contains('row-item')) refresh();
+        });
+        refresh();
+    })();
+    window.confirmBulkDelete = function () {
+        var n = document.querySelectorAll('.row-item:checked').length;
+        if (n === 0) return false;
+        return confirm(n + ' 件の広告コードを削除します。\n紐付くユーザーの広告コードはNULLに更新されます。よろしいですか?');
+    };
+    </script>
 </section>
 </body>
 </html>

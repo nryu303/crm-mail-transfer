@@ -270,6 +270,67 @@ public class AdCodeController {
         return "redirect:/manager/ad-codes";
     }
 
+    /** Bulk-delete individual ad-codes by id (used by the flat-codes view and the group-detail page). */
+    @PostMapping("/bulk-delete")
+    public String bulkDelete(@RequestParam(name = "ids", required = false) java.util.List<Long> ids,
+                             RedirectAttributes ra) {
+        if (ids == null || ids.isEmpty()) {
+            ra.addFlashAttribute("flashError", "削除対象が選択されていません");
+            return "redirect:/manager/ad-codes";
+        }
+        int n = 0;
+        for (Long id : ids) {
+            if (id == null) continue;
+            try { if (service.delete(id)) n++; } catch (Exception ignored) {}
+        }
+        ra.addFlashAttribute("flashSuccess", n + " 件の広告コードを削除しました");
+        return "redirect:/manager/ad-codes";
+    }
+
+    /**
+     * Bulk-delete groups by name. Each group expands into all its ad-codes + the group-level
+     * credentials row. Same admin-password gate as the previous one-by-one /group/delete.
+     */
+    @PostMapping("/group/bulk-delete")
+    public String bulkDeleteGroups(@RequestParam(name = "names", required = false) java.util.List<String> names,
+                                    @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
+                                    javax.servlet.http.HttpSession session,
+                                    RedirectAttributes ra) {
+        Long adminId = (Long) session.getAttribute(com.crm.interceptor.AuthInterceptor.SESSION_ADMIN_ID);
+        if (!adminAuthService.verifyPassword(adminId, confirmPassword)) {
+            ra.addFlashAttribute("flashError", "グループ削除には管理者パスワードの確認が必要です");
+            return "redirect:/manager/ad-codes";
+        }
+        if (names == null || names.isEmpty()) {
+            ra.addFlashAttribute("flashError", "削除対象が選択されていません");
+            return "redirect:/manager/ad-codes";
+        }
+        int groupsDone = 0, codesDeleted = 0;
+        java.util.List<String> failures = new java.util.ArrayList<>();
+        for (String name : names) {
+            if (name == null || name.trim().isEmpty()) continue;
+            String trimmed = name.trim();
+            java.util.List<com.crm.service.AdCodeService.CodeSummary> codes = service.listWithSummaries(null, trimmed);
+            int localDeleted = 0;
+            for (com.crm.service.AdCodeService.CodeSummary s : codes) {
+                try { if (service.delete(s.getAdCode().getId())) localDeleted++; }
+                catch (Exception e) { failures.add(s.getAdCode().getCode() + ": " + e.getMessage()); }
+            }
+            codesDeleted += localDeleted;
+            groupCredentialService.deleteByGroupName(trimmed);
+            groupsDone++;
+        }
+        if (failures.isEmpty()) {
+            ra.addFlashAttribute("flashSuccess",
+                    groupsDone + " 件のグループを削除しました (広告コード " + codesDeleted + " 件 + 認証情報)");
+        } else {
+            ra.addFlashAttribute("flashError",
+                    groupsDone + " 件のグループ削除中に " + failures.size() + " 件のコードでエラー: "
+                  + String.join(" / ", failures));
+        }
+        return "redirect:/manager/ad-codes";
+    }
+
     private static Optional<YearMonth> parseMonth(String raw) {
         if (raw == null || raw.trim().isEmpty()) return Optional.empty();
         try { return Optional.of(YearMonth.parse(raw.trim())); }

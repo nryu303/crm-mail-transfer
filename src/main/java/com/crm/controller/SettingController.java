@@ -294,6 +294,23 @@ public class SettingController {
         return "redirect:/manager/settings/relay-servers";
     }
 
+    /** Bulk-delete from the relay-servers list page (checkbox + 選択削除 pattern). */
+    @PostMapping("/relay-servers/bulk-delete")
+    public String relayBulkDelete(@RequestParam(name = "ids", required = false) java.util.List<Long> ids,
+                                  RedirectAttributes ra) {
+        if (ids == null || ids.isEmpty()) {
+            ra.addFlashAttribute("flashError", "削除対象が選択されていません");
+            return "redirect:/manager/settings/relay-servers";
+        }
+        int n = 0;
+        for (Long id : ids) {
+            if (id == null) continue;
+            try { relayServerService.delete(id); n++; } catch (Exception ignored) {}
+        }
+        ra.addFlashAttribute("flashSuccess", n + " 件のリレーサーバーを削除しました");
+        return "redirect:/manager/settings/relay-servers";
+    }
+
     // ====== Message templates ======
     @GetMapping("/message-templates")
     public String templateList(@RequestParam(name = "q", required = false) String q, Model model) {
@@ -385,6 +402,22 @@ public class SettingController {
     public String templateDelete(@PathVariable Long id, RedirectAttributes ra) {
         templateService.delete(id);
         ra.addFlashAttribute("flashSuccess", "定型文を削除しました");
+        return "redirect:/manager/settings/message-templates";
+    }
+
+    @PostMapping("/message-templates/bulk-delete")
+    public String templateBulkDelete(@RequestParam(name = "ids", required = false) java.util.List<Long> ids,
+                                      RedirectAttributes ra) {
+        if (ids == null || ids.isEmpty()) {
+            ra.addFlashAttribute("flashError", "削除対象が選択されていません");
+            return "redirect:/manager/settings/message-templates";
+        }
+        int n = 0;
+        for (Long id : ids) {
+            if (id == null) continue;
+            try { templateService.delete(id); n++; } catch (Exception ignored) {}
+        }
+        ra.addFlashAttribute("flashSuccess", n + " 件の定型文を削除しました");
         return "redirect:/manager/settings/message-templates";
     }
 

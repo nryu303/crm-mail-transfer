@@ -14,6 +14,7 @@
 
     <p class="text-sm text-slate-500 mb-4">
         管理画面の主要操作 (ログイン、管理者パスワード変更、ユーザー削除、キャリアアドレス追加/削除、一斉送信、入金処理など) の履歴が残ります。
+        ログは 1ヶ月で自動的に削除されます（毎日04:00JSTのバッチで30日経過行を削除）。
     </p>
 
     <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
@@ -32,9 +33,24 @@
             <tr th:if="${logs.empty}">
                 <td colspan="6" class="px-3 py-6 text-center text-slate-400">操作ログはまだありません</td>
             </tr>
+            <!-- Per-row color tag is computed from the action's prefix. Login family = emerald,
+                 user family = blue, carrier = cyan, broadcast = violet, payment = lime,
+                 settings/password = amber, login-fail = red. Falls back to slate. -->
             <tr th:each="l : ${logs.content}" class="hover:bg-slate-50">
                 <td class="px-3 py-2 text-xs text-slate-500" th:text="${#temporals.format(l.createdAt, 'yyyy-MM-dd HH:mm:ss')}"></td>
-                <td class="px-3 py-2"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${l.action}"></code></td>
+                <td class="px-3 py-2">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
+                          th:with="a=${l.action}"
+                          th:classappend="${a == 'LOGIN_FAIL'} ? 'bg-red-100 text-red-700' :
+                                          (${a == 'LOGIN_OK' or a == 'LOGOUT'} ? 'bg-emerald-100 text-emerald-700' :
+                                          (${a == 'ADMIN_PASSWORD_CHANGE' or a == 'SETTINGS_UPDATE'} ? 'bg-amber-100 text-amber-800' :
+                                          (${a != null and #strings.startsWith(a, 'USER_')} ? 'bg-blue-100 text-blue-700' :
+                                          (${a != null and #strings.startsWith(a, 'CARRIER_')} ? 'bg-cyan-100 text-cyan-700' :
+                                          (${a != null and #strings.startsWith(a, 'BROADCAST_')} ? 'bg-violet-100 text-violet-700' :
+                                          (${a != null and #strings.startsWith(a, 'PAYMENT_')} ? 'bg-lime-100 text-lime-700' :
+                                          (${a != null and #strings.startsWith(a, 'MESSAGE_')} ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-700')))))))"
+                          th:text="${l.action}"></span>
+                </td>
                 <td class="px-3 py-2 text-xs text-slate-600"
                     th:text="${l.entityType != null ? l.entityType + ' #' + (l.entityId != null ? l.entityId : '-') : '-'}"></td>
                 <td class="px-3 py-2 text-xs text-slate-700" th:text="${l.adminName} ?: '-'"></td>

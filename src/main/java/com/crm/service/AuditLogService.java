@@ -79,6 +79,26 @@ public class AuditLogService {
         return repository.findAllByOrderByCreatedAtDesc(PageRequest.of(page, size));
     }
 
+    /**
+     * Daily-at-04:00 cleanup of audit rows older than 30 days. Operator-visible policy: the
+     * audit log UI claims "1ヶ月の履歴が残ります", and this enforces it so the table doesn't grow
+     * unbounded on high-traffic deployments.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(cron = "0 0 4 * * *")
+    public void purgeOld() {
+        java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusDays(30);
+        try {
+            int n = repository.deleteByCreatedAtBefore(cutoff);
+            if (n > 0) {
+                org.slf4j.LoggerFactory.getLogger(AuditLogService.class)
+                        .info("Audit-log purge: removed {} row(s) older than {}", n, cutoff);
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(AuditLogService.class)
+                    .warn("Audit-log purge failed", e);
+        }
+    }
+
     private static String truncate(String s, int max) {
         return s == null ? null : (s.length() <= max ? s : s.substring(0, max));
     }
