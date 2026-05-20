@@ -24,6 +24,15 @@ public class CrmUser {
     @Column(name = "EMAIL", nullable = false, unique = true)
     private String email;
 
+    /**
+     * Set when this user's email has an RFC-invalid local-part that the relay's SMTP client
+     * will reject (trailing/leading dot, consecutive dots). See {@link com.crm.util.CsvUtil}
+     * for the reason codes. Broadcasts skip users where this is non-null; the user list and
+     * detail page show a 「送信不可」 badge so the operator can spot them.
+     */
+    @Column(name = "ADDRESS_INVALID_REASON", length = 64)
+    private String addressInvalidReason;
+
     @Column(name = "DISPLAY_NAME")
     private String displayName;
 
@@ -102,6 +111,8 @@ public class CrmUser {
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+    public String getAddressInvalidReason() { return addressInvalidReason; }
+    public void setAddressInvalidReason(String addressInvalidReason) { this.addressInvalidReason = addressInvalidReason; }
 
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }

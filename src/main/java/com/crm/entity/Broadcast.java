@@ -63,6 +63,17 @@ public class Broadcast {
     @Column(name = "FAILED_COUNT")
     private Integer failedCount;
 
+    /** Users in the broadcast's filter whose CRM_USER.ADDRESS_INVALID_REASON was set —
+     *  skipped at queue time, never counted toward TOTAL_COUNT but tracked here so the
+     *  detail page can surface them as 「送信不可: N件」 with click-through. */
+    @Column(name = "UNSENDABLE_COUNT")
+    private Integer unsendableCount;
+
+    /** Comma-separated CRM_USER.id list of the unsendable users. Stored as TEXT so even
+     *  a 5K-user broadcast with all addresses dot-broken fits (~30KB worst case). */
+    @Column(name = "UNSENDABLE_USER_IDS", columnDefinition = "TEXT")
+    private String unsendableUserIds;
+
     @Column(name = "CREATED_AT", nullable = false)
     private LocalDateTime createdAt;
 
@@ -80,6 +91,7 @@ public class Broadcast {
         if (totalCount == null) totalCount = 0;
         if (sentCount == null) sentCount = 0;
         if (failedCount == null) failedCount = 0;
+        if (unsendableCount == null) unsendableCount = 0;
     }
 
     @PreUpdate
@@ -115,6 +127,10 @@ public class Broadcast {
     public void setSentCount(Integer sentCount) { this.sentCount = sentCount; }
     public Integer getFailedCount() { return failedCount; }
     public void setFailedCount(Integer failedCount) { this.failedCount = failedCount; }
+    public Integer getUnsendableCount() { return unsendableCount; }
+    public void setUnsendableCount(Integer unsendableCount) { this.unsendableCount = unsendableCount; }
+    public String getUnsendableUserIds() { return unsendableUserIds; }
+    public void setUnsendableUserIds(String unsendableUserIds) { this.unsendableUserIds = unsendableUserIds; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

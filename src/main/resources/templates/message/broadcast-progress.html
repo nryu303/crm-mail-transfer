@@ -10,7 +10,7 @@
 <section layout:fragment="content">
     <div class="flex items-center mb-4">
         <h1 class="text-2xl font-semibold text-slate-800 flex-1" th:text="'一斉送信 ' + (${broadcast.title} ?: '')"></h1>
-        <a class="text-sm text-blue-600 hover:underline" th:href="@{/manager/messages/broadcast}">一覧に戻る</a>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/messages/broadcast}">一覧に戻る</a>
     </div>
 
     <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 mb-4" style="max-width: 820px;">
@@ -36,12 +36,52 @@
                  th:text="${donePct} + '%'"></div>
         </div>
 
-        <div class="grid grid-cols-4 gap-3 text-center mt-4">
+        <div class="grid grid-cols-5 gap-3 text-center mt-4">
             <div><div class="text-xs text-slate-500">対象</div><div class="text-2xl font-bold" th:text="${broadcast.totalCount}"></div></div>
             <div><div class="text-xs text-slate-500">送信済み</div><div class="text-2xl font-bold text-emerald-600" th:text="${broadcast.sentCount}"></div></div>
             <div><div class="text-xs text-slate-500">失敗</div><div class="text-2xl font-bold text-red-600" th:text="${broadcast.failedCount}"></div></div>
+            <div>
+                <div class="text-xs text-slate-500">送信不可</div>
+                <div class="text-2xl font-bold text-amber-700" th:text="${broadcast.unsendableCount ?: 0}"></div>
+            </div>
             <div><div class="text-xs text-slate-500">残り</div><div class="text-2xl font-bold" th:text="${broadcast.totalCount - doneCount}"></div></div>
         </div>
+
+        <!-- Error detail accordion: collapsed by default; click 「エラー詳細を表示」 to reveal
+             the list of skipped addresses with their failure reason. Uses native <details>
+             so no JavaScript is needed and screen-readers behave correctly. -->
+        <details th:if="${broadcast.unsendableCount != null and broadcast.unsendableCount > 0}"
+                 class="mt-4 rounded border border-amber-300 bg-amber-50">
+            <summary class="px-3 py-2 text-sm font-semibold text-amber-900 cursor-pointer select-none">
+                ⚠ エラー詳細 (送信不可 <span th:text="${broadcast.unsendableCount}">0</span> 件)
+            </summary>
+            <div class="px-3 py-2 text-xs text-amber-900 border-t border-amber-200">
+                <p class="mb-2">
+                    以下のアドレスは形式エラー（先頭/末尾ドット、連続ドット等）のため、転送機の SMTP 送信時に拒否されることが事前に判明しているため、今回の一斉送信では除外されました。
+                </p>
+                <table class="w-full text-xs">
+                    <thead class="bg-amber-100">
+                        <tr>
+                            <th class="px-2 py-1 text-left" style="width: 70px;">ID</th>
+                            <th class="px-2 py-1 text-left">メールアドレス</th>
+                            <th class="px-2 py-1 text-left" style="width: 160px;">エラー内容</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-amber-100">
+                        <tr th:each="u : ${unsendableUsers}">
+                            <td class="px-2 py-1 font-mono" th:text="${u.id}"></td>
+                            <td class="px-2 py-1">
+                                <a class="text-blue-700 hover:underline"
+                                   th:href="@{'/manager/users/' + ${u.id}}" th:text="${u.email}"></a>
+                            </td>
+                            <td class="px-2 py-1" th:text="${u.addressInvalidReason == 'trailing_dot'} ? '末尾にドット' :
+                                                          (${u.addressInvalidReason == 'leading_dot'} ? '先頭にドット' :
+                                                          (${u.addressInvalidReason == 'double_dot'} ? '連続ドット' : ${u.addressInvalidReason}))"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </details>
 
         <div class="mt-4" th:if="${broadcast.status == 'SENDING' or broadcast.status == 'SCHEDULED'}">
             <form method="post" th:action="@{'/manager/messages/broadcast/' + ${broadcast.id} + '/cancel'}"

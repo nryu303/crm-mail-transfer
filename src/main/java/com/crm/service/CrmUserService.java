@@ -351,8 +351,19 @@ public class CrmUserService {
             return;
         }
 
+        // RFC-invalid local-part — common with docomo legacy addresses (trailing dot,
+        // double-dot). We still REGISTER the user (the mailbox exists at docomo) but
+        // flag them so broadcasts skip them and the operator sees an error notice.
+        // Surfaces in the import result table so the admin can decide before sending.
+        String addrInvalid = CsvUtil.detectInvalidLocalPart(email);
+        if (addrInvalid != null) {
+            result.addError(rowNum,
+                    "送信不可（" + CsvUtil.invalidLocalPartLabel(addrInvalid) + "）: " + email);
+        }
+
         CrmUser u = new CrmUser();
         u.setEmail(email);
+        u.setAddressInvalidReason(addrInvalid);
         u.setDisplayName(displayName);
         u.setCarrierDomain(deriveCarrierDomainIfBlank(carrierDomain, email));
         u.setMemo(memo);

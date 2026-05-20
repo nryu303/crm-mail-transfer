@@ -258,6 +258,19 @@ public class BroadcastController {
         boolean running = Broadcast.STATUS_SENDING.equals(b.get().getStatus())
                 || Broadcast.STATUS_SCHEDULED.equals(b.get().getStatus());
         model.addAttribute("running", running);
+
+        // Resolve unsendable user IDs → display rows so the エラー詳細 accordion can show
+        // the actual addresses without an extra round trip from the browser.
+        java.util.List<com.crm.entity.CrmUser> unsendableUsers = java.util.Collections.emptyList();
+        String idsCsv = b.get().getUnsendableUserIds();
+        if (idsCsv != null && !idsCsv.isEmpty()) {
+            java.util.List<Long> ids = new java.util.ArrayList<>();
+            for (String tok : idsCsv.split(",")) {
+                try { ids.add(Long.parseLong(tok.trim())); } catch (NumberFormatException ignore) {}
+            }
+            if (!ids.isEmpty()) unsendableUsers = userService.findAllByIds(ids);
+        }
+        model.addAttribute("unsendableUsers", unsendableUsers);
         return "message/broadcast-progress";
     }
 

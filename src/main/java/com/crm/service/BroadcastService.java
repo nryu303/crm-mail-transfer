@@ -72,11 +72,20 @@ public class BroadcastService {
     public Broadcast createAndQueue(BroadcastForm form, Long adminUserId) {
         List<CrmUser> targets = findTargetUsers(form);
 
-        // Pre-compute which targets are actually deliverable (have at least one active pool binding)
+        // Pre-compute which targets are actually deliverable (have at least one active pool
+        // binding AND don't have an RFC-invalid local-part flag). Users whose
+        // ADDRESS_INVALID_REASON is set are reliably rejected by the relay's SMTP client
+        // (trailing/leading dot, double-dot — see CsvUtil.detectInvalidLocalPart) so we
+        // skip them here rather than burning a slot in the dispatcher.
         List<CrmUser> deliverable = new java.util.ArrayList<>();
         int unbound = 0, poolMissing = 0;
+        java.util.List<Long> unsendableIds = new java.util.ArrayList<>();
         java.util.Map<Long, CarrierAddressPool> userToPool = new java.util.HashMap<>();
         for (CrmUser u : targets) {
+            if (u.getAddressInvalidReason() != null && !u.getAddressInvalidReason().isEmpty()) {
+                unsendableIds.add(u.getId());
+                continue;
+            }
             Optional<CarrierAddressPool> pool = bindingService.firstBoundFor(u.getId());
             if (!pool.isPresent()) { unbound++; continue; }
             if (Boolean.FALSE.equals(pool.get().getIsActive())) { poolMissing++; continue; }
@@ -88,7 +97,8 @@ public class BroadcastService {
             throw new NoTargetsException(
                     "条件に合致し、かつキャリアアドレスが割り当て済みのユーザーが見つかりませんでした。"
                   + " (絞り込みに合致したユーザー: " + targets.size()
-                  + "件、うちキャリアアドレス未割当: " + unbound
+                  + "件、うちアドレス形式エラー: " + unsendableIds.size()
+                  + "件、キャリアアドレス未割当: " + unbound
                   + "件、プール側で無効: " + poolMissing + "件)");
         }
 
@@ -103,6 +113,15 @@ public class BroadcastService {
                 ? 60 : form.getRatePerMinute());
         b.setTargetFilter(buildFilterSummary(form, targets.size(), unbound + poolMissing));
         b.setTotalCount(deliverable.size());
+        b.setUnsendableCount(unsendableIds.size());
+        if (!unsendableIds.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < unsendableIds.size(); i++) {
+                if (i > 0) sb.append(',');
+                sb.append(unsendableIds.get(i));
+            }
+            b.setUnsendableUserIds(sb.toString());
+        }
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startAt = form.getScheduledAt() != null && form.getScheduledAt().isAfter(now)
                 ? form.getScheduledAt() : now;
@@ -137,8 +156,9 @@ public class BroadcastService {
                 messageRepository.save(persisted);
             }
         }
-        log.info("Broadcast {} created: {} queued (filter matched {}, {} skipped)",
-                saved.getId(), saved.getTotalCount(), targets.size(), unbound + poolMissing);
+        log.info("Broadcast {} created: {} queued (filter matched {}, skipped invalid-address {}, no-binding {}, pool-inactive {})",
+                saved.getId(), saved.getTotalCount(), targets.size(),
+                unsendableIds.size(), unbound, poolMissing);
         return saved;
     }
 

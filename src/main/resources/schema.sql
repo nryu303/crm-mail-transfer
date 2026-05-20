@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS ADMIN_USER (
 CREATE TABLE IF NOT EXISTS CRM_USER (
   ID                  BIGINT AUTO_INCREMENT PRIMARY KEY,
   EMAIL               VARCHAR(255)  NOT NULL    COMMENT 'user email address',
+  ADDRESS_INVALID_REASON VARCHAR(64) DEFAULT NULL
+    COMMENT 'RFC-invalid local-part flag, e.g. trailing_dot, leading_dot, double_dot — set at import time or retroactively after a relay-side SMTP reject; broadcast skips users with this flagged',
   DISPLAY_NAME        VARCHAR(255)  DEFAULT NULL,
   LOGIN_ID            VARCHAR(255)  DEFAULT NULL  COMMENT 'reply page login ID',
   LOGIN_PASSWORD      VARCHAR(255)  DEFAULT NULL  COMMENT 'BCrypt hash',
@@ -45,6 +47,7 @@ CREATE TABLE IF NOT EXISTS CRM_USER (
   AD_CODE             VARCHAR(64)   DEFAULT NULL  COMMENT 'agency / advertising campaign tag — links user to AD_CODE.code',
   GENDER              VARCHAR(8)    DEFAULT NULL  COMMENT 'M | F | NULL — used for the agency-dashboard 男性/女性 split',
   KEY IDX_CRM_USER_CARRIER (CARRIER_CODE, CARRIER_DOMAIN),
+  KEY IDX_CRM_USER_ADDR_INVALID (ADDRESS_INVALID_REASON),
   KEY IDX_CRM_USER_STATUS (STATUS),
   KEY IDX_CRM_USER_LOGIN_ID (LOGIN_ID),
   KEY IDX_CRM_USER_AD_CODE (AD_CODE),
@@ -153,6 +156,10 @@ CREATE TABLE IF NOT EXISTS BROADCAST (
   TOTAL_COUNT     INT           DEFAULT 0,
   SENT_COUNT      INT           DEFAULT 0,
   FAILED_COUNT    INT           DEFAULT 0,
+  UNSENDABLE_COUNT INT          DEFAULT 0
+    COMMENT 'users in filter who were skipped at queue time because CRM_USER.ADDRESS_INVALID_REASON was set (RFC-invalid local-part, etc.)',
+  UNSENDABLE_USER_IDS TEXT      DEFAULT NULL
+    COMMENT 'comma-separated CRM_USER.ID list of skipped users; surfaced on the broadcast progress page エラー詳細',
   CREATED_AT      DATETIME      NOT NULL,
   UPDATED_AT      DATETIME      NOT NULL,
   KEY IDX_BROADCAST_STATUS_SCHED (STATUS, SCHEDULED_AT)
