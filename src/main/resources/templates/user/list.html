@@ -90,7 +90,7 @@
         <div class="flex items-center gap-2 mb-3 flex-wrap">
             <h1 class="text-xl font-bold text-slate-800 flex items-center gap-3">
                 ユーザー管理
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700"
+                <span id="userTotalCount" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700"
                       th:text="${users.totalElements} + ' 名'">0 名</span>
                 <!-- Status quick-filter, inline with the heading per operator request.
                      The select drives the hidden status field on the main searchForm via JS
@@ -683,17 +683,45 @@ var committedFolderFilter = '';
                 f.appendChild(i);
             });
         } else if (committed !== '') {
-            // Folder-scope broadcast (no row checks, folder filter committed).
+            // Folder-scope broadcast (no row checks, folder filter committed). Forward every
+            // active filter param from the URL — folder alone is NOT enough; docomo carrier /
+            // gender / status / period filters all need to survive the redirect, or the
+            // broadcast goes to the wrong users (2026-05-21 incident: 3,148 docomo users in
+            // the page → 5,000 mixed-carrier users actually queued).
             var srcVal = committed === '__NONE__' ? '' : committed;
             var limitEl = document.getElementById('folderScopeLimit');
             var lim = limitEl && limitEl.value ? parseInt(limitEl.value, 10) : 0;
             var srcLabel = filterSelEl
                     ? filterSelEl.options[filterSelEl.selectedIndex].text
                     : srcVal;
-            var limitText = lim > 0 ? '上限 ' + lim.toLocaleString() + ' 名' : '全件';
-            if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'に一斉送信します。\n次の画面で本文を作成後に確定送信となります。よろしいですか?')) return;
+            // Read the visible result-total badge ("X 名") so the confirm dialog shows the
+            // ACTUAL filtered count, not just the limit.
+            var totalBadge = document.getElementById('userTotalCount');
+            var visibleTotal = totalBadge ? parseInt((totalBadge.textContent || '').replace(/[^0-9]/g, ''), 10) : 0;
+            var actualTarget = (lim > 0 && visibleTotal > 0)
+                    ? Math.min(lim, visibleTotal) : (visibleTotal || lim);
+            var actualText = actualTarget > 0
+                    ? '実際の対象 ' + actualTarget.toLocaleString() + ' 名 (現在の絞り込み)'
+                    : '上限 ' + (lim > 0 ? lim.toLocaleString() : '') + ' 名';
+            if (!confirm('フォルダ「' + srcLabel + '」+ 現在の絞り込み条件で一斉送信します。\n' + actualText + '\n次の画面で本文を作成後に確定送信となります。よろしいですか?')) return;
+
             f.action = '/manager/messages/broadcast/new-from-folder';
             copyCsrf();
+            // Mirror the URL's full filter set into the POST body so the server can re-apply
+            // every filter (not just folder). page/size are stripped since broadcast wants
+            // the unpaged result.
+            try {
+                var qs = new URLSearchParams(window.location.search);
+                qs.forEach(function (value, key) {
+                    if (!value) return;
+                    if (key === 'page' || key === 'size') return;
+                    if (key === '_csrf') return; // already forwarded above
+                    var i = document.createElement('input');
+                    i.type = 'hidden'; i.name = key; i.value = value;
+                    f.appendChild(i);
+                });
+            } catch (_) { /* URLSearchParams unavailable — fall back to just sourceFolder */ }
+            // Legacy alias for older server builds.
             var sf = document.createElement('input'); sf.type='hidden'; sf.name='sourceFolder'; sf.value=srcVal; f.appendChild(sf);
             if (lim > 0) {
                 var sl = document.createElement('input'); sl.type='hidden'; sl.name='scopeLimit'; sl.value=String(lim); f.appendChild(sl);

@@ -139,23 +139,36 @@ public class BroadcastController {
     }
 
     /**
-     * Folder-scope broadcast entry: the user list 「対象件数一斉送信」 button POSTs here when
-     * a folder filter is committed. We resolve the folder→IDs server-side (capped by
-     * scopeLimit), stash the result in session, and redirect to /broadcast/new — same
-     * downstream flow as {@link #selectUsersForBroadcast}. Doing the resolution here means
-     * the form sees a stable snapshot even if a user is moved into/out of the folder while
-     * the operator is still composing the message.
+     * Scope-based broadcast entry: the user list 「対象件数一斉送信」 button POSTs here when a
+     * filter is committed on /manager/users. We resolve EVERY active filter (folder +
+     * emailDomain + gender + status + adCode + period filters + …) into a user-id list,
+     * capped by {@code scopeLimit}, stash it in session, and redirect to /broadcast/new.
+     *
+     * Important: this used to take only {@code sourceFolder} which meant the docomo carrier
+     * filter (and every other non-folder filter) was silently dropped — operator saw 3,148
+     * users on the list but the broadcast went to ~5,000 (every user in the folder
+     * regardless of carrier). 2026-05-21 fix re-binds the full UserSearchForm so every
+     * filter survives the redirect.
+     *
+     * "sourceFolder" form param maps to the UserSearchForm.folder field via the JS rewrite
+     * in user/list.html — kept as an alias so the older 2026-05-19 incarnation of the form
+     * continues to work.
      */
     @PostMapping("/new-from-folder")
-    public String selectFolderForBroadcast(@RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+    public String selectFolderForBroadcast(@ModelAttribute com.crm.dto.UserSearchForm form,
                                             @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
+                                            @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
                                             HttpSession session,
                                             RedirectAttributes ra) {
-        String folder = (sourceFolder == null || sourceFolder.trim().isEmpty()) ? null : sourceFolder.trim();
-        java.util.List<Long> userIds = userService.findIdsInFolder(folder, scopeLimit);
+        // Legacy alias: if the form's folder field wasn't bound but sourceFolder was sent,
+        // copy it across so older JS still works during the rollout.
+        if ((form.getFolder() == null || form.getFolder().isEmpty()) && sourceFolder != null && !sourceFolder.isEmpty()) {
+            form.setFolder(sourceFolder);
+        }
+        java.util.List<Long> userIds = userService.findIdsBySearch(form, scopeLimit);
         if (userIds == null || userIds.isEmpty()) {
             session.removeAttribute("broadcastSelectedUserIds");
-            ra.addFlashAttribute("flashError", "対象フォルダにユーザーがいません");
+            ra.addFlashAttribute("flashError", "条件に合致するユーザーがいません");
             return "redirect:/manager/users";
         }
         session.setAttribute("broadcastSelectedUserIds", new java.util.ArrayList<>(userIds));

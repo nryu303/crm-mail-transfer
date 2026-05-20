@@ -211,6 +211,26 @@ public class CrmUserService {
         return repository.bulkUpdateFolderByFolder(from, to);
     }
 
+    /**
+     * Resolve a full UserSearchForm (folder + emailDomain + gender + status + adCode + period
+     * filters etc.) into a list of user IDs, optionally capped to the first {@code limit}
+     * (ordered by id ASC for determinism). This is the path used by the user-list "対象件数
+     * 一斉送信" button so the broadcast respects every active filter on the page, not just
+     * the folder. Previously {@link #findIdsInFolder} only honoured the folder which
+     * silently dropped the carrier / gender / status filters and sent to the wrong users.
+     */
+    public java.util.List<Long> findIdsBySearch(com.crm.dto.UserSearchForm form, Integer limit) {
+        org.springframework.data.jpa.domain.Specification<CrmUser> spec = buildSpecification(form);
+        Sort idAsc = Sort.by(Sort.Direction.ASC, "id");
+        if (limit != null && limit > 0) {
+            return repository.findAll(spec, PageRequest.of(0, limit, idAsc))
+                    .getContent().stream().map(CrmUser::getId)
+                    .collect(java.util.stream.Collectors.toList());
+        }
+        return repository.findAll(spec, idAsc).stream().map(CrmUser::getId)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
     public java.util.List<Long> findIdsInFolder(String folder, Integer limit) {
         java.util.List<Long> ids = (folder == null)
                 ? repository.findIdsByFolderIsNull()
