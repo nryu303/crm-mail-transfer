@@ -109,7 +109,7 @@
             <a class="text-sm px-3 py-1.5 border border-slate-300 text-slate-700 rounded bg-white hover:bg-slate-50"
                th:href="@{/manager/users/import}">CSVインポート</a>
             <a class="text-sm px-3 py-1.5 border border-slate-300 text-slate-700 rounded bg-white hover:bg-slate-50"
-               th:href="@{/manager/users/export.csv(email=${searchForm.email},displayName=${searchForm.displayName},status=${searchForm.status},carrierCode=${searchForm.carrierCode},emailDomain=${searchForm.emailDomain},folder=${searchForm.folder})}">CSVエクスポート</a>
+               th:href="@{/manager/users/export.csv(email=${searchForm.email},displayName=${searchForm.displayName},status=${searchForm.status},carrierCode=${searchForm.carrierCode},emailDomains=${searchForm.emailDomains},folders=${searchForm.folders})}">CSVエクスポート</a>
             <a class="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm"
                th:href="@{/manager/users/new}">新規作成</a>
         </div>
@@ -155,41 +155,43 @@
                                         </select>
                                     </span>
                                 </label>
-                                <select class="tw-input" id="folderFilterSelect" th:field="*{folder}">
-                                    <option value="">すべて</option>
+                                <!-- Multi-select (2026-05-21): Ctrl+クリック or Shift+クリックで複数選択可。
+                                     size=5 keeps the listbox compact but visible; no "すべて" prompt
+                                     because empty selection = no filter. The orphan (旧名) loop
+                                     covers EVERY stranded value when the operator filters on multiple. -->
+                                <select class="tw-input" id="folderFilterSelect"
+                                        th:field="*{folders}" multiple size="5"
+                                        title="Ctrl+クリック / Shift+クリック で複数選択">
                                     <option value="__NONE__">（未設定）</option>
-                                    <!-- If the URL's ?folder=... value isn't in the configured list (folder
-                                         was renamed) the operator would otherwise see "すべて" and assume the
-                                         filter wasn't applied. Render the stranded value as an option so the
-                                         dropdown reflects the actual URL state. -->
-                                    <option th:if="${searchForm.folder != null and searchForm.folder != '' and searchForm.folder != '__NONE__' and !#lists.contains(folders, searchForm.folder)}"
-                                            th:value="${searchForm.folder}"
-                                            th:text="${searchForm.folder} + ' （旧名）'"></option>
+                                    <option th:each="orphan : ${searchForm.folders}"
+                                            th:if="${orphan != null and orphan != '' and orphan != '__NONE__' and !#lists.contains(folders, orphan)}"
+                                            th:value="${orphan}"
+                                            th:text="${orphan} + ' （旧名）'"></option>
                                     <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
                                 </select>
                             </div>
                             <div class="min-w-0" style="flex:1 1 0;">
-                                <label class="block text-xs text-slate-500 mb-1">広告コード</label>
-                                <select class="tw-input" th:field="*{adCode}">
-                                    <option value="">すべて</option>
+                                <label class="block text-xs text-slate-500 mb-1">広告コード <span class="text-slate-400 normal-case">(複数選択可)</span></label>
+                                <select class="tw-input" th:field="*{adCodes}" multiple size="5"
+                                        title="Ctrl+クリック / Shift+クリック で複数選択">
                                     <option value="__NONE__">（未設定）</option>
                                     <option th:each="ac : ${adCodeChoices}" th:value="${ac.code}" th:text="${ac.name} + ' (' + ${ac.code} + ')'"></option>
                                 </select>
                             </div>
                             <div class="min-w-0" style="flex:1 1 0;">
-                                <label class="block text-xs text-slate-500 mb-1">性別</label>
-                                <select class="tw-input" th:field="*{gender}">
-                                    <option value="">すべて</option>
+                                <label class="block text-xs text-slate-500 mb-1">性別 <span class="text-slate-400 normal-case">(複数選択可)</span></label>
+                                <select class="tw-input" th:field="*{genders}" multiple size="4"
+                                        title="Ctrl+クリック / Shift+クリック で複数選択">
                                     <option value="M">男性</option>
                                     <option value="F">女性</option>
                                     <option value="__NONE__">（未設定）</option>
                                 </select>
                             </div>
                             <div class="min-w-0" style="flex:1 1 0;">
-                                <label class="block text-xs text-slate-500 mb-1">キャリア</label>
-                                <select class="tw-input" th:field="*{emailDomain}">
-                                    <option value="">すべて</option>
-                                    <option th:each="d : ${emailDomains}" th:value="${d}" th:text="'@' + ${d}"></option>
+                                <label class="block text-xs text-slate-500 mb-1">キャリア <span class="text-slate-400 normal-case">(複数選択可)</span></label>
+                                <select class="tw-input" th:field="*{emailDomains}" multiple size="5"
+                                        title="Ctrl+クリック / Shift+クリック で複数選択">
+                                    <option th:each="d : ${emailDomainChoices}" th:value="${d}" th:text="'@' + ${d}"></option>
                                 </select>
                             </div>
                             <button type="submit" class="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded flex-shrink-0">検索</button>
@@ -356,33 +358,33 @@
                     <li>
                         <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                            th:classappend="${users.first} ? 'opacity-50 pointer-events-none'"
-                           th:href="@{/manager/users(page=${users.number - 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}">前へ</a>
+                           th:href="@{/manager/users(page=${users.number - 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}">前へ</a>
                     </li>
                     <!-- Windowed pagination: first page, an ellipsis,
                          a sliding window of current ± 2, an ellipsis, last page.
                          Avoids the 1..151 wall when totalPages is large. -->
                     <li th:if="${users.number > 2}">
                         <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
-                           th:href="@{/manager/users(page=0,size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}">1</a>
+                           th:href="@{/manager/users(page=0,size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}">1</a>
                     </li>
                     <li th:if="${users.number > 3}" style="color:#94a3b8; padding:0 4px;">…</li>
                     <li th:each="i : ${#numbers.sequence(0, users.totalPages - 1)}"
                         th:if="${i >= users.number - 2 and i <= users.number + 2}">
                         <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                            th:classappend="${i == users.number} ? 'bg-blue-600 text-white border-blue-600'"
-                           th:href="@{/manager/users(page=${i},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}"
+                           th:href="@{/manager/users(page=${i},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}"
                            th:text="${i + 1}"></a>
                     </li>
                     <li th:if="${users.number < users.totalPages - 4}" style="color:#94a3b8; padding:0 4px;">…</li>
                     <li th:if="${users.number < users.totalPages - 3}">
                         <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
-                           th:href="@{/manager/users(page=${users.totalPages - 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}"
+                           th:href="@{/manager/users(page=${users.totalPages - 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}"
                            th:text="${users.totalPages}"></a>
                     </li>
                     <li>
                         <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                            th:classappend="${users.last} ? 'opacity-50 pointer-events-none'"
-                           th:href="@{/manager/users(page=${users.number + 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomain=${searchForm.emailDomain},status=${searchForm.status},folder=${searchForm.folder})}">次へ</a>
+                           th:href="@{/manager/users(page=${users.number + 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}">次へ</a>
                     </li>
                 </ul>
             </nav>

@@ -469,6 +469,37 @@ public class CrmUserService {
 
     private static String safe(String s) { return s == null ? "" : s; }
 
+    /**
+     * Build an OR-of-equals (or OR-of-LIKEs for emailDomain) predicate for the given list of
+     * filter values, and append it to {@code predicates}. Each value becomes one branch in
+     * the OR; "__NONE__" maps to IS NULL. {@code likeSuffix=true} switches to
+     * {@code LIKE '%@<value>'} for right-anchored domain matching. An empty list adds no
+     * predicate (no filter for that column).
+     */
+    private static void applyMultiValuePredicate(java.util.List<String> values,
+                                                  List<Predicate> predicates,
+                                                  javax.persistence.criteria.CriteriaBuilder cb,
+                                                  javax.persistence.criteria.Root<CrmUser> root,
+                                                  String column, boolean likeSuffix) {
+        if (values == null || values.isEmpty()) return;
+        List<Predicate> branches = new ArrayList<>(values.size());
+        for (String v : values) {
+            if (v == null) continue;
+            String t = v.trim();
+            if (t.isEmpty()) continue;
+            if ("__NONE__".equals(t)) {
+                branches.add(cb.isNull(root.get(column)));
+            } else if (likeSuffix) {
+                branches.add(cb.like(root.get(column), "%@" + t));
+            } else {
+                branches.add(cb.equal(root.get(column), t));
+            }
+        }
+        if (branches.isEmpty()) return;
+        if (branches.size() == 1) predicates.add(branches.get(0));
+        else predicates.add(cb.or(branches.toArray(new Predicate[0])));
+    }
+
     private static Specification<CrmUser> buildSpecification(UserSearchForm form) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -489,32 +520,14 @@ public class CrmUserService {
             }
             // carrierCode field on CrmUser was removed; the form field is preserved for binding
             // compatibility but ignored here (filter by emailDomain instead).
-            if (hasText(form.getEmailDomain())) {
-                // Match the part after '@' on the email: LIKE '%@<domain>' (right-anchored).
-                String d = form.getEmailDomain().trim();
-                predicates.add(cb.like(root.get("email"), "%@" + d));
-            }
-            if (hasText(form.getFolder())) {
-                if ("__NONE__".equals(form.getFolder())) {
-                    predicates.add(cb.isNull(root.get("folder")));
-                } else {
-                    predicates.add(cb.equal(root.get("folder"), form.getFolder()));
-                }
-            }
-            if (hasText(form.getAdCode())) {
-                if ("__NONE__".equals(form.getAdCode())) {
-                    predicates.add(cb.isNull(root.get("adCode")));
-                } else {
-                    predicates.add(cb.equal(root.get("adCode"), form.getAdCode()));
-                }
-            }
-            if (hasText(form.getGender())) {
-                if ("__NONE__".equals(form.getGender())) {
-                    predicates.add(cb.isNull(root.get("gender")));
-                } else {
-                    predicates.add(cb.equal(root.get("gender"), form.getGender()));
-                }
-            }
+            // Each of the four list filters below applies an OR across its values. "__NONE__"
+            // within a list still resolves to IS NULL (combined under the same OR) so an
+            // operator can pick e.g. [docomo.ne.jp, __NONE__] to mean "docomo OR no domain".
+            applyMultiValuePredicate(form.getEmailDomains(), predicates, cb, root,
+                    "email", true /*likeSuffix*/);
+            applyMultiValuePredicate(form.getFolders(), predicates, cb, root, "folder", false);
+            applyMultiValuePredicate(form.getAdCodes(), predicates, cb, root, "adCode", false);
+            applyMultiValuePredicate(form.getGenders(), predicates, cb, root, "gender", false);
 
             // Period filters — any combination can be set.
             java.time.LocalDateTime loginFrom = parseStart(form.getLoginFrom());

@@ -104,7 +104,7 @@ public class UserController {
         model.addAttribute("rankById", rankById);
 
         // Email-domain filter choices (distinct "@domain" values currently in the DB).
-        model.addAttribute("emailDomains", userRepository.findDistinctEmailDomains());
+        model.addAttribute("emailDomainChoices", userRepository.findDistinctEmailDomains());
         // Configurable folder choices for the filter + bulk-move control.
         model.addAttribute("folders", folderSettingService.listFolders());
         // Active carrier-pool addresses for the bulk-bind dropdown.

@@ -8,14 +8,16 @@ public class UserSearchForm {
     private String status;
     /** Legacy URL param tolerated for backwards-compat with old bookmarks; ignored. */
     private String carrierCode;
-    /** Match emails whose part after '@' equals this value. */
-    private String emailDomain;
-    /** Match exact folder name (or "__NONE__" for users without a folder). */
-    private String folder;
-    /** Match exact ad_code (or "__NONE__" for users with no ad_code). */
-    private String adCode;
-    /** "M" / "F" / "__NONE__" / "" (any). */
-    private String gender;
+    /**
+     * Filters that accept multiple values from the user-list <select multiple> widgets.
+     * Each list is the canonical store; the singular getter/setter pair below is a
+     * backwards-compat alias used by older code and ?folder=X-style bookmarks. Empty
+     * list = no filter.
+     */
+    private java.util.List<String> emailDomains = new java.util.ArrayList<>();
+    private java.util.List<String> folders      = new java.util.ArrayList<>();
+    private java.util.List<String> adCodes      = new java.util.ArrayList<>();
+    private java.util.List<String> genders      = new java.util.ArrayList<>();
 
     // Period filters (all optional). Dates are interpreted in local tz at midnight/next-midnight.
     private String loginFrom;
@@ -56,15 +58,54 @@ public class UserSearchForm {
     public String getCarrierCode() { return carrierCode; }
     public void setCarrierCode(String carrierCode) { this.carrierCode = carrierCode; }
 
-    public String getEmailDomain() { return emailDomain; }
-    public void setEmailDomain(String emailDomain) { this.emailDomain = emailDomain; }
+    public java.util.List<String> getEmailDomains() { return emailDomains; }
+    public void setEmailDomains(java.util.List<String> emailDomains) {
+        this.emailDomains = emailDomains == null ? new java.util.ArrayList<>() : trimmed(emailDomains);
+    }
+    public java.util.List<String> getFolders() { return folders; }
+    public void setFolders(java.util.List<String> folders) {
+        this.folders = folders == null ? new java.util.ArrayList<>() : trimmed(folders);
+    }
+    public java.util.List<String> getAdCodes() { return adCodes; }
+    public void setAdCodes(java.util.List<String> adCodes) {
+        this.adCodes = adCodes == null ? new java.util.ArrayList<>() : trimmed(adCodes);
+    }
+    public java.util.List<String> getGenders() { return genders; }
+    public void setGenders(java.util.List<String> genders) {
+        this.genders = genders == null ? new java.util.ArrayList<>() : trimmed(genders);
+    }
 
-    public String getFolder() { return folder; }
-    public void setFolder(String folder) { this.folder = folder; }
-    public String getAdCode() { return adCode; }
-    public void setAdCode(String adCode) { this.adCode = adCode; }
-    public String getGender() { return gender; }
-    public void setGender(String gender) { this.gender = gender; }
+    /**
+     * Singular getters/setters — kept so old code (BroadcastController.selectFolderForBroadcast
+     * sourceFolder alias, etc.) and bookmarked ?folder=X URLs continue to work. Reading
+     * returns the first list element (or null when empty); writing replaces the entire list.
+     */
+    public String getEmailDomain() { return emailDomains.isEmpty() ? null : emailDomains.get(0); }
+    public void setEmailDomain(String emailDomain) { this.emailDomains = singletonOrEmpty(emailDomain); }
+    public String getFolder() { return folders.isEmpty() ? null : folders.get(0); }
+    public void setFolder(String folder) { this.folders = singletonOrEmpty(folder); }
+    public String getAdCode() { return adCodes.isEmpty() ? null : adCodes.get(0); }
+    public void setAdCode(String adCode) { this.adCodes = singletonOrEmpty(adCode); }
+    public String getGender() { return genders.isEmpty() ? null : genders.get(0); }
+    public void setGender(String gender) { this.genders = singletonOrEmpty(gender); }
+
+    private static java.util.List<String> trimmed(java.util.List<String> in) {
+        java.util.List<String> out = new java.util.ArrayList<>(in.size());
+        for (String s : in) {
+            if (s == null) continue;
+            String t = s.trim();
+            if (!t.isEmpty()) out.add(t);
+        }
+        return out;
+    }
+    private static java.util.List<String> singletonOrEmpty(String v) {
+        if (v == null) return new java.util.ArrayList<>();
+        String t = v.trim();
+        if (t.isEmpty()) return new java.util.ArrayList<>();
+        java.util.List<String> out = new java.util.ArrayList<>(1);
+        out.add(t);
+        return out;
+    }
 
     public String getLoginFrom() { return loginFrom; }
     public void setLoginFrom(String loginFrom) { this.loginFrom = loginFrom; }
@@ -94,7 +135,8 @@ public class UserSearchForm {
 
     public boolean hasAnyFilter() {
         return hasText(email) || hasText(displayName) || hasText(status) || hasText(carrierCode)
-                || hasText(emailDomain) || hasText(folder);
+                || !emailDomains.isEmpty() || !folders.isEmpty()
+                || !adCodes.isEmpty() || !genders.isEmpty();
     }
 
     private static boolean hasText(String s) {
