@@ -206,7 +206,7 @@
                                                 th:checked="${#lists.contains(searchForm.folders, '__NONE__')}"/>（未設定）</label>
                                         <label th:each="orphan : ${searchForm.folders}"
                                                th:if="${orphan != null and !#strings.isEmpty(#strings.trim(orphan))
-                                                       and orphan != '__NONE__' and orphan != '_NONE_'
+                                                       and !#strings.containsIgnoreCase(orphan, 'NONE')
                                                        and !#lists.contains(folders, orphan)}"
                                                class="ms-dd-opt">
                                             <input type="checkbox" name="folders" th:value="${orphan}" checked/>
@@ -471,7 +471,7 @@
                     th:text="${p.address} + ' (' + ${p.carrierCode} + ')'"></option>
         </select>
         <button type="submit" class="btn-move" id="btnBindCarrier" disabled
-                formaction="/manager/users/bulk-bind-carrier">フォルダ内全割り当て</button>
+                formaction="/manager/users/bulk-bind-carrier">フォルダ対象件数割り当て</button>
         <button type="submit" class="btn-move btn-bulk-unbind" id="btnUnbindCarrier" disabled
                 formaction="/manager/users/bulk-unbind-carrier"
                 onclick="return confirm('選択したユーザーの割り当てを解除します。よろしいですか?');">割り当て削除</button>
@@ -503,7 +503,7 @@
 
     <!-- The yellow "全ユーザー割り当て" footer form was removed 2026-05-19 per client request:
          the same outcome is now reachable by selecting each folder and clicking the renamed
-         "フォルダ内全割り当て" button. The /manager/users/bulk-bind-all endpoint is left in
+         "フォルダ対象件数割り当て" button. The /manager/users/bulk-bind-all endpoint is left in
          place on the server in case ops scripts still call it, but no longer surfaced in the UI. -->
 </div>
 
@@ -662,9 +662,9 @@ function formatFolderLabel(values) {
         if (folderScopeMode) {
             btnMove.textContent = 'フォルダ内全件移動';
             btnMove.style.background = '#d97706';
-            if (btnDelete)        { btnDelete.textContent = 'フォルダ内全削除'; btnDelete.style.background = '#7f1d1d'; }
-            if (btnUnbindCarrier) { btnUnbindCarrier.textContent = 'フォルダ内全割り当て削除'; btnUnbindCarrier.style.background = '#d97706'; }
-            if (btnBindCarrier)   { btnBindCarrier.textContent = 'フォルダ内全割り当て'; btnBindCarrier.style.background = '#d97706'; }
+            if (btnDelete)        { btnDelete.textContent = 'フォルダ対象件数削除'; btnDelete.style.background = '#7f1d1d'; }
+            if (btnUnbindCarrier) { btnUnbindCarrier.textContent = 'フォルダ対象件数割り当て削除'; btnUnbindCarrier.style.background = '#7f1d1d'; }
+            if (btnBindCarrier)   { btnBindCarrier.textContent = 'フォルダ対象件数割り当て'; btnBindCarrier.style.background = '#d97706'; }
             if (btnBroad)         { btnBroad.textContent = '対象件数一斉送信'; btnBroad.style.background = '#d97706'; }
         } else {
             btnMove.textContent = '選択フォルダ移動';
