@@ -205,7 +205,9 @@
                                         <label class="ms-dd-opt"><input type="checkbox" name="folders" value="__NONE__"
                                                 th:checked="${#lists.contains(searchForm.folders, '__NONE__')}"/>（未設定）</label>
                                         <label th:each="orphan : ${searchForm.folders}"
-                                               th:if="${orphan != null and orphan != '' and orphan != '__NONE__' and !#lists.contains(folders, orphan)}"
+                                               th:if="${orphan != null and !#strings.isEmpty(#strings.trim(orphan))
+                                                       and orphan != '__NONE__' and orphan != '_NONE_'
+                                                       and !#lists.contains(folders, orphan)}"
                                                class="ms-dd-opt">
                                             <input type="checkbox" name="folders" th:value="${orphan}" checked/>
                                             <span th:text="${orphan} + ' （旧名）'"></span>
