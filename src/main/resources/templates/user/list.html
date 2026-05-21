@@ -485,6 +485,7 @@
         <span class="text-xs font-semibold text-slate-500 whitespace-nowrap">移動先フォルダ</span>
         <select class="folder-select" name="folder" id="folderSelect" disabled>
             <option value="">フォルダを選択</option>
+            <option value="__NONE__">（未設定）</option>
             <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
         </select>
         <button type="submit" class="btn-move" id="btnMove" disabled
@@ -532,6 +533,22 @@ document.addEventListener('DOMContentLoaded', function () {
         var chk = document.getElementById('chk_' + k);
         if (chk) togglePeriod(k, chk.checked);
     });
+    // Defensive sync: walk the URL's query string and force every multi-select checkbox
+    // whose name+value matches a query param to be checked. Belt-and-braces against any
+    // edge case where Thymeleaf's th:checked didn't fire (e.g. (未設定) for folders=__NONE__
+    // was reported reverting to "すべて" on 2026-05-21).
+    try {
+        var qs = new URLSearchParams(window.location.search);
+        ['folders','adCodes','genders','emailDomains'].forEach(function (name) {
+            var values = qs.getAll(name);
+            if (!values || values.length === 0) return;
+            values.forEach(function (val) {
+                var sel = 'details.ms-dd input[type="checkbox"][name="' + name + '"][value="'
+                        + val.replace(/"/g, '\\"') + '"]';
+                document.querySelectorAll(sel).forEach(function (cb) { cb.checked = true; });
+            });
+        });
+    } catch (_) { /* old browser without URLSearchParams — Thymeleaf rendering still works */ }
     initMultiSelectDropdowns();
 });
 
@@ -660,7 +677,7 @@ function formatFolderLabel(values) {
 
         // Button labels + colors switch with the mode.
         if (folderScopeMode) {
-            btnMove.textContent = 'フォルダ内全件移動';
+            btnMove.textContent = 'フォルダ対象件数移動';
             btnMove.style.background = '#d97706';
             if (btnDelete)        { btnDelete.textContent = 'フォルダ対象件数削除'; btnDelete.style.background = '#7f1d1d'; }
             if (btnUnbindCarrier) { btnUnbindCarrier.textContent = 'フォルダ対象件数割り当て削除'; btnUnbindCarrier.style.background = '#7f1d1d'; }

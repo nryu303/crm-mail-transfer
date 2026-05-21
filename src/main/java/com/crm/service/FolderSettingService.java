@@ -32,25 +32,30 @@ public class FolderSettingService {
     public List<String> listFolders() {
         String raw = repo.findBySettingKey(KEY).map(CrmSetting::getSettingValue).orElse(null);
         if (raw == null || raw.trim().isEmpty()) return DEFAULT_FOLDERS;
-        List<String> out = new ArrayList<>();
+        // LinkedHashSet preserves first-seen order while collapsing duplicates — defensive
+        // against a malformed saved value (2026-05-21: operator's list had "ーーーーーーーー"
+        // present twice, which surfaced as a doubled checkbox in the filter dropdown).
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
         for (String part : raw.split(",")) {
             String t = part.trim();
-            if (!t.isEmpty()) out.add(t);
+            if (!t.isEmpty()) seen.add(t);
         }
-        // Empty list (the operator explicitly cleared every row) is a valid state and is
-        // returned as-is. Falling back to DEFAULT_FOLDERS here would mask the operator's
-        // delete-all action and confuse the count display.
-        return out;
+        return new ArrayList<>(seen);
     }
 
     /** Replace the whole folder list with whatever the operator saved. No auto-injection
      *  of any "system" folder — the operator has full control over the list. */
     @Transactional
     public void save(List<String> folders) {
-        List<String> cleaned = folders == null ? new ArrayList<>() :
-                folders.stream().map(String::trim).filter(s -> !s.isEmpty())
-                       .collect(Collectors.toList());
-        String value = String.join(",", cleaned);
+        java.util.LinkedHashSet<String> dedup = new java.util.LinkedHashSet<>();
+        if (folders != null) {
+            for (String s : folders) {
+                if (s == null) continue;
+                String t = s.trim();
+                if (!t.isEmpty()) dedup.add(t);
+            }
+        }
+        String value = String.join(",", dedup);
         CrmSetting s = repo.findBySettingKey(KEY).orElseGet(() -> {
             CrmSetting ns = new CrmSetting();
             ns.setSettingKey(KEY);
