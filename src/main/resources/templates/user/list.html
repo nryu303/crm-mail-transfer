@@ -80,6 +80,44 @@
         .ulist .btn-broadcast { background:#2563eb; box-shadow:0 1px 3px rgba(37,99,235,.3); }
         .ulist .btn-broadcast:hover:not(:disabled) { background:#1d4ed8; }
         .ulist .btn-move:disabled, .ulist .btn-broadcast:disabled { background:#94a3b8; cursor:not-allowed; box-shadow:none; }
+
+        /* Compact multi-select dropdown built on <details>. Summary acts as the closed
+         * "input"; popover is a floating panel of checkboxes. Native focus-within / open
+         * pseudo-classes do most of the work — no JS required for show/hide, just for the
+         * summary-text-update and click-outside-to-close behaviour. */
+        .ulist .ms-dd { position: relative; }
+        .ulist .ms-dd-sum {
+            list-style: none; cursor: pointer; user-select: none;
+            font-size: .85rem; padding: 5px 28px 5px 10px;
+            border: 1px solid #cbd5e1; border-radius: 5px; background: #fff;
+            color: #1e293b; min-height: 32px; line-height: 20px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            position: relative;
+        }
+        .ulist .ms-dd-sum::-webkit-details-marker { display: none; }
+        .ulist .ms-dd-sum::after {
+            content: "▾"; position: absolute; right: 8px; top: 50%;
+            transform: translateY(-50%); font-size: .7rem; color: #94a3b8;
+        }
+        .ulist .ms-dd[open] > .ms-dd-sum { border-color: #2563eb; }
+        .ulist .ms-dd-pop {
+            position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 2px);
+            max-height: 260px; overflow-y: auto;
+            background: #fff; border: 1px solid #cbd5e1; border-radius: 5px;
+            box-shadow: 0 4px 12px rgba(0,0,0,.08);
+            padding: 4px;
+        }
+        .ulist .ms-dd-opt {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 8px; border-radius: 3px; font-size: .8rem;
+            cursor: pointer; color: #1e293b;
+        }
+        .ulist .ms-dd-opt:hover { background: #f1f5f9; }
+        .ulist .ms-dd-opt input[type="checkbox"] {
+            width: 14px; height: 14px; accent-color: #2563eb; cursor: pointer;
+            margin: 0; flex-shrink: 0;
+        }
+        .ulist .ms-dd-opt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     </style>
 </head>
 <body>
@@ -155,44 +193,72 @@
                                         </select>
                                     </span>
                                 </label>
-                                <!-- Multi-select (2026-05-21): Ctrl+クリック or Shift+クリックで複数選択可。
-                                     size=5 keeps the listbox compact but visible; no "すべて" prompt
-                                     because empty selection = no filter. The orphan (旧名) loop
-                                     covers EVERY stranded value when the operator filters on multiple. -->
-                                <select class="tw-input" id="folderFilterSelect"
-                                        th:field="*{folders}" multiple size="5"
-                                        title="Ctrl+クリック / Shift+クリック で複数選択">
-                                    <option value="__NONE__">（未設定）</option>
-                                    <option th:each="orphan : ${searchForm.folders}"
-                                            th:if="${orphan != null and orphan != '' and orphan != '__NONE__' and !#lists.contains(folders, orphan)}"
-                                            th:value="${orphan}"
-                                            th:text="${orphan} + ' （旧名）'"></option>
-                                    <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
-                                </select>
+                                <!-- Compact multi-select via <details>: summary stays one-line
+                                     ("3件選択中" / "未設定" / first-1-2 names) and the popover
+                                     of checkboxes only appears when the operator clicks. Reverted
+                                     from <select multiple size=5> which ate too much vertical
+                                     space. Checkboxes use name="folders" so Spring binds the
+                                     plural list field straight from the form. -->
+                                <details class="ms-dd" data-ms="folders">
+                                    <summary class="ms-dd-sum" data-empty-label="すべて">すべて</summary>
+                                    <div class="ms-dd-pop">
+                                        <label class="ms-dd-opt"><input type="checkbox" name="folders" value="__NONE__"
+                                                th:checked="${#lists.contains(searchForm.folders, '__NONE__')}"/>（未設定）</label>
+                                        <label th:each="orphan : ${searchForm.folders}"
+                                               th:if="${orphan != null and orphan != '' and orphan != '__NONE__' and !#lists.contains(folders, orphan)}"
+                                               class="ms-dd-opt">
+                                            <input type="checkbox" name="folders" th:value="${orphan}" checked/>
+                                            <span th:text="${orphan} + ' （旧名）'"></span>
+                                        </label>
+                                        <label th:each="f : ${folders}" class="ms-dd-opt">
+                                            <input type="checkbox" name="folders" th:value="${f}"
+                                                   th:checked="${#lists.contains(searchForm.folders, f)}"/>
+                                            <span th:text="${f}"></span>
+                                        </label>
+                                    </div>
+                                </details>
                             </div>
                             <div class="min-w-0" style="flex:1 1 0;">
-                                <label class="block text-xs text-slate-500 mb-1">広告コード <span class="text-slate-400 normal-case">(複数選択可)</span></label>
-                                <select class="tw-input" th:field="*{adCodes}" multiple size="5"
-                                        title="Ctrl+クリック / Shift+クリック で複数選択">
-                                    <option value="__NONE__">（未設定）</option>
-                                    <option th:each="ac : ${adCodeChoices}" th:value="${ac.code}" th:text="${ac.name} + ' (' + ${ac.code} + ')'"></option>
-                                </select>
+                                <label class="block text-xs text-slate-500 mb-1">広告コード</label>
+                                <details class="ms-dd" data-ms="adCodes">
+                                    <summary class="ms-dd-sum" data-empty-label="すべて">すべて</summary>
+                                    <div class="ms-dd-pop">
+                                        <label class="ms-dd-opt"><input type="checkbox" name="adCodes" value="__NONE__"
+                                                th:checked="${#lists.contains(searchForm.adCodes, '__NONE__')}"/>（未設定）</label>
+                                        <label th:each="ac : ${adCodeChoices}" class="ms-dd-opt">
+                                            <input type="checkbox" name="adCodes" th:value="${ac.code}"
+                                                   th:checked="${#lists.contains(searchForm.adCodes, ac.code)}"/>
+                                            <span th:text="${ac.name} + ' (' + ${ac.code} + ')'"></span>
+                                        </label>
+                                    </div>
+                                </details>
                             </div>
                             <div class="min-w-0" style="flex:1 1 0;">
-                                <label class="block text-xs text-slate-500 mb-1">性別 <span class="text-slate-400 normal-case">(複数選択可)</span></label>
-                                <select class="tw-input" th:field="*{genders}" multiple size="4"
-                                        title="Ctrl+クリック / Shift+クリック で複数選択">
-                                    <option value="M">男性</option>
-                                    <option value="F">女性</option>
-                                    <option value="__NONE__">（未設定）</option>
-                                </select>
+                                <label class="block text-xs text-slate-500 mb-1">性別</label>
+                                <details class="ms-dd" data-ms="genders">
+                                    <summary class="ms-dd-sum" data-empty-label="すべて">すべて</summary>
+                                    <div class="ms-dd-pop">
+                                        <label class="ms-dd-opt"><input type="checkbox" name="genders" value="M"
+                                                th:checked="${#lists.contains(searchForm.genders, 'M')}"/>男性</label>
+                                        <label class="ms-dd-opt"><input type="checkbox" name="genders" value="F"
+                                                th:checked="${#lists.contains(searchForm.genders, 'F')}"/>女性</label>
+                                        <label class="ms-dd-opt"><input type="checkbox" name="genders" value="__NONE__"
+                                                th:checked="${#lists.contains(searchForm.genders, '__NONE__')}"/>（未設定）</label>
+                                    </div>
+                                </details>
                             </div>
                             <div class="min-w-0" style="flex:1 1 0;">
-                                <label class="block text-xs text-slate-500 mb-1">キャリア <span class="text-slate-400 normal-case">(複数選択可)</span></label>
-                                <select class="tw-input" th:field="*{emailDomains}" multiple size="5"
-                                        title="Ctrl+クリック / Shift+クリック で複数選択">
-                                    <option th:each="d : ${emailDomainChoices}" th:value="${d}" th:text="'@' + ${d}"></option>
-                                </select>
+                                <label class="block text-xs text-slate-500 mb-1">キャリア</label>
+                                <details class="ms-dd" data-ms="emailDomains">
+                                    <summary class="ms-dd-sum" data-empty-label="すべて">すべて</summary>
+                                    <div class="ms-dd-pop">
+                                        <label th:each="d : ${emailDomainChoices}" class="ms-dd-opt">
+                                            <input type="checkbox" name="emailDomains" th:value="${d}"
+                                                   th:checked="${#lists.contains(searchForm.emailDomains, d)}"/>
+                                            <span th:text="'@' + ${d}"></span>
+                                        </label>
+                                    </div>
+                                </details>
                             </div>
                             <button type="submit" class="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded flex-shrink-0">検索</button>
                             <button type="button" class="inline-flex items-center px-3 py-2 border border-slate-300 bg-white text-slate-600 text-sm rounded hover:bg-slate-50 flex-shrink-0" onclick="window.location='/manager/users'">クリア</button>
@@ -464,13 +530,68 @@ document.addEventListener('DOMContentLoaded', function () {
         var chk = document.getElementById('chk_' + k);
         if (chk) togglePeriod(k, chk.checked);
     });
+    initMultiSelectDropdowns();
 });
 
+// --- Compact <details>-based multi-select dropdowns ---
+// Each .ms-dd block manages its own checked state and updates its <summary> caption with
+// the count or up-to-2 selected labels. The "data-empty-label" attribute is the fallback
+// (e.g. "すべて"). Clicking outside closes the popover via a single window listener.
+function initMultiSelectDropdowns() {
+    document.querySelectorAll('.ms-dd').forEach(function (dd) {
+        var sum = dd.querySelector('.ms-dd-sum');
+        if (!sum) return;
+        var emptyLabel = sum.getAttribute('data-empty-label') || 'すべて';
+        function refreshSummary() {
+            var checks = dd.querySelectorAll('input[type="checkbox"]:checked');
+            if (checks.length === 0) {
+                sum.textContent = emptyLabel;
+            } else if (checks.length <= 2) {
+                // Show the actual labels (use the <span> text or the value).
+                var labels = Array.prototype.map.call(checks, function (c) {
+                    var lbl = c.parentNode;
+                    var span = lbl ? lbl.querySelector('span') : null;
+                    return span ? span.textContent.trim()
+                                : (lbl ? lbl.textContent.trim() : c.value);
+                });
+                sum.textContent = labels.join(', ');
+            } else {
+                sum.textContent = checks.length + ' 件選択中';
+            }
+        }
+        dd.addEventListener('change', refreshSummary);
+        refreshSummary();
+    });
+    // One global listener that closes any open <details> when the user clicks outside it.
+    document.addEventListener('click', function (ev) {
+        document.querySelectorAll('.ms-dd[open]').forEach(function (dd) {
+            if (!dd.contains(ev.target)) dd.open = false;
+        });
+    });
+}
+
 // --- Selection footer (unified row-check + folder-scope state) ---
-// Page-level snapshot of the committed folder filter — whatever Thymeleaf rendered into the
-// select on page load (i.e. the URL state after the operator's last 検索). Folder-scope mode
-// is keyed on this; changing the dropdown alone, without re-submitting, must NOT activate it.
-var committedFolderFilter = '';
+// Page-level snapshot of the committed folder filter — what the URL said when the page
+// loaded (= the operator's last 検索 result). Folder-scope mode keys on THIS, not the live
+// checkbox state, so an operator who clicks a folder checkbox WITHOUT pressing 検索 doesn't
+// accidentally redefine the bulk-scope. 2026-05-21: array of selected folder values instead
+// of a single string, since the filter is now multi-select.
+var committedFolders = [];
+
+// Read selected values from one of the new <details data-ms="..."> multi-select widgets.
+function getMultiSelectValues(groupName) {
+    var sel = 'details.ms-dd[data-ms="' + groupName + '"] input[type="checkbox"]:checked';
+    return Array.prototype.map.call(document.querySelectorAll(sel), function (c) { return c.value; });
+}
+
+// Human-readable label of the current folder filter for confirm() dialogs.
+function formatFolderLabel(values) {
+    if (!values || values.length === 0) return '';
+    function pretty(v) { return v === '__NONE__' ? '（未設定）' : v; }
+    if (values.length === 1) return pretty(values[0]);
+    if (values.length === 2) return pretty(values[0]) + ', ' + pretty(values[1]);
+    return values.length + ' 件 (' + values.slice(0, 3).map(pretty).join(', ') + (values.length > 3 ? ', ...' : '') + ')';
+}
 
 (function () {
     var checkAll = document.getElementById('checkAll');
@@ -485,10 +606,10 @@ var committedFolderFilter = '';
     var btnBindCarrier = document.getElementById('btnBindCarrier');
     var btnUnbindCarrier = document.getElementById('btnUnbindCarrier');
     var btnDelete = document.getElementById('btnDelete');
-    var filterSelEl = document.getElementById('folderFilterSelect');
     var scopeFlag = document.getElementById('folderAllScope');
     var limitWrap = document.getElementById('folderScopeLimitWrap');
-    if (filterSelEl) committedFolderFilter = filterSelEl.value;
+    // Snapshot the committed folder filter from the rendered checkbox state.
+    committedFolders = getMultiSelectValues('folders');
 
     // Single source of truth for footer state — runs initially + every time row checks
     // change. Resolves the three operating modes:
@@ -503,7 +624,7 @@ var committedFolderFilter = '';
     function refresh() {
         var checkedList = [].filter.call(rows(), function (c) { return c.checked; });
         var hasRows = checkedList.length > 0;
-        var hasFolderFilter = committedFolderFilter !== '';
+        var hasFolderFilter = committedFolders.length > 0;
         var folderScopeMode = hasFolderFilter && !hasRows;
 
         // Status label: "X 件選択中" wins when rows are checked; otherwise hint at folder mode.
@@ -566,13 +687,14 @@ var committedFolderFilter = '';
     });
     refresh();
 
-    // Submit-handler block below still expects this IIFE-level scope handle.
+    // Submit-handler block — now reads folder selection from the new multi-select widget
+    // instead of the old single-value <select>. committedFolders (array) is the snapshot
+    // from page-load; filterSel.value / selectedIndex no longer exist.
     (function () {
         var scope = document.getElementById('folderAllScope');
-        var filterSel = document.getElementById('folderFilterSelect');
         var btnMove = document.getElementById('btnMove');
         var folderSel = document.getElementById('folderSelect');
-        if (!scope || !filterSel || !btnMove) return;
+        if (!scope || !btnMove) return;
 
         var limitSel = document.getElementById('folderScopeLimit');
 
@@ -612,23 +734,39 @@ var committedFolderFilter = '';
                         return;
                     }
                 }
-                if (!action || !scope.checked || filterSel.value === '') return;
-                var srcVal = filterSel.value === '__NONE__' ? '' : filterSel.value;
-                var srcLabel = filterSel.options[filterSel.selectedIndex].text;
+                // Folder-scope mode requires at least one committed folder AND no row checks
+                // (gate is enforced by the refresh() function that toggles scope.checked).
+                if (!action || !scope.checked || committedFolders.length === 0) return;
+
+                // Build label + list of folder values to send. Multi-folder operations send
+                // every committedFolders entry as a repeated sourceFolders=X&sourceFolders=Y
+                // param; the server iterates and runs the action on each folder's users.
+                var srcLabel = formatFolderLabel(committedFolders);
+                function addAllSourceFolders() {
+                    committedFolders.forEach(function (v) {
+                        // The server normalises "__NONE__" → null (=未設定). Send the literal
+                        // sentinel so backwards-compat single-value endpoints still work.
+                        addHidden('sourceFolders', v);
+                    });
+                    // Legacy single-value alias — server uses sourceFolders if present,
+                    // else falls back to sourceFolder for older code paths.
+                    addHidden('sourceFolder', committedFolders[0] === '__NONE__' ? '' : committedFolders[0]);
+                }
 
                 var lim = limitSel && limitSel.value ? parseInt(limitSel.value, 10) : 0;
                 var limitText = lim > 0 ? '上限 ' + lim.toLocaleString() + ' 名' : '全件';
+                var foldersText = '対象フォルダ: ' + srcLabel;
 
                 if (action.indexOf('bulk-move-folder') >= 0) {
                     var to = folderSel.options[folderSel.selectedIndex].text;
-                    if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'を「' + to + '」に移動します。\nよろしいですか?')) {
+                    if (!confirm(foldersText + '\n内の' + limitText + 'を「' + to + '」に移動します。\nよろしいですか?')) {
                         ev.preventDefault(); return;
                     }
                     addHidden('scope', 'allInFolder');
-                    addHidden('sourceFolder', srcVal);
+                    addAllSourceFolders();
                     if (lim > 0) addHidden('scopeLimit', lim);
                 } else if (action.indexOf('bulk-delete') >= 0) {
-                    if (!confirm('⚠️ フォルダ「' + srcLabel + '」内の' + limitText + 'を削除します。\n関連メッセージ・入金履歴・キャリア紐付けもすべて消えます。\nよろしいですか?')) {
+                    if (!confirm('⚠️ ' + foldersText + '\n内の' + limitText + 'を削除します。\n関連メッセージ・入金履歴・キャリア紐付けもすべて消えます。\nよろしいですか?')) {
                         ev.preventDefault(); return;
                     }
                     if (!confirm('本当に実行しますか? この操作は取り消せません。')) {
@@ -640,7 +778,7 @@ var committedFolderFilter = '';
                     if (!ph) { ph = document.createElement('input'); ph.type='hidden'; ph.name='confirmPassword'; bulkForm.appendChild(ph); }
                     ph.value = pw;
                     addHidden('scope', 'allInFolder');
-                    addHidden('sourceFolder', srcVal);
+                    addAllSourceFolders();
                     if (lim > 0) addHidden('scopeLimit', lim);
                 } else if (action.indexOf('bulk-bind-carrier') >= 0) {
                     // poolSel.value === '' means "all active pool addresses"; the controller
@@ -648,18 +786,18 @@ var committedFolderFilter = '';
                     // exactly which pool target they're committing to before we POST.
                     var poolLabel = (poolSel && poolSel.selectedIndex >= 0)
                             ? poolSel.options[poolSel.selectedIndex].text : '全キャリア（一括）';
-                    if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'へ「' + poolLabel + '」を割り当てます。\nよろしいですか?')) {
+                    if (!confirm(foldersText + '\n内の' + limitText + 'へ「' + poolLabel + '」を割り当てます。\nよろしいですか?')) {
                         ev.preventDefault(); return;
                     }
                     addHidden('scope', 'allInFolder');
-                    addHidden('sourceFolder', srcVal);
+                    addAllSourceFolders();
                     if (lim > 0) addHidden('scopeLimit', lim);
                 } else if (action.indexOf('bulk-unbind-carrier') >= 0) {
-                    if (!confirm('フォルダ「' + srcLabel + '」内の' + limitText + 'のキャリア割り当てを解除します。\nよろしいですか?')) {
+                    if (!confirm(foldersText + '\n内の' + limitText + 'のキャリア割り当てを解除します。\nよろしいですか?')) {
                         ev.preventDefault(); return;
                     }
                     addHidden('scope', 'allInFolder');
-                    addHidden('sourceFolder', srcVal);
+                    addAllSourceFolders();
                     if (lim > 0) addHidden('scopeLimit', lim);
                 }
             });
@@ -680,10 +818,7 @@ var committedFolderFilter = '';
         //      rows are checked.
         //   3. Otherwise fall through to /broadcast/new with no preselected users.
         // Always POSTed so big id lists never exceed Tomcat's 8KB GET-URL limit.
-        var filterSelEl = document.getElementById('folderFilterSelect');
-        var committed = (typeof committedFolderFilter !== 'undefined')
-                ? committedFolderFilter
-                : (filterSelEl ? filterSelEl.value : '');
+        var folders = (typeof committedFolders !== 'undefined' && committedFolders) ? committedFolders : [];
         var rowEls = document.querySelectorAll('.row-item');
         var ids = [].filter.call(rowEls, function (c) { return c.checked; }).map(function (c) { return c.value; });
         var f = document.createElement('form');
@@ -710,18 +845,22 @@ var committedFolderFilter = '';
                 i.type = 'hidden'; i.name = 'userIds'; i.value = id;
                 f.appendChild(i);
             });
-        } else if (committed !== '') {
+        } else if (folders.length > 0) {
             // Folder-scope broadcast (no row checks, folder filter committed). Forward every
             // active filter param from the URL — folder alone is NOT enough; docomo carrier /
             // gender / status / period filters all need to survive the redirect, or the
             // broadcast goes to the wrong users (2026-05-21 incident: 3,148 docomo users in
             // the page → 5,000 mixed-carrier users actually queued).
-            var srcVal = committed === '__NONE__' ? '' : committed;
+            // Multi-folder selection is supported: every committedFolders entry rides along
+            // as a repeated sourceFolders=X param (server unions them in the spec). The
+            // legacy singular sourceFolder is also sent (= the first folder) for older builds.
+            var firstFolder = folders[0];
+            var srcValLegacy = firstFolder === '__NONE__' ? '' : firstFolder;
             var limitEl = document.getElementById('folderScopeLimit');
             var lim = limitEl && limitEl.value ? parseInt(limitEl.value, 10) : 0;
-            var srcLabel = filterSelEl
-                    ? filterSelEl.options[filterSelEl.selectedIndex].text
-                    : srcVal;
+            var srcLabel = (typeof formatFolderLabel === 'function')
+                    ? formatFolderLabel(folders)
+                    : folders.join(', ');
             // Read the visible result-total badge ("X 名") so the confirm dialog shows the
             // ACTUAL filtered count, not just the limit.
             var totalBadge = document.getElementById('userTotalCount');
@@ -731,13 +870,15 @@ var committedFolderFilter = '';
             var actualText = actualTarget > 0
                     ? '実際の対象 ' + actualTarget.toLocaleString() + ' 名 (現在の絞り込み)'
                     : '上限 ' + (lim > 0 ? lim.toLocaleString() : '') + ' 名';
-            if (!confirm('フォルダ「' + srcLabel + '」+ 現在の絞り込み条件で一斉送信します。\n' + actualText + '\n次の画面で本文を作成後に確定送信となります。よろしいですか?')) return;
+            var folderWord = folders.length === 1 ? 'フォルダ' : 'フォルダ (' + folders.length + ' 件)';
+            if (!confirm(folderWord + '「' + srcLabel + '」+ 現在の絞り込み条件で一斉送信します。\n' + actualText + '\n次の画面で本文を作成後に確定送信となります。よろしいですか?')) return;
 
             f.action = '/manager/messages/broadcast/new-from-folder';
             copyCsrf();
             // Mirror the URL's full filter set into the POST body so the server can re-apply
             // every filter (not just folder). page/size are stripped since broadcast wants
-            // the unpaged result.
+            // the unpaged result. URLSearchParams.forEach iterates EACH repeated key, so
+            // multi-folder `folders=A&folders=B` survives intact.
             try {
                 var qs = new URLSearchParams(window.location.search);
                 qs.forEach(function (value, key) {
@@ -748,9 +889,17 @@ var committedFolderFilter = '';
                     i.type = 'hidden'; i.name = key; i.value = value;
                     f.appendChild(i);
                 });
-            } catch (_) { /* URLSearchParams unavailable — fall back to just sourceFolder */ }
-            // Legacy alias for older server builds.
-            var sf = document.createElement('input'); sf.type='hidden'; sf.name='sourceFolder'; sf.value=srcVal; f.appendChild(sf);
+            } catch (_) { /* URLSearchParams unavailable — fall back below */ }
+            // Belt-and-braces: also emit sourceFolders=X for each selected folder so the
+            // dedicated multi-folder broadcast endpoint sees them even if the URL lost them.
+            folders.forEach(function (v) {
+                var sfm = document.createElement('input');
+                sfm.type = 'hidden'; sfm.name = 'sourceFolders';
+                sfm.value = v === '__NONE__' ? '' : v;
+                f.appendChild(sfm);
+            });
+            // Legacy alias for older server builds (first folder only).
+            var sf = document.createElement('input'); sf.type='hidden'; sf.name='sourceFolder'; sf.value=srcValLegacy; f.appendChild(sf);
             if (lim > 0) {
                 var sl = document.createElement('input'); sl.type='hidden'; sl.name='scopeLimit'; sl.value=String(lim); f.appendChild(sl);
             }
@@ -769,8 +918,7 @@ var committedFolderFilter = '';
         // 確認ダイアログ + 管理者パスワード入力は bulkForm の submit リスナ側で
         // すでに処理しているので、ここでは「先に進ませる」だけにする。
         var scope = document.getElementById('folderAllScope');
-        var filterSel = document.getElementById('folderFilterSelect');
-        if (scope && scope.checked && filterSel && filterSel.value !== '') {
+        if (scope && scope.checked && (committedFolders && committedFolders.length > 0)) {
             return true;  // submit listener takes over with its own confirms/password
         }
 

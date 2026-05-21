@@ -158,11 +158,24 @@ public class BroadcastController {
     public String selectFolderForBroadcast(@ModelAttribute com.crm.dto.UserSearchForm form,
                                             @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                             @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                            @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                                             HttpSession session,
                                             RedirectAttributes ra) {
-        // Legacy alias: if the form's folder field wasn't bound but sourceFolder was sent,
-        // copy it across so older JS still works during the rollout.
-        if ((form.getFolder() == null || form.getFolder().isEmpty()) && sourceFolder != null && !sourceFolder.isEmpty()) {
+        // Legacy alias path: the URL filter set (folders=A&folders=B) auto-binds to
+        // form.folders via @ModelAttribute, so this is only a fallback for callers that
+        // post sourceFolder(s) only.
+        if ((form.getFolders() == null || form.getFolders().isEmpty())
+                && sourceFolders != null && !sourceFolders.isEmpty()) {
+            java.util.List<String> norm = new java.util.ArrayList<>();
+            for (String s : sourceFolders) {
+                if (s == null) continue;
+                String t = s.trim();
+                if (!t.isEmpty()) norm.add(t);
+            }
+            if (!norm.isEmpty()) form.setFolders(norm);
+        }
+        if ((form.getFolders() == null || form.getFolders().isEmpty())
+                && sourceFolder != null && !sourceFolder.isEmpty()) {
             form.setFolder(sourceFolder);
         }
         java.util.List<Long> userIds = userService.findIdsBySearch(form, scopeLimit);

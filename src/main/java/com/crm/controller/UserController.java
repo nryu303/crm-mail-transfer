@@ -219,19 +219,23 @@ public class UserController {
                                   @RequestParam(name = "poolId", required = false) Long poolId,
                                   @RequestParam(name = "scope", required = false) String scope,
                                   @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                  @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                                   @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                   RedirectAttributes ra) {
         // Folder-scope override: assign every active carrier-pool address to every user in
-        // a folder, capped by scopeLimit. Symmetric with bulk-unbind-carrier's
-        // allInFolder branch; powers the "フォルダ内全割り当て" button on the user list page.
+        // a folder (or each of a selected set of folders), capped by scopeLimit per folder.
+        // Symmetric with bulk-unbind-carrier's allInFolder branch; powers the
+        // "フォルダ内全割り当て" button on the user list page.
         if ("allInFolder".equals(scope)) {
-            String src = sourceFolder == null ? null : sourceFolder.trim();
-            if (src != null && src.isEmpty()) src = null;
-            int created = bindingService.bindAllAvailableInFolder(src, scopeLimit);
-            String srcLabel = (src == null) ? "（未設定）" : src;
-            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
+            java.util.List<String> srcs = normalizeSourceFolders(sourceFolders, sourceFolder);
+            int totalCreated = 0;
+            for (String src : srcs) {
+                totalCreated += bindingService.bindAllAvailableInFolder(src, scopeLimit);
+            }
+            String srcLabel = labelForFolders(srcs);
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件/フォルダ）" : "";
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内ユーザーへキャリアアドレスを一括割当しました（新規 " + created + " 件）" + chunkNote);
+                    "フォルダ「" + srcLabel + "」内ユーザーへキャリアアドレスを一括割当しました（新規 " + totalCreated + " 件）" + chunkNote);
             return "redirect:/manager/users";
         }
 
@@ -262,19 +266,22 @@ public class UserController {
                                     @RequestParam(name = "poolId", required = false) Long poolId,
                                     @RequestParam(name = "scope", required = false) String scope,
                                     @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                    @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                                     @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                     RedirectAttributes ra) {
-        // Scope override: unbind every carrier-pool address from users in a folder.
-        // scopeLimit caps the batch size so the operator can clear large folders
-        // in 1K/2K chunks.
+        // Scope override: unbind every carrier-pool address from users in one (or many)
+        // folder(s). scopeLimit caps the batch size per folder so the operator can clear
+        // large folders in 1K/2K chunks.
         if ("allInFolder".equals(scope)) {
-            String src = sourceFolder == null ? null : sourceFolder.trim();
-            if (src != null && src.isEmpty()) src = null;
-            int removed = bindingService.unbindAllInFolder(src, scopeLimit);
-            String srcLabel = (src == null) ? "（未設定）" : src;
-            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
+            java.util.List<String> srcs = normalizeSourceFolders(sourceFolders, sourceFolder);
+            int totalRemoved = 0;
+            for (String src : srcs) {
+                totalRemoved += bindingService.unbindAllInFolder(src, scopeLimit);
+            }
+            String srcLabel = labelForFolders(srcs);
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件/フォルダ）" : "";
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内ユーザーのキャリア割り当てを解除しました (" + removed + " 件)" + chunkNote);
+                    "フォルダ「" + srcLabel + "」内ユーザーのキャリア割り当てを解除しました (" + totalRemoved + " 件)" + chunkNote);
             return "redirect:/manager/users";
         }
 
@@ -308,6 +315,7 @@ public class UserController {
                                  @RequestParam(name = "folder", required = false) String folder,
                                  @RequestParam(name = "scope", required = false) String scope,
                                  @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                 @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                                  @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                  @RequestParam(name = "returnTo", required = false) String returnTo,
                                  RedirectAttributes ra) {
@@ -333,25 +341,27 @@ public class UserController {
         }
         String label = (target == null) ? "（フォルダ解除）" : target;
 
-        // Scope override: when scope=allInFolder, move EVERY user currently in
-        // sourceFolder. If scopeLimit > 0 is set, only the first N (by id ASC) are
-        // moved — lets operators run 15K-user reclassifies in 1K/2K-sized chunks.
+        // Scope override: when scope=allInFolder, move EVERY user currently in any of
+        // the selected source folders. If scopeLimit > 0 is set, only the first N per
+        // source folder (by id ASC) are moved — lets operators run 15K-user reclassifies
+        // in 1K/2K-sized chunks.
         if ("allInFolder".equals(scope)) {
-            String src = sourceFolder == null ? null : sourceFolder.trim();
-            if (src != null && src.isEmpty()) src = null;
-            String srcLabel = (src == null) ? "（未設定）" : src;
-            int n;
-            if (scopeLimit != null && scopeLimit > 0) {
-                java.util.List<Long> limitedIds = (src == null)
-                        ? userRepository.findIdsByFolderIsNull()
-                        : userRepository.findIdsByFolder(src);
-                if (limitedIds.size() > scopeLimit) limitedIds = limitedIds.subList(0, scopeLimit);
-                n = limitedIds.isEmpty() ? 0 : userRepository.bulkUpdateFolderForIds(limitedIds, target);
-            } else {
-                n = userRepository.bulkUpdateFolderByFolder(src, target);
+            java.util.List<String> srcs = normalizeSourceFolders(sourceFolders, sourceFolder);
+            int total = 0;
+            for (String src : srcs) {
+                if (scopeLimit != null && scopeLimit > 0) {
+                    java.util.List<Long> limitedIds = (src == null)
+                            ? userRepository.findIdsByFolderIsNull()
+                            : userRepository.findIdsByFolder(src);
+                    if (limitedIds.size() > scopeLimit) limitedIds = limitedIds.subList(0, scopeLimit);
+                    total += limitedIds.isEmpty() ? 0 : userRepository.bulkUpdateFolderForIds(limitedIds, target);
+                } else {
+                    total += userRepository.bulkUpdateFolderByFolder(src, target);
+                }
             }
+            String srcLabel = labelForFolders(srcs);
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内の " + n + " 名を " + label + " に移動しました");
+                    "フォルダ「" + srcLabel + "」内の " + total + " 名を " + label + " に移動しました");
             return "redirect:" + safeReturn;
         }
 
@@ -367,6 +377,48 @@ public class UserController {
         }
         ra.addFlashAttribute("flashSuccess", n + " 件のユーザーを " + label + " に移動しました");
         return "redirect:" + safeReturn;
+    }
+
+    /**
+     * Normalize the union of the plural sourceFolders list and the legacy singular
+     * sourceFolder field into an ordered, deduped List<String> where each entry is either
+     * a non-empty folder name OR `null` (= the "未設定" bucket). The empty/sentinel
+     * "__NONE__" / "_NONE_" values are folded to null. If no folder is selected at all,
+     * the returned list is a singleton [null] so legacy single-folder allInFolder calls
+     * (= bulk-operate on "未設定") keep working.
+     */
+    private static java.util.List<String> normalizeSourceFolders(java.util.List<String> plural,
+                                                                 String legacySingular) {
+        java.util.List<String> input = new java.util.ArrayList<>();
+        if (plural != null) input.addAll(plural);
+        if (legacySingular != null) input.add(legacySingular);
+
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+        boolean sawNone = false;
+        for (String raw : input) {
+            if (raw == null) { sawNone = true; continue; }
+            String t = raw.trim();
+            if (t.isEmpty() || "__NONE__".equals(t) || "_NONE_".equals(t)) { sawNone = true; continue; }
+            seen.add(t);
+        }
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (sawNone) out.add(null);
+        out.addAll(seen);
+        if (out.isEmpty()) out.add(null);
+        return out;
+    }
+
+    /** Human label for a normalized list (single → "X", many → "X, Y …" or count). */
+    private static String labelForFolders(java.util.List<String> srcs) {
+        if (srcs == null || srcs.isEmpty()) return "（未設定）";
+        if (srcs.size() == 1) {
+            String s = srcs.get(0);
+            return (s == null) ? "（未設定）" : s;
+        }
+        java.util.List<String> pretty = new java.util.ArrayList<>(srcs.size());
+        for (String s : srcs) pretty.add(s == null ? "（未設定）" : s);
+        if (pretty.size() <= 3) return String.join(", ", pretty);
+        return pretty.size() + " 件 (" + String.join(", ", pretty.subList(0, 3)) + ", ...)";
     }
 
     /**
@@ -570,6 +622,7 @@ public class UserController {
     public String bulkDelete(@RequestParam(name = "ids", required = false) List<Long> ids,
                               @RequestParam(name = "scope", required = false) String scope,
                               @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                              @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                               @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                               @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
                               javax.servlet.http.HttpSession session,
@@ -580,18 +633,20 @@ public class UserController {
             return "redirect:/manager/users";
         }
 
-        // Scope override: delete users in a folder. scopeLimit caps the batch size
-        // so a 15K-user folder can be drained in 1K/2K chunks.
+        // Scope override: delete users in one or more folders. scopeLimit caps the
+        // batch size per folder so a 15K-user folder can be drained in 1K/2K chunks.
         if ("allInFolder".equals(scope)) {
-            String src = sourceFolder == null ? null : sourceFolder.trim();
-            if (src != null && src.isEmpty()) src = null;
-            int n = service.deleteAllInFolder(src, scopeLimit);
-            String srcLabel = (src == null) ? "（未設定）" : src;
-            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
+            java.util.List<String> srcs = normalizeSourceFolders(sourceFolders, sourceFolder);
+            int total = 0;
+            for (String src : srcs) {
+                total += service.deleteAllInFolder(src, scopeLimit);
+            }
+            String srcLabel = labelForFolders(srcs);
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件/フォルダ）" : "";
             auditLog.record(com.crm.service.AuditLogService.ACTION_USER_DELETE,
-                    "CrmUser", null, "bulk folder=" + srcLabel + " count=" + n + chunkNote);
+                    "CrmUser", null, "bulk folder=" + srcLabel + " count=" + total + chunkNote);
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内の " + n + " 名を削除しました" + chunkNote);
+                    "フォルダ「" + srcLabel + "」内の " + total + " 名を削除しました" + chunkNote);
             return "redirect:/manager/users";
         }
 
