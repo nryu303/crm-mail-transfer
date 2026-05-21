@@ -73,16 +73,20 @@ public class BroadcastService {
         List<CrmUser> targets = findTargetUsers(form);
 
         // Pre-compute which targets are actually deliverable (have at least one active pool
-        // binding AND don't have an RFC-invalid local-part flag). Users whose
-        // ADDRESS_INVALID_REASON is set are reliably rejected by the relay's SMTP client
-        // (trailing/leading dot, double-dot — see CsvUtil.detectInvalidLocalPart) so we
-        // skip them here rather than burning a slot in the dispatcher.
+        // binding AND aren't blocked by an RFC-invalid local-part on a carrier whose SMTP
+        // refuses such addresses). Carrier-by-carrier policy:
+        //   * docomo.ne.jp — the relay (obob.jar, 2026-05-21 quoteIfDotProblematic patch)
+        //     rewraps trailing-/leading-/double-dot local-parts into RFC 5321 quoted-string
+        //     form ("foo."@docomo.ne.jp), which docomo's MX accepts. We let these through.
+        //   * everywhere else (gmail.com / yahoo.co.jp / icloud.com / au.com / …) — their
+        //     MX servers reject dot-issue addresses even in quoted form, so skip pre-dispatch.
         List<CrmUser> deliverable = new java.util.ArrayList<>();
         int unbound = 0, poolMissing = 0;
         java.util.List<Long> unsendableIds = new java.util.ArrayList<>();
         java.util.Map<Long, CarrierAddressPool> userToPool = new java.util.HashMap<>();
         for (CrmUser u : targets) {
-            if (u.getAddressInvalidReason() != null && !u.getAddressInvalidReason().isEmpty()) {
+            if (u.getAddressInvalidReason() != null && !u.getAddressInvalidReason().isEmpty()
+                    && !isDocomoDotIssueRescuable(u.getEmail())) {
                 unsendableIds.add(u.getId());
                 continue;
             }
@@ -263,4 +267,17 @@ public class BroadcastService {
     }
 
     private static boolean hasText(String s) { return s != null && !s.trim().isEmpty(); }
+
+    /**
+     * True if the address is a docomo dot-issue local-part that the relay can rescue via
+     * RFC 5321 quoted-string ("foo."@docomo.ne.jp). docomo's MX accepts the quoted form;
+     * other providers (gmail/yahoo/icloud/au) do not, so they remain unsendable.
+     */
+    private static boolean isDocomoDotIssueRescuable(String email) {
+        if (email == null) return false;
+        int at = email.lastIndexOf('@');
+        if (at < 1 || at == email.length() - 1) return false;
+        String domain = email.substring(at + 1).toLowerCase();
+        return "docomo.ne.jp".equals(domain);
+    }
 }
