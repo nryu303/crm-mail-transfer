@@ -408,12 +408,14 @@
 
         <div class="footer-divider"></div>
 
-        <!-- Folder bulk-move -->
+        <!-- Folder bulk-move. The "（フォルダ解除）" pseudo-option was removed 2026-05-21
+             because it shared value="" with the prompt option, which let operators silently
+             move users to 未設定 just by forgetting to pick a target. If folder-unset is
+             genuinely needed, use the rebind UI on /manager/settings/folders. -->
         <span class="text-xs font-semibold text-slate-500 whitespace-nowrap">移動先フォルダ</span>
         <select class="folder-select" name="folder" id="folderSelect" disabled>
             <option value="">フォルダを選択</option>
             <option th:each="f : ${folders}" th:value="${f}" th:text="${f}"></option>
-            <option value="">（フォルダ解除）</option>
         </select>
         <button type="submit" class="btn-move" id="btnMove" disabled
                 formaction="/manager/users/bulk-move-folder">選択フォルダ移動</button>
@@ -582,8 +584,32 @@ var committedFolderFilter = '';
             bulkForm.appendChild(i);
         }
         if (bulkForm) {
+            // Always carry the current URL so each bulk action redirects back to the
+            // filtered view, not the empty /manager/users. Re-evaluated on submit so a
+            // mid-page filter change is picked up.
+            bulkForm.addEventListener('submit', function (ev) {
+                var rt = window.location.pathname + window.location.search;
+                var rtIn = bulkForm.querySelector('input[name="returnTo"]');
+                if (!rtIn) {
+                    rtIn = document.createElement('input');
+                    rtIn.type = 'hidden'; rtIn.name = 'returnTo';
+                    bulkForm.appendChild(rtIn);
+                }
+                rtIn.value = rt;
+            });
+
             bulkForm.addEventListener('submit', function (ev) {
                 var action = ev.submitter && ev.submitter.getAttribute('formaction');
+                // Empty-target guard for folder-move: even outside folder-scope mode, an
+                // empty <select> value silently sent users to 未設定. Force a target pick.
+                if (action && action.indexOf('bulk-move-folder') >= 0) {
+                    var tgt = folderSel && folderSel.value;
+                    if (!tgt || tgt === '__NONE__') {
+                        alert('移動先のフォルダを選択してください');
+                        ev.preventDefault();
+                        return;
+                    }
+                }
                 if (!action || !scope.checked || filterSel.value === '') return;
                 var srcVal = filterSel.value === '__NONE__' ? '' : filterSel.value;
                 var srcLabel = filterSel.options[filterSel.selectedIndex].text;

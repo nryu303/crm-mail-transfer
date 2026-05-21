@@ -179,7 +179,18 @@ public class BroadcastService {
         broadcastRepository.markCompletedIfDone(broadcastId, now);
     }
 
-    /** Cancel a broadcast and all remaining QUEUED messages under it. */
+    /**
+     * Cancel a broadcast and all remaining QUEUED messages under it. Two-part operation:
+     *   1. Flip BROADCAST.status → CANCELLED so the dispatcher's per-tick cache picks it up
+     *      and stops dispatching any message in this batch that hasn't been sent yet.
+     *   2. Bulk UPDATE all QUEUED messages of this broadcast → CANCELLED in one statement.
+     *
+     * Step 1 has to happen FIRST so the dispatcher's race-condition gate (see
+     * ScheduledTaskService.dispatchQueued) sees the cancelled broadcast even while the bulk
+     * MESSAGE update is still in progress. Previously this method did per-row saves which
+     * could take many seconds for a 5K-row broadcast — during that window the dispatcher
+     * was still picking up rows that were technically queued, and they leaked to the relay.
+     */
     @Transactional
     public void cancel(Long broadcastId) {
         Optional<Broadcast> opt = broadcastRepository.findById(broadcastId);
@@ -189,15 +200,12 @@ public class BroadcastService {
                 || Broadcast.STATUS_CANCELLED.equals(b.getStatus())) return;
         b.setStatus(Broadcast.STATUS_CANCELLED);
         broadcastRepository.save(b);
+        // Flush the broadcast status flip immediately so the dispatcher's race gate sees it
+        // before we start the (potentially slow) bulk message update.
+        broadcastRepository.flush();
 
-        // Flip remaining QUEUED messages under this broadcast to CANCELLED
-        org.springframework.data.jpa.domain.Specification<Message> spec = (root, q, cb) ->
-                cb.and(cb.equal(root.get("broadcastId"), broadcastId),
-                       cb.equal(root.get("status"), Message.STATUS_QUEUED));
-        for (Message m : messageRepository.findAll(spec)) {
-            m.setStatus(Message.STATUS_CANCELLED);
-            messageRepository.save(m);
-        }
+        int flipped = messageRepository.cancelQueuedByBroadcastId(broadcastId, java.time.LocalDateTime.now());
+        log.info("Broadcast {} cancelled, flipped {} QUEUED messages to CANCELLED", broadcastId, flipped);
     }
 
     @Transactional

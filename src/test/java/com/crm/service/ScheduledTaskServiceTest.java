@@ -143,6 +143,11 @@ class ScheduledTaskServiceTest {
     @Test
     void ignoresExclusion_whenScheduledAtEqualsCreatedAt_immediateSend() {
         // Immediate broadcast row: scheduledAt is not strictly after createdAt → no exclusion.
+        // (The cancel-race gate added 2026-05-21 DOES still call findById to check whether
+        // the parent broadcast was cancelled — that's orthogonal to the exclusion logic and
+        // necessary even for immediate-send broadcasts. The test no longer requires the
+        // broadcast to be looked up zero times; it just confirms exclusion-via-other-sends
+        // doesn't fire.)
         LocalDateTime t = LocalDateTime.now().minusMinutes(1);
         Message m = scheduledBroadcastRow(4L, 7L, 99L, t, t);
 
@@ -152,7 +157,7 @@ class ScheduledTaskServiceTest {
         svc.dispatchQueued();
 
         verify(messageService).sendNow(eq(m), any());
-        verify(broadcastRepo, never()).findById(anyLong());
+        verify(msgRepo, never()).countOutboundFinalisedSince(anyLong(), any(), anyLong());
     }
 
     private static <T> T eq(T expected) { return org.mockito.ArgumentMatchers.eq(expected); }

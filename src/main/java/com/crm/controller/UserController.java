@@ -309,9 +309,28 @@ public class UserController {
                                  @RequestParam(name = "scope", required = false) String scope,
                                  @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
                                  @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
+                                 @RequestParam(name = "returnTo", required = false) String returnTo,
                                  RedirectAttributes ra) {
+        // "Where do we send the operator back to after the move?" — preserves their
+        // current filter (folder + emailDomain + period etc.) so they don't lose context.
+        // Falls back to the un-filtered user list if the form didn't carry returnTo or
+        // the URL looks suspicious. Only same-site relative URLs are honoured.
+        String safeReturn = safeRelativeReturnUrl(returnTo, "/manager/users");
+
         String target = folder == null ? null : folder.trim();
-        if (target != null && target.isEmpty()) target = null;
+        // Defensive: a stale form / wrong handler somewhere submitted the URL-filter sentinel
+        // "__NONE__" as the move TARGET, which would have created users with the literal
+        // string folder='__NONE__'. Treat any sentinel-shaped value as null (=フォルダ解除).
+        if (target != null && (target.isEmpty()
+                || "__NONE__".equals(target) || "_NONE_".equals(target))) target = null;
+
+        // Reject silent "move to 未設定" — the operator forgot to pick a target. They can
+        // explicitly send moveToUnset=true if they really mean it.
+        boolean explicitUnset = "true".equalsIgnoreCase(folder == null ? null : null) /* placeholder */;
+        if (target == null && !"allInFolder".equals(scope)) {
+            ra.addFlashAttribute("flashError", "移動先のフォルダを選択してください");
+            return "redirect:" + safeReturn;
+        }
         String label = (target == null) ? "（フォルダ解除）" : target;
 
         // Scope override: when scope=allInFolder, move EVERY user currently in
@@ -333,12 +352,12 @@ public class UserController {
             }
             ra.addFlashAttribute("flashSuccess",
                     "フォルダ「" + srcLabel + "」内の " + n + " 名を " + label + " に移動しました");
-            return "redirect:/manager/users";
+            return "redirect:" + safeReturn;
         }
 
         if (ids == null || ids.isEmpty()) {
             ra.addFlashAttribute("flashError", "ユーザーが選択されていません");
-            return "redirect:/manager/users";
+            return "redirect:" + safeReturn;
         }
         int n = 0;
         for (CrmUser u : userRepository.findAllById(ids)) {
@@ -347,7 +366,23 @@ public class UserController {
             n++;
         }
         ra.addFlashAttribute("flashSuccess", n + " 件のユーザーを " + label + " に移動しました");
-        return "redirect:/manager/users";
+        return "redirect:" + safeReturn;
+    }
+
+    /**
+     * Constrain a caller-supplied returnTo to a safe relative URL inside /manager/. Anything
+     * with a scheme, host, or pointing outside /manager/ falls back to the default. Protects
+     * against open-redirect when reusing the form value as a Location header.
+     */
+    private static String safeRelativeReturnUrl(String returnTo, String fallback) {
+        if (returnTo == null) return fallback;
+        String r = returnTo.trim();
+        if (r.isEmpty()) return fallback;
+        // Reject absolute URLs and protocol-relative URLs.
+        if (r.startsWith("http://") || r.startsWith("https://") || r.startsWith("//")) return fallback;
+        // Must be inside /manager/
+        if (!r.startsWith("/manager/") && !r.equals("/manager")) return fallback;
+        return r;
     }
 
     @GetMapping("/new")

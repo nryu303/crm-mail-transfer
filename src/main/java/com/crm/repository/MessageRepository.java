@@ -50,6 +50,19 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
                                     @org.springframework.data.repository.query.Param("dir") String direction,
                                     @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 
+    /**
+     * Bulk-flip all QUEUED messages of a broadcast to CANCELLED in one UPDATE. Replaces the
+     * old per-row save loop in BroadcastService.cancel(), which on a 5K-row broadcast took
+     * long enough that the dispatcher's race gate could not stop the leak in time.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+            "UPDATE Message m SET m.status = 'CANCELLED', m.updatedAt = :now "
+          + "WHERE m.broadcastId = :broadcastId AND m.status = 'QUEUED'")
+    int cancelQueuedByBroadcastId(@org.springframework.data.repository.query.Param("broadcastId") Long broadcastId,
+                                   @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
     List<Message> findByStatusAndScheduledAtLessThanEqual(String status, java.time.LocalDateTime now);
 
     /**

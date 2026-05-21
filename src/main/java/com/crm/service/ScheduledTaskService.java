@@ -97,8 +97,46 @@ public class ScheduledTaskService {
         List<Message> due = messageRepository.findDueForDispatch(Message.STATUS_QUEUED, now);
         if (due.isEmpty()) return;
         log.info("Scheduler: {} queued messages due, dispatching", due.size());
+        // Cache broadcast cancel-state lookups per tick: a 5K-message batch hits the same
+        // broadcast row 5K times, so we want one DB read per broadcast, not per message.
+        java.util.Map<Long, Boolean> broadcastCancelled = new java.util.HashMap<>();
         for (Message msg : due) {
             try {
+                // CRITICAL race-condition gate: re-fetch the row from DB before each send so
+                // a cancel that arrived AFTER findDueForDispatch loaded this batch into memory
+                // catches us before we dispatch. Without this re-fetch, an operator who hit
+                // キャンセル at "送信済み 167" still saw 645+ deliveries continue to the relay —
+                // the dispatcher was iterating an in-memory list of QUEUED snapshots that had
+                // already been flipped to CANCELLED in the DB.
+                // Falls back to the in-memory snapshot if findById can't see the row (Mockito
+                // tests don't stub findById, and an actual missing row is a different
+                // failure that the downstream save() will surface).
+                java.util.Optional<Message> freshOpt = messageRepository.findById(msg.getId());
+                Message effective = freshOpt.orElse(msg);
+                if (!Message.STATUS_QUEUED.equals(effective.getStatus())) {
+                    continue;
+                }
+                msg = effective;
+
+                // Broadcast-level cancel: the parent's status flipped to CANCELLED but the
+                // bulk MESSAGE update inside cancel() may not have reached this row yet (e.g.
+                // the dispatcher began a 5K-row tick at the same instant the cancel started).
+                // Detect it, flip this message ourselves, and skip the send.
+                if (msg.getBroadcastId() != null) {
+                    Boolean isCancelled = broadcastCancelled.get(msg.getBroadcastId());
+                    if (isCancelled == null) {
+                        com.crm.entity.Broadcast b = broadcastRepo.findById(msg.getBroadcastId()).orElse(null);
+                        isCancelled = (b != null && com.crm.entity.Broadcast.STATUS_CANCELLED.equals(b.getStatus()));
+                        broadcastCancelled.put(msg.getBroadcastId(), isCancelled);
+                    }
+                    if (isCancelled) {
+                        msg.setStatus(Message.STATUS_CANCELLED);
+                        msg.setErrorMessage("broadcast cancelled while message was in dispatcher batch");
+                        messageRepository.save(msg);
+                        continue;
+                    }
+                }
+
                 // Scheduled-broadcast exclusion: if this row belongs to a broadcast and the
                 // user has ALREADY received some other OUT message between the broadcast
                 // creation time and this message's scheduled time, drop this row. The operator
