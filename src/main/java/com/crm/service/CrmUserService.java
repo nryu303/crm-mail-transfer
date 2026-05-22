@@ -203,12 +203,28 @@ public class CrmUserService {
      * list, the per-user CRM_USER.FOLDER strings stay on the OLD value (5,001 users were
      * stranded on 2026-05-19 in folders "5000件切り分け" and "フォルダD" because of this).
      * Empty string maps to NULL on both sides so 未設定 ↔ named-folder migrations work too.
+     *
+     * <p>Chunked into 1K-row batches in their own transactions so a single rebind doesn't
+     * hold row locks long enough to deadlock against the dispatcher / inbound webhook
+     * (2026-05-23 incident: "元に戻す" button hit Lock wait timeout when one folder held
+     * ~5K rows and the dispatcher was concurrently touching CRM_USER).
      */
-    @org.springframework.transaction.annotation.Transactional
     public int renameFolderValue(String oldFolder, String newFolder) {
         String from = (oldFolder == null || oldFolder.isEmpty()) ? null : oldFolder;
         String to   = (newFolder == null || newFolder.isEmpty()) ? null : newFolder;
-        return repository.bulkUpdateFolderByFolder(from, to);
+        java.util.List<Long> ids = (from == null)
+                ? repository.findIdsByFolderIsNull()
+                : repository.findIdsByFolder(from);
+        if (ids.isEmpty()) return 0;
+        // bulkUpdateFolderForIds is already @Modifying @Transactional so each call has
+        // its own short tx — no @Transactional needed on this loop.
+        int total = 0;
+        final int chunkSize = 1000;
+        for (int i = 0; i < ids.size(); i += chunkSize) {
+            java.util.List<Long> slice = ids.subList(i, Math.min(i + chunkSize, ids.size()));
+            total += repository.bulkUpdateFolderForIds(slice, to);
+        }
+        return total;
     }
 
     /**

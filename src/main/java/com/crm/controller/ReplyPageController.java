@@ -57,19 +57,22 @@ public class ReplyPageController {
     private final ReplyPageSettingService settingService;
     private final UserActivityService userActivityService;
     private final ReplyRateLimitService rateLimitService;
+    private final com.crm.service.PlaceholderService placeholderService;
 
     public ReplyPageController(ReplyPageService replyPageService,
                                CrmUserRepository userRepository,
                                MessageRepository messageRepository,
                                ReplyPageSettingService settingService,
                                UserActivityService userActivityService,
-                               ReplyRateLimitService rateLimitService) {
+                               ReplyRateLimitService rateLimitService,
+                               com.crm.service.PlaceholderService placeholderService) {
         this.replyPageService = replyPageService;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
         this.settingService = settingService;
         this.userActivityService = userActivityService;
         this.rateLimitService = rateLimitService;
+        this.placeholderService = placeholderService;
     }
 
     /**
@@ -125,9 +128,18 @@ public class ReplyPageController {
         }
         if (headerHtml == null) headerHtml = blankToNull(settings.getDefaultHeaderHtml());
 
+        // Apply placeholder substitution against this user's data so the public reply page
+        // renders {{name}} / {{tag1}} etc. just like the admin preview does. Previously the
+        // preview screen showed substituted text but the live page leaked raw tags through.
+        String footerHtml = settings.getFooterHtml();
+        if (user.isPresent()) {
+            headerHtml = placeholderService.substitute(headerHtml, user.get());
+            footerHtml = placeholderService.substitute(footerHtml, user.get());
+        }
+
         model.addAttribute("token", token);
         model.addAttribute("headerHtml", headerHtml);
-        model.addAttribute("footerHtml", settings.getFooterHtml());
+        model.addAttribute("footerHtml", footerHtml);
         model.addAttribute("customCss", settings.getDefaultCss());
         model.addAttribute("form", new ReplyForm());
         return "reply/page";
