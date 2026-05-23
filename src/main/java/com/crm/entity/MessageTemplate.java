@@ -33,6 +33,11 @@ public class MessageTemplate {
     @Column(name = "COLOR", length = 16)
     private String color;
 
+    /** Page bucket 1..5 — operators group templates by use-case (greeting/follow-up/...)
+     *  and switch via the tab strip on the thread page. */
+    @Column(name = "PAGE_NO", nullable = false)
+    private Integer pageNo;
+
     @Column(name = "DISPLAY_ORDER")
     private Integer displayOrder;
 
@@ -48,6 +53,7 @@ public class MessageTemplate {
         if (createdAt == null) createdAt = now;
         updatedAt = now;
         if (displayOrder == null) displayOrder = 0;
+        if (pageNo == null || pageNo < 1 || pageNo > 5) pageNo = 1;
     }
 
     @PreUpdate
@@ -65,6 +71,8 @@ public class MessageTemplate {
     public void setBody(String body) { this.body = body; }
     public String getColor() { return color; }
     public void setColor(String color) { this.color = color; }
+    public Integer getPageNo() { return pageNo; }
+    public void setPageNo(Integer pageNo) { this.pageNo = pageNo; }
     public Integer getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(Integer displayOrder) { this.displayOrder = displayOrder; }
     public LocalDateTime getCreatedAt() { return createdAt; }

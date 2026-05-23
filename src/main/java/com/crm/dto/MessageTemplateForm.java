@@ -22,6 +22,9 @@ public class MessageTemplateForm {
 
     private Integer displayOrder = 0;
 
+    /** Page bucket 1..5; defaults to 1. */
+    private Integer pageNo = 1;
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getSubject() { return subject; }
@@ -32,6 +35,10 @@ public class MessageTemplateForm {
     public void setColor(String color) { this.color = color; }
     public Integer getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(Integer displayOrder) { this.displayOrder = displayOrder; }
+    public Integer getPageNo() { return pageNo; }
+    public void setPageNo(Integer pageNo) {
+        this.pageNo = (pageNo == null || pageNo < 1 || pageNo > 5) ? 1 : pageNo;
+    }
 
     public static MessageTemplateForm from(MessageTemplate t) {
         MessageTemplateForm f = new MessageTemplateForm();
@@ -40,6 +47,7 @@ public class MessageTemplateForm {
         f.body = t.getBody();
         f.color = t.getColor();
         f.displayOrder = t.getDisplayOrder();
+        f.pageNo = t.getPageNo() == null ? 1 : t.getPageNo();
         return f;
     }
 
@@ -49,5 +57,6 @@ public class MessageTemplateForm {
         t.setBody(body);
         t.setColor((color == null || color.isEmpty()) ? null : color);
         t.setDisplayOrder(displayOrder == null ? 0 : displayOrder);
+        t.setPageNo((pageNo == null || pageNo < 1 || pageNo > 5) ? 1 : pageNo);
     }
 }

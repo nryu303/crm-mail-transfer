@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface MessageTemplateRepository extends JpaRepository<MessageTemplate, Long> {
     List<MessageTemplate> findAllByOrderByDisplayOrderAscIdAsc();
+    List<MessageTemplate> findByPageNoOrderByDisplayOrderAscIdAsc(Integer pageNo);
+    long countByPageNo(Integer pageNo);
 }

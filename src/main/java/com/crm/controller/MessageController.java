@@ -136,6 +136,9 @@ public class MessageController {
         model.addAttribute("bindings", placeholderService.buildBindings(user.get()));
         model.addAttribute("builtinTags", PlaceholderService.BUILTIN_TAGS);
         model.addAttribute("templates", templateService.listAll());
+        // Page-tab strip data for the templates panel: titles + max-page.
+        model.addAttribute("templatePageTitles", templateService.listPageTitles());
+        model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
         model.addAttribute("boundAddresses", bindingService.listBoundFor(userId));
         // Left-upper inbox list (all users with any inbound, newest first).
         model.addAttribute("inboxRows", messageService.inboxByUser(false));

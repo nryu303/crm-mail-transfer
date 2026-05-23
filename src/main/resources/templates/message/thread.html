@@ -346,10 +346,20 @@
             <a class="btn-refresh ml-auto" th:href="@{/manager/settings/message-templates/new}" target="_blank">＋新規</a>
             <a class="btn-refresh" th:href="@{/manager/settings/message-templates}" target="_blank">一覧</a>
         </header>
+        <!-- Page-tab strip: click switches the visible page in-place (no reload). 2026-05-23. -->
+        <div id="tplTabs" class="flex border-b border-slate-200 bg-slate-50 text-xs overflow-x-auto" style="flex:0 0 auto;">
+            <button type="button" th:each="i : ${#numbers.sequence(1, templateMaxPages)}"
+                    class="tpl-tab px-3 py-1.5 whitespace-nowrap border-r border-slate-200"
+                    th:classappend="${i == 1 ? 'bg-white text-blue-700 font-semibold border-b-2 border-b-blue-500' : 'text-slate-600 hover:bg-white'}"
+                    th:attr="data-page=${i}"
+                    th:text="${templatePageTitles[i - 1]}">タイトル</button>
+        </div>
         <div class="body">
             <div th:if="${templates.empty}" class="text-xs text-slate-400 p-2">定型文はまだ登録されていません</div>
             <div th:each="t : ${templates}" class="tpl-item"
-                 th:classappend="${t.color != null and t.color != ''} ? 'color-' + ${t.color} : ''">
+                 th:attr="data-page=${t.pageNo}"
+                 th:classappend="${t.color != null and t.color != ''} ? 'color-' + ${t.color} : ''"
+                 th:style="${t.pageNo != 1 ? 'display:none;' : null}">
                 <div class="txt"
                      th:attr="data-subject=${t.subject},data-body=${t.body}"
                      onclick="applyTemplateFromElement(this)"
@@ -361,6 +371,30 @@
                 <a class="icon" th:href="@{'/manager/settings/message-templates/' + ${t.id} + '/edit'}" target="_blank">編集</a>
             </div>
         </div>
+        <script>
+        // Tab strip behaviour: click a tab → hide tpl-item whose data-page mismatches.
+        (function () {
+            var tabs = document.querySelectorAll('#tplTabs .tpl-tab');
+            if (!tabs.length) return;
+            function setActive(page) {
+                tabs.forEach(function (t) {
+                    var active = String(t.getAttribute('data-page')) === String(page);
+                    t.classList.toggle('bg-white', active);
+                    t.classList.toggle('text-blue-700', active);
+                    t.classList.toggle('font-semibold', active);
+                    t.classList.toggle('border-b-2', active);
+                    t.classList.toggle('border-b-blue-500', active);
+                    t.classList.toggle('text-slate-600', !active);
+                });
+                document.querySelectorAll('.pane-br .tpl-item').forEach(function (it) {
+                    it.style.display = String(it.getAttribute('data-page')) === String(page) ? '' : 'none';
+                });
+            }
+            tabs.forEach(function (t) {
+                t.addEventListener('click', function () { setActive(t.getAttribute('data-page')); });
+            });
+        })();
+        </script>
     </div>
 
 </div>

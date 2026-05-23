@@ -313,8 +313,11 @@ public class SettingController {
 
     // ====== Message templates ======
     @GetMapping("/message-templates")
-    public String templateList(@RequestParam(name = "q", required = false) String q, Model model) {
-        java.util.List<com.crm.entity.MessageTemplate> all = templateService.listAll();
+    public String templateList(@RequestParam(name = "q", required = false) String q,
+                               @RequestParam(name = "page", required = false, defaultValue = "1") Integer pageNo,
+                               Model model) {
+        if (pageNo == null || pageNo < 1 || pageNo > MessageTemplateService.MAX_PAGES) pageNo = 1;
+        java.util.List<com.crm.entity.MessageTemplate> all = templateService.listByPage(pageNo);
         java.util.List<com.crm.entity.MessageTemplate> filtered;
         if (q == null || q.trim().isEmpty()) {
             filtered = all;
@@ -331,19 +334,45 @@ public class SettingController {
         }
         model.addAttribute("templates", filtered);
         model.addAttribute("q", q == null ? "" : q);
+        model.addAttribute("pageNo", pageNo);
+        model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+        model.addAttribute("pageTitles", templateService.listPageTitles());
+        // Per-page counts so the tab strip can display "X/50"
+        int[] perPage = new int[MessageTemplateService.MAX_PAGES + 1];
+        for (int i = 1; i <= MessageTemplateService.MAX_PAGES; i++) perPage[i] = (int) templateService.countByPage(i);
+        model.addAttribute("perPageCounts", perPage);
         model.addAttribute("maxTemplates", MessageTemplateService.MAX_TEMPLATES);
-        model.addAttribute("canCreate", templateService.count() < MessageTemplateService.MAX_TEMPLATES);
+        model.addAttribute("canCreate", templateService.countByPage(pageNo) < MessageTemplateService.MAX_TEMPLATES);
         return "setting/template-list";
     }
 
-    @GetMapping("/message-templates/new")
-    public String templateCreateForm(Model model, RedirectAttributes ra) {
-        if (templateService.count() >= MessageTemplateService.MAX_TEMPLATES) {
-            ra.addFlashAttribute("flashError", "定型文は最大" + MessageTemplateService.MAX_TEMPLATES + "件までです");
-            return "redirect:/manager/settings/message-templates";
+    /** Save the operator-supplied titles for pages 1..MAX_PAGES. */
+    @PostMapping("/message-templates/page-titles")
+    public String templatePageTitles(@RequestParam java.util.Map<String, String> params,
+                                      RedirectAttributes ra) {
+        for (int i = 1; i <= MessageTemplateService.MAX_PAGES; i++) {
+            String v = params.get("title" + i);
+            if (v != null) templateService.setPageTitle(i, v);
         }
-        model.addAttribute("form", new MessageTemplateForm());
+        ra.addFlashAttribute("flashSuccess", "ページタイトルを保存しました");
+        return "redirect:/manager/settings/message-templates";
+    }
+
+    @GetMapping("/message-templates/new")
+    public String templateCreateForm(@RequestParam(name = "page", required = false, defaultValue = "1") Integer pageNo,
+                                     Model model, RedirectAttributes ra) {
+        if (pageNo == null || pageNo < 1 || pageNo > MessageTemplateService.MAX_PAGES) pageNo = 1;
+        if (templateService.countByPage(pageNo) >= MessageTemplateService.MAX_TEMPLATES) {
+            ra.addFlashAttribute("flashError",
+                    "ページ " + pageNo + " は既に最大" + MessageTemplateService.MAX_TEMPLATES + "件登録済みです");
+            return "redirect:/manager/settings/message-templates?page=" + pageNo;
+        }
+        MessageTemplateForm f = new MessageTemplateForm();
+        f.setPageNo(pageNo);
+        model.addAttribute("form", f);
         model.addAttribute("editing", false);
+        model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+        model.addAttribute("pageTitles", templateService.listPageTitles());
         model.addAttribute("builtinTags", com.crm.service.PlaceholderService.BUILTIN_TAGS);
         return "setting/template-form";
     }
@@ -353,15 +382,17 @@ public class SettingController {
                                  BindingResult br, RedirectAttributes ra, Model model) {
         if (br.hasErrors()) {
             model.addAttribute("editing", false);
+            model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+            model.addAttribute("pageTitles", templateService.listPageTitles());
             return "setting/template-form";
         }
         try {
             templateService.create(form);
             ra.addFlashAttribute("flashSuccess", "定型文を追加しました");
-            return "redirect:/manager/settings/message-templates";
+            return "redirect:/manager/settings/message-templates?page=" + form.getPageNo();
         } catch (MessageTemplateService.TooManyTemplatesException e) {
             ra.addFlashAttribute("flashError", e.getMessage());
-            return "redirect:/manager/settings/message-templates";
+            return "redirect:/manager/settings/message-templates?page=" + form.getPageNo();
         }
     }
 
@@ -375,6 +406,8 @@ public class SettingController {
         model.addAttribute("form", MessageTemplateForm.from(t.get()));
         model.addAttribute("templateId", id);
         model.addAttribute("editing", true);
+        model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+        model.addAttribute("pageTitles", templateService.listPageTitles());
         model.addAttribute("builtinTags", com.crm.service.PlaceholderService.BUILTIN_TAGS);
         return "setting/template-form";
     }
@@ -386,12 +419,14 @@ public class SettingController {
         if (br.hasErrors()) {
             model.addAttribute("templateId", id);
             model.addAttribute("editing", true);
+            model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+            model.addAttribute("pageTitles", templateService.listPageTitles());
             return "setting/template-form";
         }
         try {
             templateService.update(id, form);
             ra.addFlashAttribute("flashSuccess", "定型文を更新しました");
-            return "redirect:/manager/settings/message-templates";
+            return "redirect:/manager/settings/message-templates?page=" + form.getPageNo();
         } catch (MessageTemplateService.NotFoundException e) {
             ra.addFlashAttribute("flashError", "定型文が見つかりません");
             return "redirect:/manager/settings/message-templates";

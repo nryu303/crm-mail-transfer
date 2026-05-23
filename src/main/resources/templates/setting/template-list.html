@@ -10,24 +10,50 @@
     <div class="flex items-center mb-4">
         <h1 class="text-2xl font-semibold text-slate-800 flex-1">定型文</h1>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2" th:href="@{/manager/settings}">設定に戻る</a>
-        <a class="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm" th:href="@{/manager/settings/message-templates/new}"
+        <a class="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm"
+           th:href="@{/manager/settings/message-templates/new(page=${pageNo})}"
            th:classappend="${canCreate ? '' : 'opacity-50 pointer-events-none'}">新規追加</a>
     </div>
 
+    <!-- Page tab strip — 5 pages, each with operator-supplied title. Click switches the visible page. -->
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 mb-4">
+        <div class="flex border-b border-slate-100 overflow-x-auto">
+            <a th:each="i : ${#numbers.sequence(1, maxPages)}"
+               th:href="@{/manager/settings/message-templates(page=${i},q=${q})}"
+               class="px-4 py-2.5 text-sm whitespace-nowrap border-r border-slate-100"
+               th:classappend="${pageNo == i ? 'bg-blue-50 text-blue-700 font-semibold border-b-2 border-b-blue-500' : 'text-slate-600 hover:bg-slate-50'}">
+                <span class="text-xs text-slate-400 mr-1" th:text="${i}">1</span>
+                <span th:text="${pageTitles[i - 1]}">タイトル</span>
+                <span class="ml-2 text-xs text-slate-400" th:text="'(' + ${perPageCounts[i]} + '/' + ${maxTemplates} + ')'">(0/50)</span>
+            </a>
+        </div>
+        <details class="px-4 py-2 text-xs text-slate-500 border-t border-slate-100">
+            <summary class="cursor-pointer text-slate-600 hover:text-slate-800">ページタイトルを編集</summary>
+            <form method="post" th:action="@{/manager/settings/message-templates/page-titles}" class="mt-2 grid grid-cols-1 md:grid-cols-5 gap-2">
+                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                <div th:each="i : ${#numbers.sequence(1, maxPages)}" class="flex flex-col">
+                    <label class="text-xs text-slate-500 mb-0.5" th:text="'ページ ' + ${i}"></label>
+                    <input type="text" class="tw-input" th:name="'title' + ${i}" th:value="${pageTitles[i - 1]}" maxlength="20"/>
+                </div>
+                <button type="submit" class="md:col-span-5 mt-1 inline-flex items-center justify-center px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded w-fit">タイトルを保存</button>
+            </form>
+        </details>
+    </div>
+
     <p class="text-sm text-slate-500 mb-4">
-        個別送信および一斉送信の画面で、ここに登録した定型文を呼び出して件名・本文に差し込めます。
-        登録できる件数は最大<span th:text="${maxTemplates}">50</span>件です (現在<span th:text="${templates.size()}">0</span>件)。
+        現在 <strong th:text="${pageTitles[pageNo - 1]}">タイトル</strong>: <span th:text="${templates.size()}">0</span> 件表示 (最大<span th:text="${maxTemplates}">50</span>件/ページ)。
     </p>
 
     <form method="get" th:action="@{/manager/settings/message-templates}"
           class="bg-white rounded-lg shadow-sm border border-slate-100 p-4 mb-4 flex items-end gap-3">
+        <input type="hidden" name="page" th:value="${pageNo}"/>
         <div style="max-width: 380px; flex: 1;">
             <label class="block text-xs text-slate-500 mb-1">検索（名前・件名・本文）</label>
             <input type="text" name="q" class="tw-input" th:value="${q}" placeholder="キーワード"/>
         </div>
         <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded">検索</button>
         <a class="inline-flex items-center px-3 py-2 border border-slate-300 bg-white text-slate-600 text-sm rounded hover:bg-slate-50"
-           th:href="@{/manager/settings/message-templates}">クリア</a>
+           th:href="@{/manager/settings/message-templates(page=${pageNo})}">クリア</a>
     </form>
 
     <form id="bulkForm" method="post" th:action="@{/manager/settings/message-templates/bulk-delete}"

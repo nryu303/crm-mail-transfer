@@ -1,27 +1,84 @@
 package com.crm.service;
 
 import com.crm.dto.MessageTemplateForm;
+import com.crm.entity.CrmSetting;
 import com.crm.entity.MessageTemplate;
+import com.crm.repository.CrmSettingRepository;
 import com.crm.repository.MessageTemplateRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 @Service
 public class MessageTemplateService {
 
+    /** Per-page cap; 5 pages total => 250 templates org-wide. */
     public static final int MAX_TEMPLATES = 50;
+    public static final int MAX_PAGES = 5;
 
     private final MessageTemplateRepository repository;
+    private final CrmSettingRepository settingRepository;
 
-    public MessageTemplateService(MessageTemplateRepository repository) {
+    public MessageTemplateService(MessageTemplateRepository repository,
+                                  CrmSettingRepository settingRepository) {
         this.repository = repository;
+        this.settingRepository = settingRepository;
+    }
+
+    /** Page-title storage uses one CrmSetting row per page: template.page.N.title. */
+    private static String pageTitleKey(int pageNo) {
+        return "template.page." + pageNo + ".title";
+    }
+
+    public String getPageTitle(int pageNo) {
+        if (pageNo < 1 || pageNo > MAX_PAGES) pageNo = 1;
+        String v = settingRepository.findBySettingKey(pageTitleKey(pageNo))
+                .map(CrmSetting::getSettingValue).orElse(null);
+        return (v == null || v.trim().isEmpty()) ? ("ページ " + pageNo) : v;
+    }
+
+    /** Ordered list of page titles, indexed 0..MAX_PAGES-1 (page 1..MAX_PAGES). */
+    public List<String> listPageTitles() {
+        List<String> out = new ArrayList<>(MAX_PAGES);
+        for (int i = 1; i <= MAX_PAGES; i++) out.add(getPageTitle(i));
+        return out;
+    }
+
+    @Transactional
+    public void setPageTitle(int pageNo, String title) {
+        if (pageNo < 1 || pageNo > MAX_PAGES) return;
+        String key = pageTitleKey(pageNo);
+        String value = title == null ? "" : title.trim();
+        CrmSetting s = settingRepository.findBySettingKey(key).orElseGet(() -> {
+            CrmSetting ns = new CrmSetting();
+            ns.setSettingKey(key);
+            ns.setDescription("Title for message-template page " + pageNo);
+            ns.setUpdatedAt(LocalDateTime.now());
+            return ns;
+        });
+        s.setSettingValue(value);
+        s.setUpdatedAt(LocalDateTime.now());
+        settingRepository.save(s);
     }
 
     public List<MessageTemplate> listAll() {
         return repository.findAllByOrderByDisplayOrderAscIdAsc();
+    }
+
+    /** Single-page view used by /manager/settings/message-templates?page=N
+     *  and by the thread / inbox template panels. */
+    public List<MessageTemplate> listByPage(int pageNo) {
+        if (pageNo < 1 || pageNo > MAX_PAGES) pageNo = 1;
+        return repository.findByPageNoOrderByDisplayOrderAscIdAsc(pageNo);
+    }
+
+    public long countByPage(int pageNo) {
+        if (pageNo < 1 || pageNo > MAX_PAGES) pageNo = 1;
+        return repository.countByPageNo(pageNo);
     }
 
     public Optional<MessageTemplate> findById(Long id) {
@@ -34,8 +91,9 @@ public class MessageTemplateService {
 
     @Transactional
     public MessageTemplate create(MessageTemplateForm form) {
-        if (repository.count() >= MAX_TEMPLATES) {
-            throw new TooManyTemplatesException();
+        int pageNo = form.getPageNo() == null ? 1 : form.getPageNo();
+        if (countByPage(pageNo) >= MAX_TEMPLATES) {
+            throw new TooManyTemplatesException(pageNo);
         }
         MessageTemplate t = new MessageTemplate();
         form.applyTo(t);
@@ -78,6 +136,9 @@ public class MessageTemplateService {
     public static class TooManyTemplatesException extends RuntimeException {
         public TooManyTemplatesException() {
             super("最大" + MAX_TEMPLATES + "件までしか登録できません");
+        }
+        public TooManyTemplatesException(int pageNo) {
+            super("ページ " + pageNo + " は既に最大" + MAX_TEMPLATES + "件登録済みです");
         }
     }
 
