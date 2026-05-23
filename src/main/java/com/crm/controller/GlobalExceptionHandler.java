@@ -34,6 +34,22 @@ public class GlobalExceptionHandler {
         return mv;
     }
 
+    /**
+     * Bot scanners constantly POST/PUT/DELETE/PROPFIND at "/" looking for misconfigured
+     * apps. Spring's default surfaces these as HttpRequestMethodNotSupportedException,
+     * which the catch-all below would log at ERROR with a full stack trace — drowning
+     * real errors. Demote to a single-line WARN and return 405 cleanly.
+     */
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ModelAndView handleMethodNotAllowed(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex,
+            HttpServletRequest req) {
+        log.warn("405 Method not supported: {} {}", req.getMethod(), req.getRequestURI());
+        ModelAndView mv = new ModelAndView("error/404"); // reuse the no-info page
+        mv.setStatus(HttpStatus.METHOD_NOT_ALLOWED);
+        return mv;
+    }
+
     @ExceptionHandler(Exception.class)
     public ModelAndView handleAll(Exception ex, HttpServletRequest req) {
         log.error("Unhandled exception processing {} {}: {}",
