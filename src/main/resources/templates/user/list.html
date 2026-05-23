@@ -189,6 +189,7 @@
                                             <option value="500">500</option>
                                             <option value="1000" selected>1,000</option>
                                             <option value="2000">2,000</option>
+                                            <option value="2500">2,500</option>
                                             <option value="5000">5,000</option>
                                         </select>
                                     </span>
@@ -628,7 +629,18 @@ function formatFolderLabel(values) {
     var scopeFlag = document.getElementById('folderAllScope');
     var limitWrap = document.getElementById('folderScopeLimitWrap');
     // Snapshot the committed folder filter from the rendered checkbox state.
+    // NOTE: at script-execution time the DOMContentLoaded defensive checkbox-sync
+    // hasn't fired yet, so a missing th:checked on the (未設定) box would leave
+    // committedFolders empty here even though the URL has folders=__NONE__. Cover
+    // that by ALSO reading values straight from the URL's `folders=` params and
+    // merging — that way folder-scope mode engages correctly for 未設定 too.
     committedFolders = getMultiSelectValues('folders');
+    try {
+        var qsFolders = new URLSearchParams(window.location.search).getAll('folders');
+        qsFolders.forEach(function (v) {
+            if (v && committedFolders.indexOf(v) === -1) committedFolders.push(v);
+        });
+    } catch (_) { /* old browser; rely on Thymeleaf rendering alone */ }
 
     // Single source of truth for footer state — runs initially + every time row checks
     // change. Resolves the three operating modes:
