@@ -19,11 +19,14 @@ public class InboxController {
 
     private final MessageService messageService;
     private final com.crm.service.AdminAuthService adminAuthService;
+    private final com.crm.service.MessageTemplateService templateService;
 
     public InboxController(MessageService messageService,
-                            com.crm.service.AdminAuthService adminAuthService) {
+                            com.crm.service.AdminAuthService adminAuthService,
+                            com.crm.service.MessageTemplateService templateService) {
         this.messageService = messageService;
         this.adminAuthService = adminAuthService;
+        this.templateService = templateService;
     }
 
     @GetMapping("/manager/inbox")
@@ -36,6 +39,16 @@ public class InboxController {
         model.addAttribute("rows", rows);
         model.addAttribute("unreadOnly", unreadOnly);
         model.addAttribute("totalUnread", totalUnread);
+        // Bulk-reply panel data (operator request 2026-05-23 — same layout as the
+        // single-user reply screen with template tabs + tag references).
+        model.addAttribute("templates", templateService.listAll());
+        model.addAttribute("templatePageTitles", templateService.listPageTitles());
+        model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
+        model.addAttribute("builtinTags", com.crm.service.PlaceholderService.BUILTIN_TAGS);
+        // User-specific tag keys are dynamic per-user, but for the bulk-reply panel we expose
+        // the conventional 5-slot key names so operators can drop the tokens into the body.
+        model.addAttribute("customTagTokens", java.util.Arrays.asList(
+                "%amount%", "%product%", "%full_address%", "%date_jp%"));
         return "inbox/list";
     }
 

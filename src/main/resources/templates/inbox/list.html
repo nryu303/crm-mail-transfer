@@ -127,19 +127,130 @@
         </table>
     </div>
 
-    <!-- Bulk reply panel: collapsed by default, expands when user clicks 「選択返信」 -->
+    <!-- Bulk reply panel — collapsed by default, expands when 「選択返信」 is clicked.
+         2026-05-23: layout matches the single-user reply screen:
+           • Left:  compose (件名 + 本文)
+           • Right: 定型文 with 5-page tab strip
+           • Below: デフォルト置き換えタグ + 置き換えタグ(ユーザー専用) reference panels -->
     <div id="inboxReplyPanel" style="display:none; margin-top:12px; background:#fff; border:1px solid #e2e8f0;
                                        border-radius:8px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,.04);">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
             <strong style="font-size:.9rem;">選択ユーザーへ一括返信</strong>
             <span id="inboxReplyCount" class="text-xs text-slate-500"></span>
-            <span class="ml-auto text-xs text-slate-400">置き換えタグ: %name% / %email% / %amount% など</span>
+            <span class="ml-auto text-xs text-slate-400">置換タグはユーザーごとに自動展開されます</span>
         </div>
-        <input type="text" name="subject" placeholder="件名 (例: %name% 様 ご連絡)"
-               class="tw-input mb-2" style="font-size:.85rem;"/>
-        <textarea name="body" rows="4" placeholder="本文 (例: %name% 様 こんにちは...)"
-                  class="tw-input" style="font-size:.85rem;"></textarea>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <!-- Left: compose -->
+            <div>
+                <input type="text" name="subject" id="inboxBulkSubject" placeholder="件名 (例: %name% 様 ご連絡)"
+                       class="tw-input mb-2" style="font-size:.85rem;"/>
+                <textarea name="body" id="inboxBulkBody" rows="8" placeholder="本文 (例: %name% 様 こんにちは...)"
+                          class="tw-input" style="font-size:.85rem;"></textarea>
+            </div>
+            <!-- Right: 定型文 panel with page tabs -->
+            <div class="bg-slate-50 border border-slate-200 rounded">
+                <div class="px-3 py-2 border-b border-slate-200 flex items-center gap-2">
+                    <strong class="text-xs text-slate-700">定型文</strong>
+                    <a class="text-xs text-blue-600 hover:underline ml-auto" th:href="@{/manager/settings/message-templates}" target="_blank">編集</a>
+                </div>
+                <div id="inboxTplTabs" class="flex border-b border-slate-200 bg-slate-100 text-xs overflow-x-auto">
+                    <button type="button" th:each="i : ${#numbers.sequence(1, templateMaxPages)}"
+                            class="inbox-tpl-tab px-3 py-1.5 whitespace-nowrap border-r border-slate-200"
+                            th:classappend="${i == 1 ? 'bg-white text-blue-700 font-semibold border-b-2 border-b-blue-500' : 'text-slate-600 hover:bg-white'}"
+                            th:attr="data-page=${i}"
+                            th:text="${templatePageTitles[i - 1]}">タイトル</button>
+                </div>
+                <div id="inboxTplBody" style="max-height:260px; overflow-y:auto;">
+                    <div th:if="${templates.empty}" class="px-3 py-3 text-xs text-slate-400">定型文はまだ登録されていません</div>
+                    <div th:each="t : ${templates}" class="inbox-tpl-item border-b border-slate-100 hover:bg-blue-50 cursor-pointer"
+                         th:attr="data-page=${t.pageNo},data-subject=${t.subject},data-body=${t.body}"
+                         th:style="${t.pageNo != 1 ? 'display:none;' : null}">
+                        <div class="px-3 py-2">
+                            <div class="text-xs font-semibold text-slate-700" th:text="${t.name}">名前</div>
+                            <div class="text-xs text-slate-500 truncate" th:text="${t.subject} ?: '(タイトル未設定)'">件名</div>
+                            <div class="text-xs text-slate-400 truncate" th:text="${t.body}">本文</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Tag reference panels -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div class="bg-emerald-50 border border-emerald-200 rounded p-3">
+                <div class="text-xs font-semibold text-emerald-800 mb-1.5">デフォルトの置き換えタグ (クリックで本文に挿入)</div>
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" th:each="b : ${builtinTags}"
+                            class="inbox-tag-chip text-xs bg-white border border-emerald-300 text-emerald-700 px-2 py-1 rounded hover:bg-emerald-100"
+                            th:attr="data-tag=${b.token}">
+                        <code th:text="${b.token}">%name%</code>
+                        <span class="text-emerald-500 ml-1" th:text="'(' + ${b.description} + ')'"></span>
+                    </button>
+                </div>
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded p-3">
+                <div class="text-xs font-semibold text-slate-700 mb-1.5">置き換えタグ（ユーザー専用・保存編集可）</div>
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" th:each="tag : ${customTagTokens}"
+                            class="inbox-tag-chip text-xs bg-white border border-slate-300 text-slate-700 px-2 py-1 rounded hover:bg-slate-100"
+                            th:attr="data-tag=${tag}">
+                        <code th:text="${tag}">%amount%</code>
+                    </button>
+                </div>
+                <div class="text-xs text-slate-500 mt-1.5">ユーザー個別の値は <a th:href="@{/manager/users}" class="text-blue-600 hover:underline">ユーザー詳細</a> で編集できます。</div>
+            </div>
+        </div>
     </div>
+    <script>
+    // Inbox bulk-reply panel behaviour:
+    //   * tpl-item click → fill the subject + body textarea
+    //   * tag-chip click → insert the token at the current cursor of body (or subject)
+    //   * page tabs → show/hide tpl-item by data-page (no reload)
+    (function () {
+        var subjEl = document.getElementById('inboxBulkSubject');
+        var bodyEl = document.getElementById('inboxBulkBody');
+        if (!subjEl || !bodyEl) return;
+        document.querySelectorAll('.inbox-tpl-item').forEach(function (it) {
+            it.addEventListener('click', function () {
+                var s = it.getAttribute('data-subject') || '';
+                var b = it.getAttribute('data-body') || '';
+                subjEl.value = s;
+                bodyEl.value = b;
+                bodyEl.focus();
+            });
+        });
+        document.querySelectorAll('.inbox-tag-chip').forEach(function (c) {
+            c.addEventListener('click', function () {
+                var tag = c.getAttribute('data-tag') || '';
+                if (!tag) return;
+                var target = (document.activeElement === subjEl) ? subjEl : bodyEl;
+                var start = target.selectionStart || target.value.length;
+                var end   = target.selectionEnd   || target.value.length;
+                target.value = target.value.substring(0, start) + tag + target.value.substring(end);
+                var pos = start + tag.length;
+                target.focus();
+                target.setSelectionRange(pos, pos);
+            });
+        });
+        var tabs = document.querySelectorAll('#inboxTplTabs .inbox-tpl-tab');
+        function setActive(page) {
+            tabs.forEach(function (t) {
+                var active = String(t.getAttribute('data-page')) === String(page);
+                t.classList.toggle('bg-white', active);
+                t.classList.toggle('text-blue-700', active);
+                t.classList.toggle('font-semibold', active);
+                t.classList.toggle('border-b-2', active);
+                t.classList.toggle('border-b-blue-500', active);
+                t.classList.toggle('text-slate-600', !active);
+            });
+            document.querySelectorAll('.inbox-tpl-item').forEach(function (it) {
+                it.style.display = String(it.getAttribute('data-page')) === String(page) ? '' : 'none';
+            });
+        }
+        tabs.forEach(function (t) {
+            t.addEventListener('click', function () { setActive(t.getAttribute('data-page')); });
+        });
+    })();
+    </script>
 
     <div class="list-page-footer">
         <span class="selected-count" id="inboxSelectedCount"></span>
