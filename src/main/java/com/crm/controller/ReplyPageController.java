@@ -124,7 +124,8 @@ public class ReplyPageController {
         ReplyPageSetting settings = settingService.getOrCreate();
         String headerHtml = blankToNull(rp.getHeaderHtml());
         if (headerHtml == null && user.isPresent()) {
-            headerHtml = blankToNull(user.get().getMemo());
+            // Honour the operator's 使用中 slot selection (memo / memo2 / memo3).
+            headerHtml = blankToNull(user.get().getActiveMemo());
         }
         if (headerHtml == null) headerHtml = blankToNull(settings.getDefaultHeaderHtml());
 

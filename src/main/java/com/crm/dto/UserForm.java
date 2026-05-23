@@ -33,8 +33,13 @@ public class UserForm {
     @Size(max = 8)
     private String gender;
 
-    /** Memo is displayed on the public reply page (rendered as HTML, with placeholder substitution). */
+    /** Memo is displayed on the public reply page (rendered as HTML, with placeholder substitution).
+     *  Slot 1 of three; slots 2 and 3 are stored in {@link #memo2}, {@link #memo3}. */
     private String memo;
+    private String memo2;
+    private String memo3;
+    /** Which slot (1..3) the reply page should currently render. */
+    private Integer activeMemoSlot;
 
     /** Admin-only internal memo. Never shown to the end user. */
     private String internalMemo;
@@ -69,6 +74,15 @@ public class UserForm {
     public String getMemo() { return memo; }
     public void setMemo(String memo) { this.memo = memo; }
 
+    public String getMemo2() { return memo2; }
+    public void setMemo2(String memo2) { this.memo2 = memo2; }
+    public String getMemo3() { return memo3; }
+    public void setMemo3(String memo3) { this.memo3 = memo3; }
+    public Integer getActiveMemoSlot() { return activeMemoSlot == null ? 1 : activeMemoSlot; }
+    public void setActiveMemoSlot(Integer s) {
+        this.activeMemoSlot = (s == null || s < 1 || s > 3) ? 1 : s;
+    }
+
     public String getInternalMemo() { return internalMemo; }
     public void setInternalMemo(String internalMemo) { this.internalMemo = internalMemo; }
 
@@ -91,6 +105,9 @@ public class UserForm {
         f.adCode = u.getAdCode();
         f.gender = u.getGender();
         f.memo = u.getMemo();
+        f.memo2 = u.getMemo2();
+        f.memo3 = u.getMemo3();
+        f.activeMemoSlot = u.getActiveMemoSlot();
         f.internalMemo = u.getInternalMemo();
         f.amount       = readValueForKey(u, "amount");
         f.product      = readValueForKey(u, "product");
@@ -108,6 +125,9 @@ public class UserForm {
         u.setAdCode(trim(adCode));
         u.setGender(normalizeGender(gender));
         u.setMemo(memo);
+        u.setMemo2(memo2);
+        u.setMemo3(memo3);
+        u.setActiveMemoSlot(activeMemoSlot);
         u.setInternalMemo(internalMemo);
         // Named slots: the key is fixed; only the value is editable.
         u.setTag1Key("amount");       u.setTag1Value(trim(amount));

@@ -65,9 +65,20 @@ public class CrmUser {
 
     /** Per-user reply-page HTML (rendered as HTML on the public reply page).
      *  LONGTEXT (4GB) so operators can paste full landing-page HTML with
-     *  base64-embedded images — TEXT (64KB) was being exceeded. */
+     *  base64-embedded images — TEXT (64KB) was being exceeded.
+     *  Slot 1 of three; see {@link #memo2}, {@link #memo3}, {@link #activeMemoSlot}. */
     @Column(name = "MEMO", columnDefinition = "LONGTEXT")
     private String memo;
+
+    /** Two extra slots for the reply-page header HTML (2026-05-23). The operator
+     *  switches between them via {@code activeMemoSlot}; the public /reply page
+     *  reads whichever slot is currently marked 使用中. */
+    @Column(name = "MEMO_2", columnDefinition = "LONGTEXT")
+    private String memo2;
+    @Column(name = "MEMO_3", columnDefinition = "LONGTEXT")
+    private String memo3;
+    @Column(name = "ACTIVE_MEMO_SLOT", nullable = false)
+    private Integer activeMemoSlot;
 
     /** Admin-only internal memo (never shown to the user). */
     @Column(name = "INTERNAL_MEMO", columnDefinition = "LONGTEXT")
@@ -99,6 +110,7 @@ public class CrmUser {
         if (createdAt == null) createdAt = now;
         updatedAt = now;
         if (status == null) status = STATUS_ACTIVE;
+        if (activeMemoSlot == null || activeMemoSlot < 1 || activeMemoSlot > 3) activeMemoSlot = 1;
     }
 
     @PreUpdate
@@ -141,6 +153,23 @@ public class CrmUser {
 
     public String getMemo() { return memo; }
     public void setMemo(String memo) { this.memo = memo; }
+
+    public String getMemo2() { return memo2; }
+    public void setMemo2(String memo2) { this.memo2 = memo2; }
+    public String getMemo3() { return memo3; }
+    public void setMemo3(String memo3) { this.memo3 = memo3; }
+    public Integer getActiveMemoSlot() { return activeMemoSlot == null ? 1 : activeMemoSlot; }
+    public void setActiveMemoSlot(Integer s) {
+        this.activeMemoSlot = (s == null || s < 1 || s > 3) ? 1 : s;
+    }
+
+    /** Returns the HTML for the slot currently marked 使用中. */
+    public String getActiveMemo() {
+        int s = getActiveMemoSlot();
+        if (s == 2) return memo2;
+        if (s == 3) return memo3;
+        return memo;
+    }
 
     public String getInternalMemo() { return internalMemo; }
     public void setInternalMemo(String internalMemo) { this.internalMemo = internalMemo; }

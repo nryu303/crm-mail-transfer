@@ -776,16 +776,23 @@ public class UserController {
      * the memo, with placeholder tags substituted against this user's data.
      */
     @GetMapping("/{id}/reply-preview")
-    public String replyPreview(@PathVariable Long id, Model model, RedirectAttributes ra) {
+    public String replyPreview(@PathVariable Long id,
+                                @RequestParam(name = "slot", required = false) Integer slot,
+                                Model model, RedirectAttributes ra) {
         Optional<CrmUser> user = service.findById(id);
         if (!user.isPresent()) {
             ra.addFlashAttribute("flashError", "ユーザーが見つかりません");
             return "redirect:/manager/users";
         }
-        String rawMemo = user.get().getMemo();
+        // Default to the slot the operator marked 使用中; allow ?slot=N override for preview.
+        int effSlot = (slot != null && slot >= 1 && slot <= 3) ? slot : user.get().getActiveMemoSlot();
+        String rawMemo;
+        if (effSlot == 2) rawMemo = user.get().getMemo2();
+        else if (effSlot == 3) rawMemo = user.get().getMemo3();
+        else rawMemo = user.get().getMemo();
         boolean usingDefault = rawMemo == null || rawMemo.trim().isEmpty();
         if (usingDefault) {
-            // No per-user HTML; fall back to the site-wide reply page HTML from settings.
+            // No per-user HTML for this slot; fall back to the site-wide reply page HTML.
             rawMemo = replyPageSettingService.getOrCreate().getDefaultHeaderHtml();
         }
         String memoText = placeholderService.substitute(rawMemo, user.get());
@@ -795,6 +802,8 @@ public class UserController {
         model.addAttribute("memoText", repaired);
         model.addAttribute("repaired", wasRepaired);
         model.addAttribute("usingDefaultHtml", usingDefault);
+        model.addAttribute("previewSlot", effSlot);
+        model.addAttribute("activeSlot", user.get().getActiveMemoSlot());
         model.addAttribute("bindings", placeholderService.buildBindings(user.get()));
         return "user/reply-preview";
     }

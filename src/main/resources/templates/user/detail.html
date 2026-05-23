@@ -91,22 +91,80 @@
                 </select>
             </div>
 
+            <!-- Three reply-page HTML slots — operator picks one as 使用中. The public reply
+                 page renders only the active slot. Each slot has its own preview link.
+                 Operator request 2026-05-23. -->
             <div>
-                <label class="block text-xs text-slate-500 mb-1 flex items-center gap-2">
-                    <span>専用返信画面HTML <span class="text-slate-400 normal-case">(ユーザーの返信ページに表示されます)</span></span>
-                    <span class="ml-auto text-slate-400" id="memoCharCount" style="font-size:0.7rem;"></span>
+                <label class="block text-xs text-slate-500 mb-1">
+                    専用返信画面HTML <span class="text-slate-400 normal-case">(3つまで保存でき、使用中のみが公開ページに反映されます)</span>
                 </label>
-                <textarea class="tw-input font-mono" id="memo" name="memo"
-                          th:text="${form.memo}"
-                          style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
-                          placeholder="例: &lt;p&gt;%name% 様&lt;/p&gt;&#10;&lt;p&gt;ご請求額: %amount%&lt;/p&gt;"></textarea>
+                <div class="border border-slate-200 rounded-md overflow-hidden">
+                    <div class="flex border-b border-slate-200 bg-slate-50 text-xs">
+                        <button type="button" class="memo-tab px-3 py-2 flex-1 text-left flex items-center gap-2 border-r border-slate-200"
+                                data-slot="1">
+                            <input type="radio" name="activeMemoSlot" value="1"
+                                   th:checked="${form.activeMemoSlot == 1}" title="このスロットを使用中にする"/>
+                            <span>① 返信HTML</span>
+                            <span class="ml-auto text-slate-400 memo-char" data-for="memo">0 文字</span>
+                        </button>
+                        <button type="button" class="memo-tab px-3 py-2 flex-1 text-left flex items-center gap-2 border-r border-slate-200"
+                                data-slot="2">
+                            <input type="radio" name="activeMemoSlot" value="2"
+                                   th:checked="${form.activeMemoSlot == 2}" title="このスロットを使用中にする"/>
+                            <span>② 返信HTML</span>
+                            <span class="ml-auto text-slate-400 memo-char" data-for="memo2">0 文字</span>
+                        </button>
+                        <button type="button" class="memo-tab px-3 py-2 flex-1 text-left flex items-center gap-2"
+                                data-slot="3">
+                            <input type="radio" name="activeMemoSlot" value="3"
+                                   th:checked="${form.activeMemoSlot == 3}" title="このスロットを使用中にする"/>
+                            <span>③ 返信HTML</span>
+                            <span class="ml-auto text-slate-400 memo-char" data-for="memo3">0 文字</span>
+                        </button>
+                    </div>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo" name="memo"
+                              th:text="${form.memo}"
+                              th:style="${form.activeMemoSlot == 1 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              placeholder="① 例: &lt;p&gt;%name% 様&lt;/p&gt;&#10;&lt;p&gt;ご請求額: %amount%&lt;/p&gt;"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo2" name="memo2"
+                              th:text="${form.memo2}"
+                              th:style="${form.activeMemoSlot == 2 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              placeholder="② パターン違いの HTML をここに保存"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo3" name="memo3"
+                              th:text="${form.memo3}"
+                              th:style="${form.activeMemoSlot == 3 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              placeholder="③ 三つめの HTML をここに保存"></textarea>
+                </div>
+                <p class="mt-1 text-xs text-slate-500">タブのラジオボタンが「使用中」マークです。クリックでパネル切替、ラジオで公開反映スロットを変更し、保存後に反映されます。</p>
             </div>
             <script>
                 (function(){
-                    var ta = document.getElementById('memo');
-                    var c  = document.getElementById('memoCharCount');
-                    function update(){ if(c && ta) c.textContent = (ta.value || '').length.toLocaleString() + ' 文字'; }
-                    if (ta) { ta.addEventListener('input', update); update(); }
+                    var panes = ['memo','memo2','memo3'];
+                    function refreshCounts() {
+                        panes.forEach(function (p) {
+                            var ta = document.getElementById(p);
+                            var lbl = document.querySelector('.memo-char[data-for="' + p + '"]');
+                            if (ta && lbl) lbl.textContent = (ta.value || '').length.toLocaleString() + ' 文字';
+                        });
+                    }
+                    panes.forEach(function (p) {
+                        var ta = document.getElementById(p);
+                        if (ta) ta.addEventListener('input', refreshCounts);
+                    });
+                    refreshCounts();
+                    document.querySelectorAll('.memo-tab').forEach(function (tab) {
+                        tab.addEventListener('click', function (e) {
+                            // Don't swallow the click on the radio itself — but DO switch the pane.
+                            var slot = tab.getAttribute('data-slot');
+                            panes.forEach(function (p, i) {
+                                var ta = document.getElementById(p);
+                                if (ta) ta.style.display = (String(i + 1) === String(slot)) ? '' : 'none';
+                            });
+                        });
+                    });
                 })();
             </script>
 
@@ -123,10 +181,16 @@
             <input type="hidden" th:field="*{dateJp}"/>
             <input type="hidden" name="confirmPassword" id="updateConfirmPassword"/>
 
-            <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+            <div class="flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap">
                 <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md">保存</button>
                 <a class="inline-flex items-center px-3 py-2 text-sm border border-sky-500 text-sky-700 hover:bg-sky-50 rounded-md"
-                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'}" target="_blank">返信画面プレビュー</a>
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'}" target="_blank">プレビュー (使用中)</a>
+                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=1)}" target="_blank">①</a>
+                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=2)}" target="_blank">②</a>
+                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=3)}" target="_blank">③</a>
                 <span class="ml-auto text-xs text-slate-500">ID: <code th:text="${user.id}"></code></span>
             </div>
         </form>
