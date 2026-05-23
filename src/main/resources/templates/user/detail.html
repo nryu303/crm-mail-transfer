@@ -134,6 +134,22 @@
         <!-- ===== RIGHT: tags + payments ===== -->
         <div class="flex flex-col gap-4">
 
+            <!-- Built-in tags (read-only reference for the operator). Per request 2026-05-23
+                 these should be visible on the user detail page above the user-specific
+                 (editable) tags panel so the operator can see the full tag vocabulary at
+                 once when composing a message. -->
+            <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-5">
+                <h2 class="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2 mb-3">デフォルトの置き換えタグ</h2>
+                <p class="text-xs text-slate-500 mb-3">メッセージ送信時に自動的に差し替えられます。編集不可。</p>
+                <div class="grid grid-cols-1 gap-2">
+                    <div th:each="b : ${builtinTags}" class="grid grid-cols-12 gap-2 items-center">
+                        <code class="col-span-3 bg-emerald-50 text-emerald-700 px-2 py-1 rounded text-sm text-center"
+                              th:text="${b.token}"></code>
+                        <span class="col-span-9 text-sm text-slate-600" th:text="${b.description}"></span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Replacement tags (inline-edited via the SAME form above — we mirror the hidden inputs) -->
             <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-5">
                 <h2 class="text-sm font-semibold text-slate-700 border-b border-slate-100 pb-2 mb-3">置き換えタグ（メッセージ送信時に差し替え）</h2>

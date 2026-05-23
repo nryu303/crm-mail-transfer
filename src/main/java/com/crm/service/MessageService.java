@@ -55,9 +55,31 @@ public class MessageService {
         this.ctx = ctx;
     }
 
-    /** Thread display for the user-detail pane: newest at the top. */
+    /**
+     * Thread display for the user-detail pane. Future-scheduled outbound messages
+     * (status=QUEUED with scheduledAt > now) are pinned to the top in scheduled-time
+     * DESC order, so an operator sees "what's about to fire" before the historical
+     * sent/received trail. Everything else falls below, sorted by createdAt DESC.
+     * Operator request 2026-05-23.
+     */
     public List<Message> threadFor(Long userId) {
-        return messageRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<Message> all = messageRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        List<Message> future = new java.util.ArrayList<>();
+        List<Message> rest = new java.util.ArrayList<>();
+        for (Message m : all) {
+            if (Message.STATUS_QUEUED.equals(m.getStatus())
+                    && m.getScheduledAt() != null && m.getScheduledAt().isAfter(now)) {
+                future.add(m);
+            } else {
+                rest.add(m);
+            }
+        }
+        future.sort((a, b) -> b.getScheduledAt().compareTo(a.getScheduledAt()));
+        List<Message> out = new java.util.ArrayList<>(all.size());
+        out.addAll(future);
+        out.addAll(rest);
+        return out;
     }
 
     /** One row per user that has inbound messages, newest first. For /manager/inbox. */
