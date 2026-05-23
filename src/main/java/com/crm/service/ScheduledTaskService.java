@@ -86,6 +86,30 @@ public class ScheduledTaskService {
                 deleted, days, cutoff);
     }
 
+    /**
+     * Worker pool used to parallelise the per-tick dispatch loop. Each task represents one
+     * QUEUED message — the worker re-fetches it, runs the cancel/exclusion gates, then calls
+     * {@code messageService.sendNow}. Sized via {@code app.scheduler.parallel-workers}
+     * (default 8). 8 workers × ~700ms per send ≈ 700 msgs/min, well above the 600/min cap.
+     *
+     * <p>Why parallel? Each send opens an SSH + HTTP round-trip to the relay (~700ms) so a
+     * sequential loop tops out at ~85 msgs/min — far below the configured rate cap. With 8
+     * workers we restore the 600/min ceiling without changing the relay or the rate logic.
+     *
+     * <p>Bounded by:
+     *   * HikariCP pool size (default 10; 8 workers + main + handlers fits)
+     *   * Relay capacity per host (the relays each spawn their own short-lived ssh process
+     *     per upload, so 8 concurrent uploads is well within their typical fanout)
+     */
+    private final int parallelWorkers = Integer.parseInt(
+            System.getProperty("app.scheduler.parallel-workers", "8"));
+    private final java.util.concurrent.ExecutorService workerPool =
+            java.util.concurrent.Executors.newFixedThreadPool(parallelWorkers, r -> {
+                Thread t = new Thread(r, "crm-dispatch");
+                t.setDaemon(true);
+                return t;
+            });
+
     @Scheduled(fixedRateString = "${app.scheduler.queued-poll-rate-ms:30000}",
                initialDelayString = "${app.scheduler.queued-poll-initial-delay-ms:15000}")
     public void dispatchQueued() {
@@ -96,81 +120,89 @@ public class ScheduledTaskService {
         LocalDateTime now = LocalDateTime.now();
         List<Message> due = messageRepository.findDueForDispatch(Message.STATUS_QUEUED, now);
         if (due.isEmpty()) return;
-        log.info("Scheduler: {} queued messages due, dispatching", due.size());
+        log.info("Scheduler: {} queued messages due, dispatching across {} workers", due.size(), parallelWorkers);
         // Cache broadcast cancel-state lookups per tick: a 5K-message batch hits the same
         // broadcast row 5K times, so we want one DB read per broadcast, not per message.
-        java.util.Map<Long, Boolean> broadcastCancelled = new java.util.HashMap<>();
-        for (Message msg : due) {
-            try {
-                // CRITICAL race-condition gate: re-fetch the row from DB before each send so
-                // a cancel that arrived AFTER findDueForDispatch loaded this batch into memory
-                // catches us before we dispatch. Without this re-fetch, an operator who hit
-                // キャンセル at "送信済み 167" still saw 645+ deliveries continue to the relay —
-                // the dispatcher was iterating an in-memory list of QUEUED snapshots that had
-                // already been flipped to CANCELLED in the DB.
-                // Falls back to the in-memory snapshot if findById can't see the row (Mockito
-                // tests don't stub findById, and an actual missing row is a different
-                // failure that the downstream save() will surface).
-                java.util.Optional<Message> freshOpt = messageRepository.findById(msg.getId());
-                Message effective = freshOpt.orElse(msg);
-                if (!Message.STATUS_QUEUED.equals(effective.getStatus())) {
-                    continue;
-                }
-                msg = effective;
+        // Concurrent because the parallel workers race on it.
+        final java.util.concurrent.ConcurrentMap<Long, Boolean> broadcastCancelled =
+                new java.util.concurrent.ConcurrentHashMap<>();
+        java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>(due.size());
+        for (final Message initialMsg : due) {
+            futures.add(workerPool.submit(() -> dispatchOne(initialMsg, broadcastCancelled)));
+        }
+        // Wait for every task in this tick to finish before returning. Bounds tick wall-time
+        // to ~ (batch_size / workers) × per_send_latency, which keeps backpressure visible
+        // (if a tick can't finish in 30s the next @Scheduled fire is queued by Spring's
+        // single-threaded TaskScheduler — we don't double-dispatch).
+        for (java.util.concurrent.Future<?> f : futures) {
+            try { f.get(); }
+            catch (Exception e) { log.warn("Scheduler: worker task failed: {}", e.toString()); }
+        }
+    }
 
-                // Broadcast-level cancel: the parent's status flipped to CANCELLED but the
-                // bulk MESSAGE update inside cancel() may not have reached this row yet (e.g.
-                // the dispatcher began a 5K-row tick at the same instant the cancel started).
-                // Detect it, flip this message ourselves, and skip the send.
-                if (msg.getBroadcastId() != null) {
-                    Boolean isCancelled = broadcastCancelled.get(msg.getBroadcastId());
-                    if (isCancelled == null) {
-                        com.crm.entity.Broadcast b = broadcastRepo.findById(msg.getBroadcastId()).orElse(null);
-                        isCancelled = (b != null && com.crm.entity.Broadcast.STATUS_CANCELLED.equals(b.getStatus()));
-                        broadcastCancelled.put(msg.getBroadcastId(), isCancelled);
-                    }
-                    if (isCancelled) {
+    /** One message → re-fetch + gate + send. Runs on the worker pool. */
+    private void dispatchOne(Message msg,
+                             java.util.concurrent.ConcurrentMap<Long, Boolean> broadcastCancelled) {
+        try {
+            // CRITICAL race-condition gate: re-fetch the row from DB before each send so
+            // a cancel that arrived AFTER findDueForDispatch loaded this batch into memory
+            // catches us before we dispatch. Without this re-fetch, an operator who hit
+            // キャンセル at "送信済み 167" still saw 645+ deliveries continue to the relay —
+            // the dispatcher was iterating an in-memory list of QUEUED snapshots that had
+            // already been flipped to CANCELLED in the DB.
+            java.util.Optional<Message> freshOpt = messageRepository.findById(msg.getId());
+            Message effective = freshOpt.orElse(msg);
+            if (!Message.STATUS_QUEUED.equals(effective.getStatus())) {
+                return;
+            }
+            msg = effective;
+
+            // Broadcast-level cancel: the parent's status flipped to CANCELLED but the
+            // bulk MESSAGE update inside cancel() may not have reached this row yet.
+            if (msg.getBroadcastId() != null) {
+                Boolean isCancelled = broadcastCancelled.computeIfAbsent(msg.getBroadcastId(), bid -> {
+                    com.crm.entity.Broadcast b = broadcastRepo.findById(bid).orElse(null);
+                    return (b != null && com.crm.entity.Broadcast.STATUS_CANCELLED.equals(b.getStatus()));
+                });
+                if (Boolean.TRUE.equals(isCancelled)) {
+                    msg.setStatus(Message.STATUS_CANCELLED);
+                    msg.setErrorMessage("broadcast cancelled while message was in dispatcher batch");
+                    messageRepository.save(msg);
+                    return;
+                }
+            }
+
+            // Scheduled-broadcast exclusion: if this row belongs to a broadcast and the
+            // user has ALREADY received some other OUT message between the broadcast
+            // creation time and this message's scheduled time, drop this row.
+            if (msg.getBroadcastId() != null && msg.getScheduledAt() != null
+                    && msg.getScheduledAt().isAfter(msg.getCreatedAt())) {
+                com.crm.entity.Broadcast b = broadcastRepo.findById(msg.getBroadcastId()).orElse(null);
+                if (b != null && b.getCreatedAt() != null) {
+                    long otherSends = messageRepository.countOutboundFinalisedSince(
+                            msg.getUserId(), b.getCreatedAt(), msg.getId());
+                    if (otherSends > 0) {
                         msg.setStatus(Message.STATUS_CANCELLED);
-                        msg.setErrorMessage("broadcast cancelled while message was in dispatcher batch");
+                        msg.setErrorMessage("excluded: user received " + otherSends
+                                + " other send(s) after broadcast was scheduled");
                         messageRepository.save(msg);
-                        continue;
+                        log.info("Scheduler: excluded msg {} (user {} got {} other sends after broadcast {})",
+                                msg.getId(), msg.getUserId(), otherSends, msg.getBroadcastId());
+                        return;
                     }
                 }
+            }
 
-                // Scheduled-broadcast exclusion: if this row belongs to a broadcast and the
-                // user has ALREADY received some other OUT message between the broadcast
-                // creation time and this message's scheduled time, drop this row. The operator
-                // explicitly requested this so a manually-sent intermediate message removes
-                // the user from the still-pending scheduled batch.
-                if (msg.getBroadcastId() != null && msg.getScheduledAt() != null
-                        && msg.getScheduledAt().isAfter(msg.getCreatedAt())) {
-                    com.crm.entity.Broadcast b = broadcastRepo.findById(msg.getBroadcastId()).orElse(null);
-                    if (b != null && b.getCreatedAt() != null) {
-                        long otherSends = messageRepository.countOutboundFinalisedSince(
-                                msg.getUserId(), b.getCreatedAt(), msg.getId());
-                        if (otherSends > 0) {
-                            msg.setStatus(Message.STATUS_CANCELLED);
-                            msg.setErrorMessage("excluded: user received " + otherSends
-                                    + " other send(s) after broadcast was scheduled");
-                            messageRepository.save(msg);
-                            log.info("Scheduler: excluded msg {} (user {} got {} other sends after broadcast {})",
-                                    msg.getId(), msg.getUserId(), otherSends, msg.getBroadcastId());
-                            continue;
-                        }
-                    }
-                }
-
-                // Pool lookup is best-effort. As of the 2026-05 dispatcher refactor, outbound
-                // transport is chosen by the active RELAY_SERVER row, so a missing pool entry
-                // (e.g. the FROM uses the avu74g.jp base domain rather than a carrier address)
-                // is no longer a fatal condition.
-                CarrierAddressPool pool = poolRepository.findByAddress(msg.getFromAddress()).orElse(null);
-                messageService.sendNow(msg, pool);
-            } catch (Exception e) {
-                log.warn("Scheduler: dispatch failed for message {}: {}", msg.getId(), e.toString());
+            CarrierAddressPool pool = poolRepository.findByAddress(msg.getFromAddress()).orElse(null);
+            messageService.sendNow(msg, pool);
+        } catch (Exception e) {
+            log.warn("Scheduler: dispatch failed for message {}: {}", msg.getId(), e.toString());
+            try {
                 msg.setStatus(Message.STATUS_FAILED);
                 msg.setErrorMessage("scheduler error: " + e.toString());
                 messageRepository.save(msg);
+            } catch (Exception inner) {
+                log.warn("Scheduler: failed to record FAILED status for {}: {}", msg.getId(), inner.toString());
             }
         }
     }

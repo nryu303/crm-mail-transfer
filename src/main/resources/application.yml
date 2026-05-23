@@ -43,7 +43,10 @@ spring:
     password: ${DB_PASSWORD:crm_user_dev_2026}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 10
+      # Bumped from 10 → 20 on 2026-05-23 when the dispatcher gained 8 parallel workers.
+      # Each worker holds a connection during the save() at the end of dispatchOne, plus
+      # the broadcast/pool lookups. Reserve headroom for concurrent admin web requests.
+      maximum-pool-size: 20
       minimum-idle: 2
   jpa:
     hibernate:
