@@ -22,12 +22,25 @@ public class UserSearchForm {
     // Period filters (all optional). Dates are interpreted in local tz at midnight/next-midnight.
     private String loginFrom;
     private String loginTo;
+    /** When true, return only users whose last_login_at IS NULL (= 未ログイン). Mirrors
+     *  the 「未」 checkbox next to 「ログイン期間」. Takes effect even when loginFrom/To
+     *  are also set — narrows to users matching neither past login. */
+    private boolean loginUnset;
     private String sendFrom;
     private String sendTo;
     private String paymentFrom;
     private String paymentTo;
     private String registerFrom;
     private String registerTo;
+
+    /** Cumulative outbound-SENT count range filter (operator-supplied; either bound optional).
+     *  Range semantics: count BETWEEN min..max inclusive. min==null treated as 0;
+     *  max==null treated as unbounded. */
+    private Integer sentCountMin;
+    private Integer sentCountMax;
+    /** Cumulative inbound-message count range filter; same semantics as sentCount*. */
+    private Integer replyCountMin;
+    private Integer replyCountMax;
 
     private int page = 0;
     private int size = 500;
@@ -111,6 +124,17 @@ public class UserSearchForm {
     public void setLoginFrom(String loginFrom) { this.loginFrom = loginFrom; }
     public String getLoginTo() { return loginTo; }
     public void setLoginTo(String loginTo) { this.loginTo = loginTo; }
+    public boolean isLoginUnset() { return loginUnset; }
+    public void setLoginUnset(boolean loginUnset) { this.loginUnset = loginUnset; }
+
+    public Integer getSentCountMin() { return sentCountMin; }
+    public void setSentCountMin(Integer sentCountMin) { this.sentCountMin = sentCountMin; }
+    public Integer getSentCountMax() { return sentCountMax; }
+    public void setSentCountMax(Integer sentCountMax) { this.sentCountMax = sentCountMax; }
+    public Integer getReplyCountMin() { return replyCountMin; }
+    public void setReplyCountMin(Integer replyCountMin) { this.replyCountMin = replyCountMin; }
+    public Integer getReplyCountMax() { return replyCountMax; }
+    public void setReplyCountMax(Integer replyCountMax) { this.replyCountMax = replyCountMax; }
 
     public String getSendFrom() { return sendFrom; }
     public void setSendFrom(String sendFrom) { this.sendFrom = sendFrom; }

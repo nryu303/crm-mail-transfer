@@ -156,8 +156,12 @@
             <form method="get" th:action="@{/manager/users}" th:object="${searchForm}" id="searchForm">
                 <!-- Hidden status input: driven by the header quick-filter; must stay in the form. -->
                 <input type="hidden" id="searchFormStatus" th:field="*{status}"/>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                    <div>
+                <!-- Grid widened from 4→6 cols (2026-05-24): email keeps a 2-col block,
+                     displayName shrinks to 1 col (≒ half its old width per operator request),
+                     selects/buttons row gets the remaining 3 cols so the new 累計送信件数 /
+                     累計返信件数 number-range inputs fit on the same line. -->
+                <div class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+                    <div class="md:col-span-2">
                         <label class="block text-xs text-slate-500 mb-1">メールアドレス <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
                         <textarea class="tw-input" rows="2" th:field="*{email}" style="resize:none;"
                                   placeholder="user1@example.com&#10;user2@example.com"></textarea>
@@ -166,10 +170,9 @@
                         <label class="block text-xs text-slate-500 mb-1">表示名 <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
                         <textarea class="tw-input" rows="2" th:field="*{displayName}" style="resize:none;"></textarea>
                     </div>
-                    <!-- 4 compact selects (フォルダ・広告コード・性別・キャリア) in a single row
-                         at ~half the previous width each, with search/clear buttons on the
-                         right edge of the same row. -->
-                    <div class="md:col-span-2">
+                    <!-- Compact selects (フォルダ・広告コード・性別・キャリア・累計送信・累計返信)
+                         in a single row with search/clear buttons on the right edge of the row. -->
+                    <div class="md:col-span-3">
                         <div class="flex items-end gap-2 flex-wrap">
                             <div class="min-w-0" style="flex:1 1 0;">
                                 <label class="block text-xs text-slate-500 mb-1">
@@ -263,6 +266,31 @@
                                     </div>
                                 </details>
                             </div>
+                            <!-- 累計送信件数: from-to range (inclusive). Either bound optional.
+                                 0-0 = users who have never been sent anything; 1-1 = exactly one;
+                                 3-5 = range. Predicate runs as a correlated COUNT subquery on
+                                 MESSAGE (direction=OUT, status=SENT) — see CrmUserService. -->
+                            <div class="min-w-0" style="flex:0 0 auto;">
+                                <label class="block text-xs text-slate-500 mb-1">累計送信件数</label>
+                                <div class="flex items-center gap-1">
+                                    <input type="number" min="0" class="tw-input" th:field="*{sentCountMin}"
+                                           placeholder="最小" style="width:64px;padding:6px 4px;font-size:.8rem;"/>
+                                    <span class="text-slate-400 text-sm">〜</span>
+                                    <input type="number" min="0" class="tw-input" th:field="*{sentCountMax}"
+                                           placeholder="最大" style="width:64px;padding:6px 4px;font-size:.8rem;"/>
+                                </div>
+                            </div>
+                            <!-- 累計返信件数: same shape, predicate on MESSAGE direction=IN. -->
+                            <div class="min-w-0" style="flex:0 0 auto;">
+                                <label class="block text-xs text-slate-500 mb-1">累計返信件数</label>
+                                <div class="flex items-center gap-1">
+                                    <input type="number" min="0" class="tw-input" th:field="*{replyCountMin}"
+                                           placeholder="最小" style="width:64px;padding:6px 4px;font-size:.8rem;"/>
+                                    <span class="text-slate-400 text-sm">〜</span>
+                                    <input type="number" min="0" class="tw-input" th:field="*{replyCountMax}"
+                                           placeholder="最大" style="width:64px;padding:6px 4px;font-size:.8rem;"/>
+                                </div>
+                            </div>
                             <button type="submit" class="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded flex-shrink-0">検索</button>
                             <button type="button" class="inline-flex items-center px-3 py-2 border border-slate-300 bg-white text-slate-600 text-sm rounded hover:bg-slate-50 flex-shrink-0" onclick="window.location='/manager/users'">クリア</button>
                         </div>
@@ -293,6 +321,14 @@
                             <input type="checkbox" id="chk_login" onchange="togglePeriod('login', this.checked)"
                                    th:checked="${!#strings.isEmpty(searchForm.loginFrom) or !#strings.isEmpty(searchForm.loginTo)}"/>
                             ログイン期間
+                        </label>
+                        <!-- 「未」 = never-logged-in users (last_login_at IS NULL). Separate from the
+                             period range so the operator can search "either people who logged in
+                             during this window OR people who never logged in". -->
+                        <label class="period-label" for="chk_login_unset" style="margin-left:8px;">
+                            <input type="checkbox" id="chk_login_unset" name="loginUnset" value="true"
+                                   th:checked="${searchForm.loginUnset}"/>
+                            未
                         </label>
                         <div class="period-inputs">
                             <input type="datetime-local" id="login_from" name="loginFrom"

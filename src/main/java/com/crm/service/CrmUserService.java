@@ -550,6 +550,46 @@ public class CrmUserService {
             java.time.LocalDateTime loginTo   = parseEndExclusive(form.getLoginTo());
             if (loginFrom != null) predicates.add(cb.greaterThanOrEqualTo(root.get("lastLoginAt"), loginFrom));
             if (loginTo   != null) predicates.add(cb.lessThan(root.get("lastLoginAt"), loginTo));
+            // 「未」 checkbox — find users who have NEVER logged in (lastLoginAt IS NULL).
+            // The operator can combine this with a period filter; the resulting AND will
+            // match nothing in practice, which is the expected "either-or" UX.
+            if (form.isLoginUnset()) {
+                predicates.add(cb.isNull(root.get("lastLoginAt")));
+            }
+
+            // Cumulative count filters — correlated subqueries against MESSAGE.
+            // 累計送信件数 (OUT direction, SENT status), 累計返信件数 (IN direction).
+            // Indexed via IDX_MSG_USER_CREATED so per-row count lookup stays cheap when the
+            // outer query is already narrowed by other filters (folder / period / …).
+            if (form.getSentCountMin() != null || form.getSentCountMax() != null) {
+                javax.persistence.criteria.Subquery<Long> sq = query.subquery(Long.class);
+                javax.persistence.criteria.Root<com.crm.entity.Message> mRoot = sq.from(com.crm.entity.Message.class);
+                sq.select(cb.count(mRoot));
+                sq.where(
+                        cb.equal(mRoot.get("userId"), root.get("id")),
+                        cb.equal(mRoot.get("direction"), com.crm.entity.Message.DIR_OUT),
+                        cb.equal(mRoot.get("status"),    com.crm.entity.Message.STATUS_SENT));
+                if (form.getSentCountMin() != null) {
+                    predicates.add(cb.greaterThanOrEqualTo(sq, form.getSentCountMin().longValue()));
+                }
+                if (form.getSentCountMax() != null) {
+                    predicates.add(cb.lessThanOrEqualTo(sq, form.getSentCountMax().longValue()));
+                }
+            }
+            if (form.getReplyCountMin() != null || form.getReplyCountMax() != null) {
+                javax.persistence.criteria.Subquery<Long> sq = query.subquery(Long.class);
+                javax.persistence.criteria.Root<com.crm.entity.Message> mRoot = sq.from(com.crm.entity.Message.class);
+                sq.select(cb.count(mRoot));
+                sq.where(
+                        cb.equal(mRoot.get("userId"), root.get("id")),
+                        cb.equal(mRoot.get("direction"), com.crm.entity.Message.DIR_IN));
+                if (form.getReplyCountMin() != null) {
+                    predicates.add(cb.greaterThanOrEqualTo(sq, form.getReplyCountMin().longValue()));
+                }
+                if (form.getReplyCountMax() != null) {
+                    predicates.add(cb.lessThanOrEqualTo(sq, form.getReplyCountMax().longValue()));
+                }
+            }
 
             java.time.LocalDateTime sendFrom = parseStart(form.getSendFrom());
             java.time.LocalDateTime sendTo   = parseEndExclusive(form.getSendTo());
