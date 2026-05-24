@@ -156,23 +156,23 @@
             <form method="get" th:action="@{/manager/users}" th:object="${searchForm}" id="searchForm">
                 <!-- Hidden status input: driven by the header quick-filter; must stay in the form. -->
                 <input type="hidden" id="searchFormStatus" th:field="*{status}"/>
-                <!-- Grid widened from 4→6 cols (2026-05-24): email keeps a 2-col block,
-                     displayName shrinks to 1 col (≒ half its old width per operator request),
-                     selects/buttons row gets the remaining 3 cols so the new 累計送信件数 /
-                     累計返信件数 number-range inputs fit on the same line. -->
-                <div class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+                <!-- Grid 12-col (2026-05-24 v2): email + displayName halved again per
+                     operator request — email 33%→17% (2/12), displayName 17%→8% (1/12) —
+                     freeing up 25% more width for the right-hand selects + count-range
+                     inputs which were getting cramped. -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                     <div class="md:col-span-2">
                         <label class="block text-xs text-slate-500 mb-1">メールアドレス <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
-                        <textarea class="tw-input" rows="2" th:field="*{email}" style="resize:none;"
+                        <textarea class="tw-input" rows="2" th:field="*{email}" style="resize:none;font-size:.78rem;"
                                   placeholder="user1@example.com&#10;user2@example.com"></textarea>
                     </div>
-                    <div>
+                    <div class="md:col-span-1">
                         <label class="block text-xs text-slate-500 mb-1">表示名 <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
-                        <textarea class="tw-input" rows="2" th:field="*{displayName}" style="resize:none;"></textarea>
+                        <textarea class="tw-input" rows="2" th:field="*{displayName}" style="resize:none;font-size:.78rem;"></textarea>
                     </div>
                     <!-- Compact selects (フォルダ・広告コード・性別・キャリア・累計送信・累計返信)
                          in a single row with search/clear buttons on the right edge of the row. -->
-                    <div class="md:col-span-3">
+                    <div class="md:col-span-9">
                         <div class="flex items-end gap-2 flex-wrap">
                             <div class="min-w-0" style="flex:1 1 0;">
                                 <label class="block text-xs text-slate-500 mb-1">
