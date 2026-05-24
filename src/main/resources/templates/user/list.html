@@ -769,6 +769,27 @@ function formatFolderLabel(values) {
                 // (gate is enforced by the refresh() function that toggles scope.checked).
                 if (!action || !scope.checked || committedFolders.length === 0) return;
 
+                // Mirror every active filter from the URL as hidden inputs so the server can
+                // re-apply the SAME filter set when resolving the scope-target user IDs.
+                // Without this the bulk action ignores the operator's login-period / carrier /
+                // gender / status filters and operates on the entire folder (2026-05-24
+                // incident: 177-row filtered view → folder move targeted all rows in the
+                // folder, not just the 177 matching the period filter).
+                try {
+                    var qs = new URLSearchParams(window.location.search);
+                    qs.forEach(function (value, key) {
+                        if (!value) return;
+                        if (key === 'page' || key === 'size') return;
+                        if (key === '_csrf') return;
+                        // Skip params that the bulkForm itself will set/override below.
+                        if (key === 'sourceFolder' || key === 'sourceFolders'
+                            || key === 'scope' || key === 'scopeLimit'
+                            || key === 'folder' || key === 'returnTo'
+                            || key === 'ids' || key === 'poolId') return;
+                        addHidden(key, value);
+                    });
+                } catch (_) { /* old browser without URLSearchParams */ }
+
                 // Build label + list of folder values to send. Multi-folder operations send
                 // every committedFolders entry as a repeated sourceFolders=X&sourceFolders=Y
                 // param; the server iterates and runs the action on each folder's users.

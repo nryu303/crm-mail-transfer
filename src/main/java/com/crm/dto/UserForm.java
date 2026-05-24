@@ -2,14 +2,21 @@ package com.crm.dto;
 
 import com.crm.entity.CrmUser;
 
-import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Pattern;
 import javax.validation.constraints.Size;
 
 public class UserForm {
 
+    /** Permissive sanity check rather than strict @Email — docomo issues local-parts
+     *  like "sky..1951...@docomo.ne.jp" (leading/trailing/consecutive dot) that fail
+     *  Jakarta's @Email but are accepted by docomo's MX when the relay quotes them
+     *  (see {@link com.crm.util.CsvUtil#detectInvalidLocalPart} and the relay's
+     *  obob.jar quoteIfDotProblematic). Anything with one '@' and a dotted right side
+     *  is good enough here; the dot-issue flag still gets recorded on insert. */
     @NotBlank(message = "メールアドレスを入力してください")
-    @Email(message = "メールアドレスの形式が正しくありません")
+    @Pattern(regexp = "^\\S+@\\S+\\.\\S+$",
+             message = "メールアドレスの形式が正しくありません")
     @Size(max = 255)
     private String email;
 

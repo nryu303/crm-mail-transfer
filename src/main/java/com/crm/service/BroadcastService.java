@@ -36,6 +36,7 @@ public class BroadcastService {
     private final MessageRepository messageRepository;
     private final PlaceholderService placeholderService;
     private final ReplyPageService replyPageService;
+    private final DomainSettingService domainSettingService;
 
     public BroadcastService(BroadcastRepository broadcastRepository,
                             CrmUserRepository userRepository,
@@ -43,13 +44,15 @@ public class BroadcastService {
                             CarrierBindingService bindingService,
                             MessageRepository messageRepository,
                             PlaceholderService placeholderService,
-                            ReplyPageService replyPageService) {
+                            ReplyPageService replyPageService,
+                            DomainSettingService domainSettingService) {
         this.broadcastRepository = broadcastRepository;
         this.userRepository = userRepository;
         this.poolRepository = poolRepository;
         this.bindingService = bindingService;
         this.messageRepository = messageRepository;
         this.placeholderService = placeholderService;
+        this.domainSettingService = domainSettingService;
         this.replyPageService = replyPageService;
     }
 
@@ -80,10 +83,15 @@ public class BroadcastService {
         //     form ("foo."@docomo.ne.jp), which docomo's MX accepts. We let these through.
         //   * everywhere else (gmail.com / yahoo.co.jp / icloud.com / au.com / …) — their
         //     MX servers reject dot-issue addresses even in quoted form, so skip pre-dispatch.
+        // Unbound (no pool / inactive-pool) users used to be skipped, but the operator embeds
+        // the reply URL in the body and doesn't need a working FROM-address for round-tripping.
+        // 2026-05-24: fall back to the configured base-domain FROM (from.base_domain setting)
+        // so a broadcast can still be sent to users who haven't been carrier-bound yet.
         List<CrmUser> deliverable = new java.util.ArrayList<>();
         int unbound = 0, poolMissing = 0;
         java.util.List<Long> unsendableIds = new java.util.ArrayList<>();
         java.util.Map<Long, CarrierAddressPool> userToPool = new java.util.HashMap<>();
+        String fallbackFrom = domainSettingService.buildFromAddress();
         for (CrmUser u : targets) {
             if (u.getAddressInvalidReason() != null && !u.getAddressInvalidReason().isEmpty()
                     && !isDocomoDotIssueRescuable(u.getEmail())) {
@@ -91,19 +99,30 @@ public class BroadcastService {
                 continue;
             }
             Optional<CarrierAddressPool> pool = bindingService.firstBoundFor(u.getId());
-            if (!pool.isPresent()) { unbound++; continue; }
-            if (Boolean.FALSE.equals(pool.get().getIsActive())) { poolMissing++; continue; }
-            deliverable.add(u);
-            userToPool.put(u.getId(), pool.get());
+            if (pool.isPresent() && !Boolean.FALSE.equals(pool.get().getIsActive())) {
+                deliverable.add(u);
+                userToPool.put(u.getId(), pool.get());
+            } else if (fallbackFrom != null && !fallbackFrom.isEmpty()) {
+                // No carrier binding (or pool inactive) — accept the user and use the
+                // base-domain FROM. userToPool intentionally has NO entry; the message
+                // generator below detects this and uses fallbackFrom.
+                if (pool.isPresent()) poolMissing++;
+                else                  unbound++;
+                deliverable.add(u);
+            } else {
+                if (pool.isPresent()) poolMissing++;
+                else                  unbound++;
+            }
         }
 
         if (deliverable.isEmpty()) {
             throw new NoTargetsException(
-                    "条件に合致し、かつキャリアアドレスが割り当て済みのユーザーが見つかりませんでした。"
+                    "条件に合致し、送信可能なユーザーが見つかりませんでした。"
                   + " (絞り込みに合致したユーザー: " + targets.size()
                   + "件、うちアドレス形式エラー: " + unsendableIds.size()
                   + "件、キャリアアドレス未割当: " + unbound
-                  + "件、プール側で無効: " + poolMissing + "件)");
+                  + "件、プール側で無効: " + poolMissing
+                  + "件、フォールバックFROM未設定: " + (fallbackFrom == null || fallbackFrom.isEmpty() ? "はい" : "いいえ") + ")");
         }
 
         Broadcast b = new Broadcast();
@@ -137,6 +156,12 @@ public class BroadcastService {
         for (int i = 0; i < deliverable.size(); i++) {
             CrmUser user = deliverable.get(i);
             CarrierAddressPool pool = userToPool.get(user.getId());
+            // If user has no active pool binding, use the base-domain FROM fallback.
+            // The fallback is rebuilt per-message because it may include a random local-part
+            // (see DomainSettingService.resolveFromLocal).
+            String fromAddr = (pool != null)
+                    ? pool.getAddress()
+                    : domainSettingService.buildFromAddress();
 
             LocalDateTime when = startAt.plusNanos(intervalMs * 1_000_000L * i);
             Message m = new Message();
@@ -147,7 +172,7 @@ public class BroadcastService {
             m.setSubject(placeholderService.substitute(form.getSubject(), user));
             String body = placeholderService.substitute(form.getBody(), user);
             m.setBodyText(body);
-            m.setFromAddress(pool.getAddress());
+            m.setFromAddress(fromAddr);
             m.setToAddress(user.getEmail());
             m.setBroadcastId(saved.getId());
             m.setStatus(Message.STATUS_QUEUED);

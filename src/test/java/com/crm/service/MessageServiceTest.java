@@ -56,9 +56,10 @@ class MessageServiceTest {
         aes = mock(AesEncryptionUtil.class);
         replyPageService = mock(ReplyPageService.class);
         ctx = mock(ApplicationContext.class);
+        DomainSettingService domainSettings = mock(DomainSettingService.class);
 
         svc = new MessageService(messageRepo, userRepo, poolRepo, bindingService,
-                placeholderService, outboundMail, aes, replyPageService, ctx);
+                placeholderService, outboundMail, aes, replyPageService, domainSettings, ctx);
     }
 
     private static Message queued() {

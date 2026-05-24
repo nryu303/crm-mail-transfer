@@ -32,6 +32,7 @@ public class MessageService {
     private final OutboundMailService outboundMailService;
     private final AesEncryptionUtil aes;
     private final ReplyPageService replyPageService;
+    private final DomainSettingService domainSettingService;
     /** Lazy reference — broadcast counter update is optional and avoids a circular dependency. */
     private final org.springframework.context.ApplicationContext ctx;
 
@@ -43,6 +44,7 @@ public class MessageService {
                           OutboundMailService outboundMailService,
                           AesEncryptionUtil aes,
                           ReplyPageService replyPageService,
+                          DomainSettingService domainSettingService,
                           org.springframework.context.ApplicationContext ctx) {
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
@@ -52,6 +54,7 @@ public class MessageService {
         this.outboundMailService = outboundMailService;
         this.aes = aes;
         this.replyPageService = replyPageService;
+        this.domainSettingService = domainSettingService;
         this.ctx = ctx;
     }
 
@@ -312,10 +315,13 @@ public class MessageService {
             if (!uOpt.isPresent()) continue;
             CrmUser user = uOpt.get();
 
+            // 2026-05-24: fall back to base-domain FROM when no active pool binding so
+            // operators can still bulk-reply to users they haven't carrier-bound yet.
             java.util.Optional<CarrierAddressPool> poolOpt = bindingService.firstBoundFor(uid);
-            if (!poolOpt.isPresent()) continue;
-            CarrierAddressPool pool = poolOpt.get();
-            if (Boolean.FALSE.equals(pool.getIsActive())) continue;
+            CarrierAddressPool pool = (poolOpt.isPresent()
+                    && !Boolean.FALSE.equals(poolOpt.get().getIsActive())) ? poolOpt.get() : null;
+            String fromAddr = (pool != null) ? pool.getAddress() : domainSettingService.buildFromAddress();
+            if (fromAddr == null || fromAddr.isEmpty()) continue;
 
             String renderedSubject = placeholderService.substitute(subject, user);
             String renderedBody    = placeholderService.substitute(body, user);
@@ -326,7 +332,7 @@ public class MessageService {
             m.setChannel(Message.CHANNEL_EMAIL);
             m.setSubject(renderedSubject);
             m.setBodyText(renderedBody);
-            m.setFromAddress(pool.getAddress());
+            m.setFromAddress(fromAddr);
             m.setToAddress(user.getEmail());
             m.setStatus(Message.STATUS_QUEUED);
             m.setScheduledAt(now);
@@ -402,10 +408,14 @@ public class MessageService {
     public Message compose(Long userId, Long adminUserId, MessageComposeForm form) {
         CrmUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new MessageException("ユーザーが見つかりません"));
-        CarrierAddressPool pool = bindingService.firstBoundFor(userId)
-                .orElseThrow(() -> new MessageException("このユーザーにはキャリアアドレスが未割当です"));
-        if (Boolean.FALSE.equals(pool.getIsActive())) {
-            throw new MessageException("割当中のキャリアアドレスが無効化されています");
+        // 2026-05-24: unbound users used to be rejected here, but the operator can still
+        // send via the base-domain FROM (from.base_domain setting) — the reply-page URL in
+        // the body handles round-tripping. Fall back when no active pool binding exists.
+        CarrierAddressPool pool = bindingService.firstBoundFor(userId).orElse(null);
+        if (pool != null && Boolean.FALSE.equals(pool.getIsActive())) pool = null;
+        String fromAddr = (pool != null) ? pool.getAddress() : domainSettingService.buildFromAddress();
+        if (fromAddr == null || fromAddr.isEmpty()) {
+            throw new MessageException("送信元アドレスが解決できません (キャリア未割当かつ from.base_domain 未設定)");
         }
 
         String renderedSubject = placeholderService.substitute(form.getSubject(), user);
@@ -418,7 +428,7 @@ public class MessageService {
         msg.setChannel(Message.CHANNEL_EMAIL);
         msg.setSubject(renderedSubject);
         msg.setBodyText(renderedBody);
-        msg.setFromAddress(pool.getAddress());
+        msg.setFromAddress(fromAddr);
         msg.setToAddress(user.getEmail());
         msg.setReplyToMessageId(form.getReplyToMessageId());
 

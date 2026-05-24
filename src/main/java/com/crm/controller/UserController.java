@@ -221,21 +221,26 @@ public class UserController {
                                   @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
                                   @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                                   @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
+                                  @ModelAttribute UserSearchForm filterForm,
                                   RedirectAttributes ra) {
-        // Folder-scope override: assign every active carrier-pool address to every user in
-        // a folder (or each of a selected set of folders), capped by scopeLimit per folder.
-        // Symmetric with bulk-unbind-carrier's allInFolder branch; powers the
-        // "フォルダ内全割り当て" button on the user list page.
+        // Folder-scope override — resolves the target user-ID list via the SAME UserSearchForm
+        // as the GET list, so all on-screen filters apply. 2026-05-24 fix mirrors the one in
+        // bulk-move-folder: previously this only honored FOLDER and ignored login-period etc.
         if ("allInFolder".equals(scope)) {
             java.util.List<String> srcs = normalizeSourceFolders(sourceFolders, sourceFolder);
-            int totalCreated = 0;
-            for (String src : srcs) {
-                totalCreated += bindingService.bindAllAvailableInFolder(src, scopeLimit);
+            applySourceFoldersOverride(filterForm, srcs);
+            java.util.List<Long> ids2 = service.findIdsBySearch(filterForm,
+                    (scopeLimit != null && scopeLimit > 0) ? scopeLimit : null);
+            int totalCreated;
+            if (poolId == null) {
+                totalCreated = ids2.isEmpty() ? 0 : bindingService.bindAllAvailableToMany(ids2);
+            } else {
+                totalCreated = ids2.isEmpty() ? 0 : bindingService.bindOneToMany(poolId, ids2);
             }
             String srcLabel = labelForFolders(srcs);
-            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件/フォルダ）" : "";
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内ユーザーへキャリアアドレスを一括割当しました（新規 " + totalCreated + " 件）" + chunkNote);
+                    "フォルダ「" + srcLabel + "」内 " + ids2.size() + " 名へキャリアアドレスを一括割当しました（新規 " + totalCreated + " 件、絞り込み条件適用済）" + chunkNote);
             return "redirect:/manager/users";
         }
 
@@ -268,20 +273,24 @@ public class UserController {
                                     @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
                                     @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                                     @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
+                                    @ModelAttribute UserSearchForm filterForm,
                                     RedirectAttributes ra) {
-        // Scope override: unbind every carrier-pool address from users in one (or many)
-        // folder(s). scopeLimit caps the batch size per folder so the operator can clear
-        // large folders in 1K/2K chunks.
+        // Scope override — same filter-aware resolution as bulk-bind-carrier (2026-05-24 fix).
         if ("allInFolder".equals(scope)) {
             java.util.List<String> srcs = normalizeSourceFolders(sourceFolders, sourceFolder);
+            applySourceFoldersOverride(filterForm, srcs);
+            java.util.List<Long> ids2 = service.findIdsBySearch(filterForm,
+                    (scopeLimit != null && scopeLimit > 0) ? scopeLimit : null);
             int totalRemoved = 0;
-            for (String src : srcs) {
-                totalRemoved += bindingService.unbindAllInFolder(src, scopeLimit);
+            if (poolId == null) {
+                for (Long uid : ids2) if (uid != null) totalRemoved += bindingService.unbindAll(uid);
+            } else {
+                for (Long uid : ids2) if (uid != null && bindingService.unbindOne(uid, poolId)) totalRemoved++;
             }
             String srcLabel = labelForFolders(srcs);
-            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件/フォルダ）" : "";
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内ユーザーのキャリア割り当てを解除しました (" + totalRemoved + " 件)" + chunkNote);
+                    "フォルダ「" + srcLabel + "」内 " + ids2.size() + " 名のキャリア割り当てを解除しました (" + totalRemoved + " 件、絞り込み条件適用済)" + chunkNote);
             return "redirect:/manager/users";
         }
 
@@ -318,6 +327,7 @@ public class UserController {
                                  @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                                  @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                  @RequestParam(name = "returnTo", required = false) String returnTo,
+                                 @ModelAttribute UserSearchForm filterForm,
                                  RedirectAttributes ra) {
         // "Where do we send the operator back to after the move?" — preserves their
         // current filter (folder + emailDomain + period etc.) so they don't lose context.
@@ -341,27 +351,23 @@ public class UserController {
         }
         String label = (target == null) ? "（フォルダ解除）" : target;
 
-        // Scope override: when scope=allInFolder, move EVERY user currently in any of
-        // the selected source folders. If scopeLimit > 0 is set, only the first N per
-        // source folder (by id ASC) are moved — lets operators run 15K-user reclassifies
-        // in 1K/2K-sized chunks.
+        // Scope override: when scope=allInFolder, resolve the target user-ID list via the
+        // SAME UserSearchForm that the GET-list page uses, so login-period / status /
+        // gender / carrier and every other on-screen filter survives the redirect. The
+        // page's filter set was POSTed to us as hidden inputs (see user/list.html bulkForm
+        // submit listener). 2026-05-24 fix: previously this only filtered by FOLDER which
+        // moved entire folders even when the operator was looking at a narrower view.
         if ("allInFolder".equals(scope)) {
+            // The form already carries folders[] from the URL params, but we also fold in
+            // any sourceFolders/sourceFolder legacy aliases for robustness.
             java.util.List<String> srcs = normalizeSourceFolders(sourceFolders, sourceFolder);
-            int total = 0;
-            for (String src : srcs) {
-                if (scopeLimit != null && scopeLimit > 0) {
-                    java.util.List<Long> limitedIds = (src == null)
-                            ? userRepository.findIdsByFolderIsNull()
-                            : userRepository.findIdsByFolder(src);
-                    if (limitedIds.size() > scopeLimit) limitedIds = limitedIds.subList(0, scopeLimit);
-                    total += limitedIds.isEmpty() ? 0 : userRepository.bulkUpdateFolderForIds(limitedIds, target);
-                } else {
-                    total += userRepository.bulkUpdateFolderByFolder(src, target);
-                }
-            }
+            applySourceFoldersOverride(filterForm, srcs);
+            java.util.List<Long> ids2 = service.findIdsBySearch(filterForm,
+                    (scopeLimit != null && scopeLimit > 0) ? scopeLimit : null);
+            int total = ids2.isEmpty() ? 0 : userRepository.bulkUpdateFolderForIds(ids2, target);
             String srcLabel = labelForFolders(srcs);
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内の " + total + " 名を " + label + " に移動しました");
+                    "フォルダ「" + srcLabel + "」内の " + total + " 名を " + label + " に移動しました（絞り込み条件適用済）");
             return "redirect:" + safeReturn;
         }
 
@@ -406,6 +412,17 @@ public class UserController {
         out.addAll(seen);
         if (out.isEmpty()) out.add(null);
         return out;
+    }
+
+    /** If the operator's filter form has no folders set but legacy sourceFolders/sourceFolder
+     *  was POSTed, fold those into the form's folders list so the spec resolver sees them.
+     *  null entries in srcs become the "__NONE__" sentinel that CrmUserService recognises. */
+    private static void applySourceFoldersOverride(UserSearchForm form, java.util.List<String> srcs) {
+        if (form.getFolders() != null && !form.getFolders().isEmpty()) return;
+        if (srcs == null || srcs.isEmpty()) return;
+        java.util.List<String> out = new java.util.ArrayList<>(srcs.size());
+        for (String s : srcs) out.add(s == null ? "__NONE__" : s);
+        form.setFolders(out);
     }
 
     /** Human label for a normalized list (single → "X", many → "X, Y …" or count). */
@@ -625,6 +642,7 @@ public class UserController {
                               @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
                               @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                               @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
+                              @ModelAttribute UserSearchForm filterForm,
                               javax.servlet.http.HttpSession session,
                               RedirectAttributes ra) {
         Long adminId = (Long) session.getAttribute(com.crm.interceptor.AuthInterceptor.SESSION_ADMIN_ID);
@@ -633,20 +651,25 @@ public class UserController {
             return "redirect:/manager/users";
         }
 
-        // Scope override: delete users in one or more folders. scopeLimit caps the
-        // batch size per folder so a 15K-user folder can be drained in 1K/2K chunks.
+        // Scope override — same filter-aware resolution as bulk-move-folder (2026-05-24 fix).
+        // Honours every filter from the GET list (login period, status, carrier, …) instead
+        // of blindly deleting the whole folder.
         if ("allInFolder".equals(scope)) {
             java.util.List<String> srcs = normalizeSourceFolders(sourceFolders, sourceFolder);
+            applySourceFoldersOverride(filterForm, srcs);
+            java.util.List<Long> ids2 = service.findIdsBySearch(filterForm,
+                    (scopeLimit != null && scopeLimit > 0) ? scopeLimit : null);
             int total = 0;
-            for (String src : srcs) {
-                total += service.deleteAllInFolder(src, scopeLimit);
+            for (Long uid : ids2) {
+                if (uid == null) continue;
+                try { service.delete(uid); total++; } catch (Exception ignored) {}
             }
             String srcLabel = labelForFolders(srcs);
-            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件/フォルダ）" : "";
+            String chunkNote = (scopeLimit != null && scopeLimit > 0) ? "（上限 " + scopeLimit + " 件）" : "";
             auditLog.record(com.crm.service.AuditLogService.ACTION_USER_DELETE,
                     "CrmUser", null, "bulk folder=" + srcLabel + " count=" + total + chunkNote);
             ra.addFlashAttribute("flashSuccess",
-                    "フォルダ「" + srcLabel + "」内の " + total + " 名を削除しました" + chunkNote);
+                    "フォルダ「" + srcLabel + "」内の " + total + " 名を削除しました（絞り込み条件適用済）" + chunkNote);
             return "redirect:/manager/users";
         }
 
