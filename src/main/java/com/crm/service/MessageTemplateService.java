@@ -97,6 +97,19 @@ public class MessageTemplateService {
         }
         MessageTemplate t = new MessageTemplate();
         form.applyTo(t);
+        // 2026-05-24: a freshly-created template should land at the BOTTOM of its page
+        // (operator-requested). MessageTemplateForm.displayOrder defaults to 0 when blank,
+        // which would otherwise dump it at the very top above existing rows. Override that
+        // here whenever the operator didn't set an explicit non-zero displayOrder.
+        if (t.getDisplayOrder() == null || t.getDisplayOrder() == 0) {
+            List<MessageTemplate> samePage = repository.findByPageNoOrderByDisplayOrderAscIdAsc(pageNo);
+            int nextOrder = 0;
+            for (MessageTemplate existing : samePage) {
+                Integer o = existing.getDisplayOrder();
+                if (o != null && o >= nextOrder) nextOrder = o + 1;
+            }
+            t.setDisplayOrder(nextOrder);
+        }
         return repository.save(t);
     }
 
