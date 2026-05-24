@@ -50,6 +50,7 @@ public class UserController {
     private final com.crm.service.AdCodeService adCodeService;
     private final com.crm.service.ReplyPageSettingService replyPageSettingService;
     private final com.crm.service.AuditLogService auditLog;
+    private final com.crm.service.ReplyHtmlSlotService replyHtmlSlotService;
 
     public UserController(CrmUserService service,
                           CarrierBindingService bindingService,
@@ -61,7 +62,8 @@ public class UserController {
                           com.crm.service.AdminAuthService adminAuthService,
                           com.crm.service.AdCodeService adCodeService,
                           com.crm.service.ReplyPageSettingService replyPageSettingService,
-                          com.crm.service.AuditLogService auditLog) {
+                          com.crm.service.AuditLogService auditLog,
+                          com.crm.service.ReplyHtmlSlotService replyHtmlSlotService) {
         this.service = service;
         this.bindingService = bindingService;
         this.placeholderService = placeholderService;
@@ -73,6 +75,7 @@ public class UserController {
         this.adCodeService = adCodeService;
         this.replyPageSettingService = replyPageSettingService;
         this.auditLog = auditLog;
+        this.replyHtmlSlotService = replyHtmlSlotService;
     }
 
     /** Active ad-code choices for autocomplete on the user-detail form. */
@@ -504,6 +507,8 @@ public class UserController {
         model.addAttribute("statLastReply",  messageRepository.maxCreatedAtByUserIdAndDirection(id, com.crm.entity.Message.DIR_IN));
         java.math.BigDecimal totalPaid = paymentService.sumPaidByUser(id);
         model.addAttribute("statTotalPaid",  totalPaid != null ? totalPaid : java.math.BigDecimal.ZERO);
+        // 6-slot reply-HTML titles for the tab labels
+        model.addAttribute("memoSlotTitles", replyHtmlSlotService.listSlotTitles());
         return "user/detail";
     }
 
@@ -807,12 +812,9 @@ public class UserController {
             ra.addFlashAttribute("flashError", "ユーザーが見つかりません");
             return "redirect:/manager/users";
         }
-        // Default to the slot the operator marked 使用中; allow ?slot=N override for preview.
-        int effSlot = (slot != null && slot >= 1 && slot <= 3) ? slot : user.get().getActiveMemoSlot();
-        String rawMemo;
-        if (effSlot == 2) rawMemo = user.get().getMemo2();
-        else if (effSlot == 3) rawMemo = user.get().getMemo3();
-        else rawMemo = user.get().getMemo();
+        // Default to the slot the operator marked 使用中; allow ?slot=N override (1..6) for preview.
+        int effSlot = (slot != null && slot >= 1 && slot <= 6) ? slot : user.get().getActiveMemoSlot();
+        String rawMemo = user.get().getMemoSlot(effSlot);
         boolean usingDefault = rawMemo == null || rawMemo.trim().isEmpty();
         if (usingDefault) {
             // No per-user HTML for this slot; fall back to the site-wide reply page HTML.

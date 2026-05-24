@@ -41,11 +41,14 @@ public class UserForm {
     private String gender;
 
     /** Memo is displayed on the public reply page (rendered as HTML, with placeholder substitution).
-     *  Slot 1 of three; slots 2 and 3 are stored in {@link #memo2}, {@link #memo3}. */
+     *  Slot 1 of six; slots 2-6 are stored in {@link #memo2}..{@link #memo6}. */
     private String memo;
     private String memo2;
     private String memo3;
-    /** Which slot (1..3) the reply page should currently render. */
+    private String memo4;
+    private String memo5;
+    private String memo6;
+    /** Which slot (1..6) the reply page should currently render. */
     private Integer activeMemoSlot;
 
     /** Admin-only internal memo. Never shown to the end user. */
@@ -85,9 +88,15 @@ public class UserForm {
     public void setMemo2(String memo2) { this.memo2 = memo2; }
     public String getMemo3() { return memo3; }
     public void setMemo3(String memo3) { this.memo3 = memo3; }
+    public String getMemo4() { return memo4; }
+    public void setMemo4(String memo4) { this.memo4 = memo4; }
+    public String getMemo5() { return memo5; }
+    public void setMemo5(String memo5) { this.memo5 = memo5; }
+    public String getMemo6() { return memo6; }
+    public void setMemo6(String memo6) { this.memo6 = memo6; }
     public Integer getActiveMemoSlot() { return activeMemoSlot == null ? 1 : activeMemoSlot; }
     public void setActiveMemoSlot(Integer s) {
-        this.activeMemoSlot = (s == null || s < 1 || s > 3) ? 1 : s;
+        this.activeMemoSlot = (s == null || s < 1 || s > 6) ? 1 : s;
     }
 
     public String getInternalMemo() { return internalMemo; }
@@ -114,6 +123,9 @@ public class UserForm {
         f.memo = u.getMemo();
         f.memo2 = u.getMemo2();
         f.memo3 = u.getMemo3();
+        f.memo4 = u.getMemo4();
+        f.memo5 = u.getMemo5();
+        f.memo6 = u.getMemo6();
         f.activeMemoSlot = u.getActiveMemoSlot();
         f.internalMemo = u.getInternalMemo();
         f.amount       = readValueForKey(u, "amount");
@@ -134,6 +146,9 @@ public class UserForm {
         u.setMemo(memo);
         u.setMemo2(memo2);
         u.setMemo3(memo3);
+        u.setMemo4(memo4);
+        u.setMemo5(memo5);
+        u.setMemo6(memo6);
         u.setActiveMemoSlot(activeMemoSlot);
         u.setInternalMemo(internalMemo);
         // Named slots: the key is fixed; only the value is editable.

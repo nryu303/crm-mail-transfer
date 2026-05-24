@@ -42,6 +42,7 @@ public class SettingController {
     private final com.crm.service.HttpRelayOutboundMailService httpRelayOutboundMailService;
     private final com.crm.service.HomeHtmlService homeHtmlService;
     private final com.crm.service.CrmUserService crmUserService;
+    private final com.crm.service.ReplyHtmlSlotService replyHtmlSlotService;
 
     public SettingController(RelayServerService relayServerService,
                              MessageTemplateService templateService,
@@ -52,7 +53,8 @@ public class SettingController {
                              com.crm.service.FolderSettingService folderSettingService,
                              org.springframework.beans.factory.ObjectProvider<com.crm.service.HttpRelayOutboundMailService> httpRelayProvider,
                              com.crm.service.HomeHtmlService homeHtmlService,
-                             com.crm.service.CrmUserService crmUserService) {
+                             com.crm.service.CrmUserService crmUserService,
+                             com.crm.service.ReplyHtmlSlotService replyHtmlSlotService) {
         this.relayServerService = relayServerService;
         this.templateService = templateService;
         this.replyPageSettingService = replyPageSettingService;
@@ -60,11 +62,10 @@ public class SettingController {
         this.auditLog = auditLog;
         this.domainSettingService = domainSettingService;
         this.folderSettingService = folderSettingService;
-        // ObjectProvider — the relay bean only exists when app.outbound.adapter=relay.
-        // In stub/test profiles the controller still loads but activeRelayHost stays empty.
         this.httpRelayOutboundMailService = httpRelayProvider.getIfAvailable();
         this.homeHtmlService = homeHtmlService;
         this.crmUserService = crmUserService;
+        this.replyHtmlSlotService = replyHtmlSlotService;
     }
 
     // ====== Folder settings ======
@@ -521,6 +522,64 @@ public class SettingController {
         replyPageSettingService.save(form);
         ra.addFlashAttribute("flashSuccess", "返信画面設定を保存しました");
         return "redirect:/manager/settings/reply-page";
+    }
+
+    // ====== Reply-HTML bulk edit (6 slots × N users in a folder) ======
+    @GetMapping("/memo-html-bulk")
+    public String memoHtmlBulkForm(@RequestParam(name = "folder", required = false) String folder,
+                                    @RequestParam(name = "loadFromUserId", required = false) Long loadFromUserId,
+                                    Model model) {
+        model.addAttribute("folders", folderSettingService.listFolders());
+        model.addAttribute("slotCount", com.crm.service.ReplyHtmlSlotService.SLOT_COUNT);
+        model.addAttribute("slotTitles", replyHtmlSlotService.listSlotTitles());
+        model.addAttribute("selectedFolder", folder == null ? "" : folder);
+        // Optional bootstrap: copy the 6 HTMLs from an existing user (so the operator can
+        // start from "the current state of user X" rather than from scratch).
+        String[] htmls = new String[com.crm.service.ReplyHtmlSlotService.SLOT_COUNT];
+        Integer activeSlot = 1;
+        if (loadFromUserId != null) {
+            java.util.Optional<com.crm.entity.CrmUser> uOpt = crmUserService.findById(loadFromUserId);
+            if (uOpt.isPresent()) {
+                com.crm.entity.CrmUser u = uOpt.get();
+                for (int s = 1; s <= htmls.length; s++) htmls[s - 1] = u.getMemoSlot(s);
+                activeSlot = u.getActiveMemoSlot();
+            }
+        }
+        model.addAttribute("htmls", htmls);
+        model.addAttribute("activeSlot", activeSlot);
+        return "setting/memo-html-bulk";
+    }
+
+    @PostMapping("/memo-html-bulk/titles")
+    public String memoHtmlSaveTitles(@RequestParam java.util.Map<String, String> params,
+                                      RedirectAttributes ra) {
+        for (int i = 1; i <= com.crm.service.ReplyHtmlSlotService.SLOT_COUNT; i++) {
+            String v = params.get("title" + i);
+            if (v != null) replyHtmlSlotService.setSlotTitle(i, v);
+        }
+        ra.addFlashAttribute("flashSuccess", "スロット名を保存しました");
+        return "redirect:/manager/settings/memo-html-bulk";
+    }
+
+    @PostMapping("/memo-html-bulk")
+    public String memoHtmlBulkApply(@RequestParam(name = "folder", required = false) String folder,
+                                     @RequestParam(name = "activeSlot", required = false, defaultValue = "1") Integer activeSlot,
+                                     @RequestParam java.util.Map<String, String> params,
+                                     RedirectAttributes ra) {
+        if (folder == null) folder = "";
+        String[] htmls = new String[com.crm.service.ReplyHtmlSlotService.SLOT_COUNT];
+        for (int s = 1; s <= htmls.length; s++) htmls[s - 1] = params.get("html" + s);
+        int n = replyHtmlSlotService.bulkApply(folder.isEmpty() ? null : folder, htmls, activeSlot);
+        String folderLabel = folder.isEmpty() ? "（未設定）" : folder;
+        ra.addFlashAttribute("flashSuccess",
+                "フォルダ「" + folderLabel + "」内 " + n + " 名に返信HTMLを一括適用しました（使用中: スロット" + activeSlot + "）");
+        String encoded;
+        try {
+            encoded = java.net.URLEncoder.encode(folder, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            encoded = "";
+        }
+        return "redirect:/manager/settings/memo-html-bulk?folder=" + encoded;
     }
 
     // ====== Admin password change ======

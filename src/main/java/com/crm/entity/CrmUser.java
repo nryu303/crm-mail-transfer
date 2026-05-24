@@ -70,13 +70,20 @@ public class CrmUser {
     @Column(name = "MEMO", columnDefinition = "LONGTEXT")
     private String memo;
 
-    /** Two extra slots for the reply-page header HTML (2026-05-23). The operator
-     *  switches between them via {@code activeMemoSlot}; the public /reply page
-     *  reads whichever slot is currently marked 使用中. */
+    /** Slots 2-6 for the reply-page header HTML (slots 2-3 added 2026-05-23, 4-6 added
+     *  2026-05-25 for the bulk-edit workflow). The operator switches between them via
+     *  {@code activeMemoSlot}; the public /reply page reads whichever slot is currently
+     *  marked 使用中. */
     @Column(name = "MEMO_2", columnDefinition = "LONGTEXT")
     private String memo2;
     @Column(name = "MEMO_3", columnDefinition = "LONGTEXT")
     private String memo3;
+    @Column(name = "MEMO_4", columnDefinition = "LONGTEXT")
+    private String memo4;
+    @Column(name = "MEMO_5", columnDefinition = "LONGTEXT")
+    private String memo5;
+    @Column(name = "MEMO_6", columnDefinition = "LONGTEXT")
+    private String memo6;
     @Column(name = "ACTIVE_MEMO_SLOT", nullable = false)
     private Integer activeMemoSlot;
 
@@ -110,7 +117,7 @@ public class CrmUser {
         if (createdAt == null) createdAt = now;
         updatedAt = now;
         if (status == null) status = STATUS_ACTIVE;
-        if (activeMemoSlot == null || activeMemoSlot < 1 || activeMemoSlot > 3) activeMemoSlot = 1;
+        if (activeMemoSlot == null || activeMemoSlot < 1 || activeMemoSlot > 6) activeMemoSlot = 1;
     }
 
     @PreUpdate
@@ -158,17 +165,50 @@ public class CrmUser {
     public void setMemo2(String memo2) { this.memo2 = memo2; }
     public String getMemo3() { return memo3; }
     public void setMemo3(String memo3) { this.memo3 = memo3; }
+    public String getMemo4() { return memo4; }
+    public void setMemo4(String memo4) { this.memo4 = memo4; }
+    public String getMemo5() { return memo5; }
+    public void setMemo5(String memo5) { this.memo5 = memo5; }
+    public String getMemo6() { return memo6; }
+    public void setMemo6(String memo6) { this.memo6 = memo6; }
     public Integer getActiveMemoSlot() { return activeMemoSlot == null ? 1 : activeMemoSlot; }
     public void setActiveMemoSlot(Integer s) {
-        this.activeMemoSlot = (s == null || s < 1 || s > 3) ? 1 : s;
+        this.activeMemoSlot = (s == null || s < 1 || s > 6) ? 1 : s;
     }
 
     /** Returns the HTML for the slot currently marked 使用中. */
     public String getActiveMemo() {
         int s = getActiveMemoSlot();
-        if (s == 2) return memo2;
-        if (s == 3) return memo3;
-        return memo;
+        switch (s) {
+            case 2: return memo2;
+            case 3: return memo3;
+            case 4: return memo4;
+            case 5: return memo5;
+            case 6: return memo6;
+            default: return memo;
+        }
+    }
+
+    /** Read any slot (1..6) by index. */
+    public String getMemoSlot(int n) {
+        switch (n) {
+            case 2: return memo2;
+            case 3: return memo3;
+            case 4: return memo4;
+            case 5: return memo5;
+            case 6: return memo6;
+            default: return memo;
+        }
+    }
+    public void setMemoSlot(int n, String value) {
+        switch (n) {
+            case 2: this.memo2 = value; break;
+            case 3: this.memo3 = value; break;
+            case 4: this.memo4 = value; break;
+            case 5: this.memo5 = value; break;
+            case 6: this.memo6 = value; break;
+            default: this.memo = value;
+        }
     }
 
     public String getInternalMemo() { return internalMemo; }

@@ -107,14 +107,24 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/messages/broadcast}">一覧に戻る</a>
     </div>
 
-    <!-- Top-left: templates -->
+    <!-- Top-left: templates with 5-page tab strip (operator request 2026-05-25 — mirror
+         the thread / inbox panel so broadcast composing sees the same paginated set as
+         the settings page). Tab click toggles .tpl-item visibility by data-page. -->
     <div class="bcast-pane">
         <header>定型文（クリックで挿入）</header>
+        <div id="bcastTplTabs" class="flex border-b border-slate-200 bg-slate-50 text-xs overflow-x-auto" style="flex:0 0 auto;">
+            <button type="button" th:each="i : ${#numbers.sequence(1, templateMaxPages)}"
+                    class="bcast-tpl-tab px-3 py-1.5 whitespace-nowrap border-r border-slate-200"
+                    th:classappend="${i == 1 ? 'bg-white text-blue-700 font-semibold border-b-2 border-b-blue-500' : 'text-slate-600 hover:bg-white'}"
+                    th:attr="data-page=${i}"
+                    th:text="${templatePageTitles[i - 1]}">タイトル</button>
+        </div>
         <div class="body">
             <div th:if="${templates.empty}" class="text-xs text-slate-400">定型文はまだ登録されていません。</div>
             <div th:each="t : ${templates}" class="tpl-item"
+                 th:attr="data-page=${t.pageNo},data-subject=${t.subject},data-body=${t.body}"
                  th:classappend="${t.color != null and t.color != ''} ? 'color-' + ${t.color} : ''"
-                 th:attr="data-subject=${t.subject},data-body=${t.body}"
+                 th:style="${t.pageNo != 1 ? 'display:none;' : null}"
                  onclick="applyTemplateFromElement(this)"
                  style="flex-direction:column;align-items:flex-start;">
                 <span class="name" th:text="${t.name}" th:title="${t.name}"></span>
@@ -122,6 +132,29 @@
                 <span class="subj" th:text="${t.body}" th:title="${t.body}"></span>
             </div>
         </div>
+        <script>
+        (function () {
+            var tabs = document.querySelectorAll('#bcastTplTabs .bcast-tpl-tab');
+            if (!tabs.length) return;
+            function setActive(page) {
+                tabs.forEach(function (t) {
+                    var active = String(t.getAttribute('data-page')) === String(page);
+                    t.classList.toggle('bg-white', active);
+                    t.classList.toggle('text-blue-700', active);
+                    t.classList.toggle('font-semibold', active);
+                    t.classList.toggle('border-b-2', active);
+                    t.classList.toggle('border-b-blue-500', active);
+                    t.classList.toggle('text-slate-600', !active);
+                });
+                document.querySelectorAll('.bcast-pane .tpl-item').forEach(function (it) {
+                    it.style.display = String(it.getAttribute('data-page')) === String(page) ? '' : 'none';
+                });
+            }
+            tabs.forEach(function (t) {
+                t.addEventListener('click', function () { setActive(t.getAttribute('data-page')); });
+            });
+        })();
+        </script>
     </div>
 
     <!-- Right (spans both rows): history -->

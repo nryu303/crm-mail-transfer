@@ -91,58 +91,65 @@
                 </select>
             </div>
 
-            <!-- Three reply-page HTML slots — operator picks one as 使用中. The public reply
-                 page renders only the active slot. Each slot has its own preview link.
-                 Operator request 2026-05-23. -->
+            <!-- Six reply-page HTML slots — operator picks one as 使用中. The public reply
+                 page renders only the active slot. Each slot has an operator-supplied
+                 display name (slotTitles, from CrmSetting memo.slot.N.title). Per-slot
+                 preview link in the action row below. Expanded 3→6 slots 2026-05-25. -->
             <div>
-                <label class="block text-xs text-slate-500 mb-1">
-                    専用返信画面HTML <span class="text-slate-400 normal-case">(3つまで保存でき、使用中のみが公開ページに反映されます)</span>
+                <label class="block text-xs text-slate-500 mb-1 flex items-center gap-2">
+                    <span>専用返信画面HTML <span class="text-slate-400 normal-case">(6スロットまで保存でき、使用中のみが公開ページに反映されます)</span></span>
+                    <a class="ml-auto text-xs text-blue-600 hover:underline"
+                       th:href="@{/manager/settings/memo-html-bulk(loadFromUserId=${user.id})}" target="_blank">フォルダ内一括編集 →</a>
                 </label>
                 <div class="border border-slate-200 rounded-md overflow-hidden">
-                    <div class="flex border-b border-slate-200 bg-slate-50 text-xs">
-                        <button type="button" class="memo-tab px-3 py-2 flex-1 text-left flex items-center gap-2 border-r border-slate-200"
-                                data-slot="1">
-                            <input type="radio" name="activeMemoSlot" value="1"
-                                   th:checked="${form.activeMemoSlot == 1}" title="このスロットを使用中にする"/>
-                            <span>① 返信HTML</span>
-                            <span class="ml-auto text-slate-400 memo-char" data-for="memo">0 文字</span>
-                        </button>
-                        <button type="button" class="memo-tab px-3 py-2 flex-1 text-left flex items-center gap-2 border-r border-slate-200"
-                                data-slot="2">
-                            <input type="radio" name="activeMemoSlot" value="2"
-                                   th:checked="${form.activeMemoSlot == 2}" title="このスロットを使用中にする"/>
-                            <span>② 返信HTML</span>
-                            <span class="ml-auto text-slate-400 memo-char" data-for="memo2">0 文字</span>
-                        </button>
-                        <button type="button" class="memo-tab px-3 py-2 flex-1 text-left flex items-center gap-2"
-                                data-slot="3">
-                            <input type="radio" name="activeMemoSlot" value="3"
-                                   th:checked="${form.activeMemoSlot == 3}" title="このスロットを使用中にする"/>
-                            <span>③ 返信HTML</span>
-                            <span class="ml-auto text-slate-400 memo-char" data-for="memo3">0 文字</span>
+                    <div class="flex border-b border-slate-200 bg-slate-50 text-xs overflow-x-auto">
+                        <button type="button" th:each="i : ${#numbers.sequence(1, 6)}"
+                                class="memo-tab px-3 py-2 text-left flex items-center gap-2 border-r border-slate-200"
+                                style="flex:1 1 0; min-width:140px;"
+                                th:attr="data-slot=${i}">
+                            <input type="radio" name="activeMemoSlot" th:value="${i}"
+                                   th:checked="${form.activeMemoSlot == i}" title="このスロットを使用中にする"/>
+                            <span class="text-slate-700" th:text="${memoSlotTitles[i - 1]}">タイトル</span>
+                            <span class="ml-auto text-slate-400 memo-char" th:attr="data-for='memo' + ${i}">0 文字</span>
                         </button>
                     </div>
-                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo" name="memo"
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo1" name="memo"
                               th:text="${form.memo}"
                               th:style="${form.activeMemoSlot == 1 ? '' : 'display:none;'}"
                               style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
-                              placeholder="① 例: &lt;p&gt;%name% 様&lt;/p&gt;&#10;&lt;p&gt;ご請求額: %amount%&lt;/p&gt;"></textarea>
+                              th:placeholder="${memoSlotTitles[0]} + ' の HTML を入力'"></textarea>
                     <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo2" name="memo2"
                               th:text="${form.memo2}"
                               th:style="${form.activeMemoSlot == 2 ? '' : 'display:none;'}"
                               style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
-                              placeholder="② パターン違いの HTML をここに保存"></textarea>
+                              th:placeholder="${memoSlotTitles[1]} + ' の HTML を入力'"></textarea>
                     <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo3" name="memo3"
                               th:text="${form.memo3}"
                               th:style="${form.activeMemoSlot == 3 ? '' : 'display:none;'}"
                               style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
-                              placeholder="③ 三つめの HTML をここに保存"></textarea>
+                              th:placeholder="${memoSlotTitles[2]} + ' の HTML を入力'"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo4" name="memo4"
+                              th:text="${form.memo4}"
+                              th:style="${form.activeMemoSlot == 4 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              th:placeholder="${memoSlotTitles[3]} + ' の HTML を入力'"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo5" name="memo5"
+                              th:text="${form.memo5}"
+                              th:style="${form.activeMemoSlot == 5 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              th:placeholder="${memoSlotTitles[4]} + ' の HTML を入力'"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo6" name="memo6"
+                              th:text="${form.memo6}"
+                              th:style="${form.activeMemoSlot == 6 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              th:placeholder="${memoSlotTitles[5]} + ' の HTML を入力'"></textarea>
                 </div>
-                <p class="mt-1 text-xs text-slate-500">タブのラジオボタンが「使用中」マークです。クリックでパネル切替、ラジオで公開反映スロットを変更し、保存後に反映されます。</p>
+                <p class="mt-1 text-xs text-slate-500">タブのラジオボタンが「使用中」マークです。クリックでパネル切替、ラジオで公開反映スロットを変更し、保存後に反映されます。空白で保存すると該当スロットは削除扱いになります。スロットの表示名は<a class="text-blue-600 hover:underline" th:href="@{/manager/settings/memo-html-bulk}" target="_blank">一括編集ページ</a>から変更できます。</p>
             </div>
             <script>
                 (function(){
-                    var panes = ['memo','memo2','memo3'];
+                    var panes = ['memo1','memo2','memo3','memo4','memo5','memo6'];
+                    var nameFor = { 'memo1':'memo','memo2':'memo2','memo3':'memo3','memo4':'memo4','memo5':'memo5','memo6':'memo6' };
                     function refreshCounts() {
                         panes.forEach(function (p) {
                             var ta = document.getElementById(p);
@@ -157,7 +164,6 @@
                     refreshCounts();
                     document.querySelectorAll('.memo-tab').forEach(function (tab) {
                         tab.addEventListener('click', function (e) {
-                            // Don't swallow the click on the radio itself — but DO switch the pane.
                             var slot = tab.getAttribute('data-slot');
                             panes.forEach(function (p, i) {
                                 var ta = document.getElementById(p);
@@ -191,6 +197,12 @@
                    th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=2)}" target="_blank">②</a>
                 <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
                    th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=3)}" target="_blank">③</a>
+                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=4)}" target="_blank">④</a>
+                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=5)}" target="_blank">⑤</a>
+                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=6)}" target="_blank">⑥</a>
                 <span class="ml-auto text-xs text-slate-500">ID: <code th:text="${user.id}"></code></span>
             </div>
         </form>

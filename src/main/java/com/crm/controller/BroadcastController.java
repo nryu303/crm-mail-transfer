@@ -234,6 +234,8 @@ public class BroadcastController {
             model.addAttribute("selectedUsers", userService.findAllByIds(userIds));
         }
         model.addAttribute("templates", templateService.listAll());
+        model.addAttribute("templatePageTitles", templateService.listPageTitles());
+        model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
         // Recent history for the right panel: last 50 outbound messages (SENT + scheduled).
         org.springframework.data.domain.Page<com.crm.entity.Message> recent = messageRepository.findAll(
                 org.springframework.data.domain.PageRequest.of(0, 50,
@@ -254,6 +256,8 @@ public class BroadcastController {
                          BindingResult br, HttpSession session, RedirectAttributes ra, Model model) {
         if (br.hasErrors()) {
             model.addAttribute("templates", templateService.listAll());
+        model.addAttribute("templatePageTitles", templateService.listPageTitles());
+        model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
             return "message/broadcast-form";
         }
         Long adminId = (Long) session.getAttribute(AuthInterceptor.SESSION_ADMIN_ID);
