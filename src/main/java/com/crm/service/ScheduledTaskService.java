@@ -110,6 +110,34 @@ public class ScheduledTaskService {
                 return t;
             });
 
+    /**
+     * Every 5 minutes — find broadcasts stuck in SCHEDULED/SENDING with no remaining
+     * QUEUED messages and flip them to COMPLETED. Belt-and-braces for the (now-fixed)
+     * exclusion path that historically forgot to bump the parent counters; also covers
+     * any other race that could leave a parent row in a non-terminal status.
+     */
+    @Scheduled(fixedRateString = "${app.scheduler.stuck-broadcast-sweeper-ms:300000}",
+               initialDelayString = "${app.scheduler.stuck-broadcast-sweeper-init-ms:60000}")
+    public void sweepStuckBroadcasts() {
+        if (!acquireOrRefreshLock()) return;
+        java.util.List<com.crm.entity.Broadcast> stuck = broadcastRepo.findByStatusInOrderByCreatedAtDesc(
+                java.util.Arrays.asList(com.crm.entity.Broadcast.STATUS_SCHEDULED,
+                                        com.crm.entity.Broadcast.STATUS_SENDING));
+        int flipped = 0;
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        for (com.crm.entity.Broadcast b : stuck) {
+            long remaining = messageRepository.countByBroadcastIdAndStatus(b.getId(), Message.STATUS_QUEUED);
+            if (remaining > 0) continue; // still actively sending or scheduled
+            // Idempotent flip — same predicate as markCompletedIfDone but doesn't require
+            // sent+failed to equal total (the operator-cancelled cases also land here).
+            int n = broadcastRepo.flipToCompletedIfNoQueued(b.getId(), now);
+            if (n > 0) flipped++;
+        }
+        if (flipped > 0) {
+            log.info("Sweeper: flipped {} stuck broadcast(s) to COMPLETED", flipped);
+        }
+    }
+
     @Scheduled(fixedRateString = "${app.scheduler.queued-poll-rate-ms:30000}",
                initialDelayString = "${app.scheduler.queued-poll-initial-delay-ms:15000}")
     public void dispatchQueued() {
@@ -186,6 +214,13 @@ public class ScheduledTaskService {
                         msg.setErrorMessage("excluded: user received " + otherSends
                                 + " other send(s) after broadcast was scheduled");
                         messageRepository.save(msg);
+                        // Count the exclusion toward failed_count so the parent broadcast's
+                        // markCompletedIfDone gate fires. Without this the broadcast stays
+                        // SCHEDULED/SENDING forever even when every message has finalised
+                        // (broadcast 108 / 121 hit this on 2026-05-23/24).
+                        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                        broadcastRepo.incrementCounters(msg.getBroadcastId(), 0, 1, now);
+                        broadcastRepo.markCompletedIfDone(msg.getBroadcastId(), now);
                         log.info("Scheduler: excluded msg {} (user {} got {} other sends after broadcast {})",
                                 msg.getId(), msg.getUserId(), otherSends, msg.getBroadcastId());
                         return;

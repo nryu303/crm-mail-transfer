@@ -27,4 +27,15 @@ public interface BroadcastRepository extends JpaRepository<Broadcast, Long> {
             "AND (b.sentCount + b.failedCount) >= b.totalCount")
     int markCompletedIfDone(@org.springframework.data.repository.query.Param("id") Long id,
                             @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
+    /** Sweeper-driven flip: unconditional COMPLETED for a non-terminal broadcast whose
+     *  caller has verified that zero MESSAGE rows remain in QUEUED state. Separate from
+     *  markCompletedIfDone because we want to recover broadcasts whose counters drifted
+     *  (e.g. excluded messages whose failed_count bump was lost before 2026-05-25). */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(
+            "UPDATE Broadcast b SET b.status = 'COMPLETED', b.updatedAt = :now " +
+            "WHERE b.id = :id AND b.status NOT IN ('COMPLETED','CANCELLED')")
+    int flipToCompletedIfNoQueued(@org.springframework.data.repository.query.Param("id") Long id,
+                                  @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 }

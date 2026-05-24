@@ -86,6 +86,10 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
     long countByUserIdAndDirection(@org.springframework.data.repository.query.Param("userId") Long userId,
                                    @org.springframework.data.repository.query.Param("direction") String direction);
 
+    /** How many MESSAGE rows in this broadcast still hold the given status. Used by
+     *  the stuck-broadcast sweeper to detect parents whose children all finalised. */
+    long countByBroadcastIdAndStatus(Long broadcastId, String status);
+
     @org.springframework.data.jpa.repository.Query(
             "SELECT MAX(m.createdAt) FROM Message m WHERE m.userId = :userId AND m.direction = :direction")
     java.time.LocalDateTime maxCreatedAtByUserIdAndDirection(@org.springframework.data.repository.query.Param("userId") Long userId,
