@@ -144,11 +144,123 @@
 </head>
 <body>
 <section layout:fragment="content">
-    <div class="dash flex flex-col gap-4">
+    <div class="dash flex flex-col gap-4" style="margin-right: 220px;">
 
         <div class="flex items-center">
             <h1 class="text-2xl font-semibold text-slate-800 flex-1">ダッシュボード</h1>
         </div>
+
+        <!-- Server-stats panel: pinned to the right edge so it stays visible while the
+             rest of the dashboard scrolls. Polls /manager/dashboard/sys-stats every 10s.
+             Operator request 2026-05-25. The 220px right margin on .dash above reserves
+             gutter space. -->
+        <aside id="sysStatsPanel" class="bg-white border border-slate-200 rounded-lg shadow-sm p-3"
+               style="position:fixed; right:12px; top:60px; width:200px; z-index:50; font-size:.72rem;">
+            <div class="flex items-center mb-2">
+                <strong class="text-xs text-slate-700">サーバ状況</strong>
+                <span id="sysStatsAgo" class="ml-auto text-[10px] text-slate-400">--秒前</span>
+            </div>
+            <div class="space-y-2 text-slate-700">
+                <div>
+                    <div class="flex justify-between"><span>メモリ</span><span id="sysMem">--</span></div>
+                    <div class="h-1.5 bg-slate-100 rounded mt-0.5 overflow-hidden">
+                        <div id="sysMemBar" class="h-full bg-emerald-500" style="width:0%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between"><span>Swap</span><span id="sysSwap">--</span></div>
+                    <div class="h-1.5 bg-slate-100 rounded mt-0.5 overflow-hidden">
+                        <div id="sysSwapBar" class="h-full bg-amber-500" style="width:0%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between"><span>ディスク</span><span id="sysDisk">--</span></div>
+                    <div class="h-1.5 bg-slate-100 rounded mt-0.5 overflow-hidden">
+                        <div id="sysDiskBar" class="h-full bg-sky-500" style="width:0%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between"><span>JVM Heap</span><span id="sysHeap">--</span></div>
+                    <div class="h-1.5 bg-slate-100 rounded mt-0.5 overflow-hidden">
+                        <div id="sysHeapBar" class="h-full bg-violet-500" style="width:0%"></div>
+                    </div>
+                </div>
+                <div class="pt-1 border-t border-slate-100 flex justify-between">
+                    <span>CPU負荷 (1分)</span><span id="sysLoad">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>稼働時間</span><span id="sysUptime">--</span>
+                </div>
+            </div>
+            <div id="sysCapacity" class="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-500 leading-tight">
+                <!-- Operator-facing capacity hint, populated by JS -->
+            </div>
+        </aside>
+        <script>
+        (function () {
+            function fmtBytes(n) {
+                if (!n) return '0';
+                if (n >= 1073741824) return (n / 1073741824).toFixed(1) + 'GB';
+                if (n >= 1048576)    return (n / 1048576).toFixed(0)   + 'MB';
+                if (n >= 1024)       return (n / 1024).toFixed(0)      + 'KB';
+                return n + 'B';
+            }
+            function fmtUptime(sec) {
+                if (sec == null) return '--';
+                var d = Math.floor(sec / 86400);
+                var h = Math.floor((sec % 86400) / 3600);
+                return (d > 0 ? d + '日 ' : '') + h + '時間';
+            }
+            function colorize(pct, lightId) {
+                var el = document.getElementById(lightId);
+                if (!el) return;
+                el.classList.remove('bg-emerald-500','bg-amber-500','bg-rose-500');
+                if (pct >= 90) el.classList.add('bg-rose-500');
+                else if (pct >= 75) el.classList.add('bg-amber-500');
+                else el.classList.add('bg-emerald-500');
+            }
+            function capacityHint(memPct, swapPct, diskPct) {
+                // Rough estimate keyed to the current 30K-user baseline. 4GB RAM
+                // headroom shrinks as the user table grows; swap pressure rises first.
+                if (memPct >= 90 || swapPct >= 50) return '⚠️ RAM増設の検討時期です';
+                if (memPct >= 80 || swapPct >= 30) return '推定上限: 〜50,000ユーザー';
+                if (memPct >= 60)                  return '推定上限: 〜80,000ユーザー';
+                return '推定上限: 〜100,000ユーザー (4GB RAM)';
+            }
+            var lastTs = 0;
+            function refresh() {
+                fetch('/manager/dashboard/sys-stats', {credentials:'same-origin'})
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (s) {
+                        if (!s) return;
+                        lastTs = Date.now();
+                        var m = s.memory, d = s.disk, c = s.cpu, j = s.jvm;
+                        document.getElementById('sysMem').textContent  = fmtBytes(m.usedBytes) + ' / ' + fmtBytes(m.totalBytes) + ' (' + m.usedPct + '%)';
+                        document.getElementById('sysMemBar').style.width = m.usedPct + '%';
+                        colorize(m.usedPct, 'sysMemBar');
+                        document.getElementById('sysSwap').textContent = fmtBytes(m.swapUsedBytes) + ' / ' + fmtBytes(m.swapTotalBytes) + ' (' + m.swapUsedPct + '%)';
+                        document.getElementById('sysSwapBar').style.width = m.swapUsedPct + '%';
+                        colorize(m.swapUsedPct, 'sysSwapBar');
+                        document.getElementById('sysDisk').textContent = fmtBytes(d.usedBytes) + ' / ' + fmtBytes(d.totalBytes) + ' (' + d.usedPct + '%)';
+                        document.getElementById('sysDiskBar').style.width = d.usedPct + '%';
+                        colorize(d.usedPct, 'sysDiskBar');
+                        document.getElementById('sysHeap').textContent = fmtBytes(j.heapUsedBytes) + ' / ' + fmtBytes(j.heapMaxBytes) + ' (' + j.heapUsedPct + '%)';
+                        document.getElementById('sysHeapBar').style.width = j.heapUsedPct + '%';
+                        colorize(j.heapUsedPct, 'sysHeapBar');
+                        var load = (c.load1 == null || c.load1 < 0) ? '--' : c.load1.toFixed(2) + ' / ' + c.cores + 'core';
+                        document.getElementById('sysLoad').textContent = load;
+                        document.getElementById('sysUptime').textContent = fmtUptime(j.uptimeSec);
+                        document.getElementById('sysCapacity').textContent = capacityHint(m.usedPct, m.swapUsedPct, d.usedPct);
+                    });
+            }
+            setInterval(function () {
+                var sec = Math.floor((Date.now() - lastTs) / 1000);
+                document.getElementById('sysStatsAgo').textContent = lastTs ? (sec + '秒前') : '--';
+            }, 1000);
+            refresh();
+            setInterval(refresh, 10000); // every 10s
+        })();
+        </script>
 
         <div th:if="${stats.unboundPoolCount > 0}"
              class="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-3">
