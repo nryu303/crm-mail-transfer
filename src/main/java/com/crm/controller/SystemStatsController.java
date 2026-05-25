@@ -85,8 +85,47 @@ public class SystemStatsController {
         jvm.put("uptimeSec", uptimeMs / 1000);
         out.put("jvm", jvm);
 
+        // Backup status — most-recent file in BACKUP_DIR. Operator-visible so a silent
+        // cron failure (gzip error / podman exec down) shows up on the dashboard.
+        out.put("backup", readBackupStatus());
+
         out.put("nowMs", System.currentTimeMillis());
         return out;
+    }
+
+    private static final String BACKUP_DIR = "/home/centos/crm-backups";
+
+    private static Map<String, Object> readBackupStatus() {
+        Map<String, Object> b = new LinkedHashMap<>();
+        File dir = new File(BACKUP_DIR);
+        File latest = null;
+        long latestMtime = 0L;
+        int count = 0;
+        if (dir.isDirectory()) {
+            File[] files = dir.listFiles((d, name) -> name.startsWith("crm-") && name.endsWith(".sql.gz"));
+            if (files != null) {
+                count = files.length;
+                for (File f : files) {
+                    if (f.lastModified() > latestMtime) {
+                        latestMtime = f.lastModified();
+                        latest = f;
+                    }
+                }
+            }
+        }
+        b.put("count", count);
+        if (latest != null) {
+            b.put("latestName",  latest.getName());
+            b.put("latestBytes", latest.length());
+            b.put("latestEpoch", latestMtime);
+            b.put("ageHours",    (System.currentTimeMillis() - latestMtime) / (1000L * 60 * 60));
+        } else {
+            b.put("latestName",  null);
+            b.put("latestBytes", 0L);
+            b.put("latestEpoch", 0L);
+            b.put("ageHours",    Long.MAX_VALUE);
+        }
+        return b;
     }
 
     private static Map<String, Long> readMeminfo() {
