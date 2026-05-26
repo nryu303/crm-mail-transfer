@@ -56,8 +56,11 @@ class ScheduledTaskServiceTest {
         // Make the dispatcher lock always acquirable (empty value, no holder).
         when(settingRepo.findBySettingKey(anyString())).thenReturn(Optional.empty());
 
+        FolderSettingService folderSettings = mock(FolderSettingService.class);
+        FolderRetentionService folderRetention = mock(FolderRetentionService.class);
         svc = new ScheduledTaskService(msgRepo, poolRepo, messageService,
-                settingRepo, bindingRepo, domainSettings, broadcastRepo);
+                settingRepo, bindingRepo, domainSettings, broadcastRepo,
+                folderSettings, folderRetention);
     }
 
     private static Message scheduledBroadcastRow(Long id, Long userId, Long broadcastId,

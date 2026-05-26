@@ -90,6 +90,24 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
      *  the stuck-broadcast sweeper to detect parents whose children all finalised. */
     long countByBroadcastIdAndStatus(Long broadcastId, String status);
 
+    /** Bulk-delete every MESSAGE row whose user_id is in the given list. Used by
+     *  FolderRetentionService for the operator's per-folder "履歴削除" button. */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+            "DELETE FROM Message m WHERE m.userId IN :userIds")
+    int deleteByUserIdIn(@org.springframework.data.repository.query.Param("userIds") java.util.List<Long> userIds);
+
+    /** Bulk-delete MESSAGE rows older than {@code cutoff} for users in the list.
+     *  Used by the daily retention sweeper. */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+            "DELETE FROM Message m WHERE m.userId IN :userIds AND m.createdAt < :cutoff")
+    int deleteByUserIdInAndCreatedAtBefore(
+            @org.springframework.data.repository.query.Param("userIds") java.util.List<Long> userIds,
+            @org.springframework.data.repository.query.Param("cutoff") java.time.LocalDateTime cutoff);
+
     @org.springframework.data.jpa.repository.Query(
             "SELECT MAX(m.createdAt) FROM Message m WHERE m.userId = :userId AND m.direction = :direction")
     java.time.LocalDateTime maxCreatedAtByUserIdAndDirection(@org.springframework.data.repository.query.Param("userId") Long userId,

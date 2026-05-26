@@ -102,6 +102,115 @@
         </div>
     </form>
 
+    <!-- ===== Per-folder history / binding purge + auto-retention ===== -->
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-5xl mt-6">
+        <h2 class="text-base font-semibold text-slate-800 mb-2">フォルダ単位の履歴クリーンアップ</h2>
+        <p class="text-xs text-slate-500 mb-4">
+            メモリ圧を下げるため、フォルダ内ユーザーの一斉送信返信履歴 / キャリア登録割り当てを削除できます。<br/>
+            「自動削除日数」を設定すると、毎日 00:00 にそのフォルダ内ユーザーで <strong>指定日数より古い</strong> 一斉送信返信履歴を自動削除します
+            (0 で無効化、1 日で前日以前を削除、7 で1週間以前)。キャリア登録割り当ては手動削除のみで自動削除されません。
+        </p>
+        <table class="w-full text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-3 py-2 text-left">フォルダ名</th>
+                    <th class="px-3 py-2 text-right" style="width: 100px;">件数</th>
+                    <th class="px-3 py-2 text-left" style="width: 180px;">自動削除日数</th>
+                    <th class="px-3 py-2 text-left" style="width: 320px;">手動削除</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                <tr th:each="r : ${configuredRows}" class="hover:bg-slate-50/50">
+                    <td class="px-3 py-2 text-slate-700 font-medium" th:text="${r.name}"></td>
+                    <td class="px-3 py-2 text-right font-mono text-slate-600"
+                        th:text="${#numbers.formatInteger(r.count, 1, 'COMMA')} + ' 件'"></td>
+                    <td class="px-3 py-2">
+                        <form method="post" th:action="@{/manager/settings/folders/retention}" class="flex items-center gap-2">
+                            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                            <input type="hidden" name="folderName" th:value="${r.name}"/>
+                            <input type="number" name="days" min="0" max="3650"
+                                   th:value="${retentionDaysByFolder.get(r.name) ?: 0}"
+                                   class="tw-input" style="width:80px;padding:4px 8px;font-size:.78rem;"/>
+                            <span class="text-xs text-slate-500">日</span>
+                            <button type="submit"
+                                    class="inline-flex items-center px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded">保存</button>
+                        </form>
+                    </td>
+                    <td class="px-3 py-2">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <form method="post" th:action="@{/manager/settings/folders/purge-messages}"
+                                  onsubmit="return confirmPurge(this,'history','[[${r.name}]]');"
+                                  class="inline-flex">
+                                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                                <input type="hidden" name="folderName" th:value="${r.name}"/>
+                                <input type="hidden" name="confirmPassword" class="confirm-pw"/>
+                                <button type="submit"
+                                        class="inline-flex items-center px-2 py-1 text-xs bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 rounded">
+                                    一斉送信返信履歴 削除
+                                </button>
+                            </form>
+                            <form method="post" th:action="@{/manager/settings/folders/purge-bindings}"
+                                  onsubmit="return confirmPurge(this,'binding','[[${r.name}]]');"
+                                  class="inline-flex">
+                                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                                <input type="hidden" name="folderName" th:value="${r.name}"/>
+                                <input type="hidden" name="confirmPassword" class="confirm-pw"/>
+                                <button type="submit"
+                                        class="inline-flex items-center px-2 py-1 text-xs bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 rounded">
+                                    キャリア登録割り当て 削除
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                <!-- 未設定 bucket -->
+                <tr class="hover:bg-slate-50/50">
+                    <td class="px-3 py-2 text-slate-500">（未設定）</td>
+                    <td class="px-3 py-2 text-right font-mono text-slate-600"
+                        th:text="${#numbers.formatInteger(unsetCount, 1, 'COMMA')} + ' 件'"></td>
+                    <td class="px-3 py-2 text-xs text-slate-400">自動削除対象外</td>
+                    <td class="px-3 py-2">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <form method="post" th:action="@{/manager/settings/folders/purge-messages}"
+                                  onsubmit="return confirmPurge(this,'history','（未設定）');"
+                                  class="inline-flex">
+                                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                                <input type="hidden" name="folderName" value=""/>
+                                <input type="hidden" name="confirmPassword" class="confirm-pw"/>
+                                <button type="submit"
+                                        class="inline-flex items-center px-2 py-1 text-xs bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 rounded">
+                                    一斉送信返信履歴 削除
+                                </button>
+                            </form>
+                            <form method="post" th:action="@{/manager/settings/folders/purge-bindings}"
+                                  onsubmit="return confirmPurge(this,'binding','（未設定）');"
+                                  class="inline-flex">
+                                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                                <input type="hidden" name="folderName" value=""/>
+                                <input type="hidden" name="confirmPassword" class="confirm-pw"/>
+                                <button type="submit"
+                                        class="inline-flex items-center px-2 py-1 text-xs bg-amber-50 border border-amber-300 text-amber-800 hover:bg-amber-100 rounded">
+                                    キャリア登録割り当て 削除
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <script>
+        function confirmPurge(form, kind, folder) {
+            var label = (kind === 'history') ? '一斉送信返信履歴' : 'キャリア登録割り当て';
+            if (!confirm('⚠️ フォルダ「' + folder + '」内ユーザーの' + label + 'を全削除します。\n復元できません。よろしいですか?')) return false;
+            if (!confirm('本当に削除してよろしいですか? この操作は取り消せません。')) return false;
+            var pw = prompt('管理者パスワードを入力してください');
+            if (!pw) return false;
+            form.querySelector('.confirm-pw').value = pw;
+            return true;
+        }
+        </script>
+    </div>
+
     <!-- ===== Stranded folders (DB values not in the configured list) ===== -->
     <div th:if="${strandedRows != null and !strandedRows.empty}"
          class="bg-amber-50 rounded-lg shadow-sm border border-amber-300 p-6 max-w-3xl">

@@ -43,6 +43,7 @@ public class SettingController {
     private final com.crm.service.HomeHtmlService homeHtmlService;
     private final com.crm.service.CrmUserService crmUserService;
     private final com.crm.service.ReplyHtmlSlotService replyHtmlSlotService;
+    private final com.crm.service.FolderRetentionService folderRetentionService;
 
     public SettingController(RelayServerService relayServerService,
                              MessageTemplateService templateService,
@@ -54,7 +55,8 @@ public class SettingController {
                              org.springframework.beans.factory.ObjectProvider<com.crm.service.HttpRelayOutboundMailService> httpRelayProvider,
                              com.crm.service.HomeHtmlService homeHtmlService,
                              com.crm.service.CrmUserService crmUserService,
-                             com.crm.service.ReplyHtmlSlotService replyHtmlSlotService) {
+                             com.crm.service.ReplyHtmlSlotService replyHtmlSlotService,
+                             com.crm.service.FolderRetentionService folderRetentionService) {
         this.relayServerService = relayServerService;
         this.templateService = templateService;
         this.replyPageSettingService = replyPageSettingService;
@@ -66,6 +68,7 @@ public class SettingController {
         this.homeHtmlService = homeHtmlService;
         this.crmUserService = crmUserService;
         this.replyHtmlSlotService = replyHtmlSlotService;
+        this.folderRetentionService = folderRetentionService;
     }
 
     // ====== Folder settings ======
@@ -111,7 +114,60 @@ public class SettingController {
         model.addAttribute("configuredRows", configuredRows);
         model.addAttribute("strandedRows", strandedRows);
         model.addAttribute("unsetCount", unsetCount);
+        // Per-folder retention day count for the new auto-purge UI (2026-05-26).
+        model.addAttribute("retentionDaysByFolder",
+                folderRetentionService.getRetentionDaysMap(folders));
         return "setting/folders";
+    }
+
+    /** Manual one-shot: delete every MESSAGE row for users in this folder. */
+    @PostMapping("/folders/purge-messages")
+    public String foldersPurgeMessages(@RequestParam("folderName") String folderName,
+                                        @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
+                                        javax.servlet.http.HttpSession session,
+                                        RedirectAttributes ra) {
+        Long adminId = (Long) session.getAttribute(com.crm.interceptor.AuthInterceptor.SESSION_ADMIN_ID);
+        if (!adminAuthService.verifyPassword(adminId, confirmPassword)) {
+            ra.addFlashAttribute("flashError", "履歴一括削除には管理者パスワードの確認が必要です");
+            return "redirect:/manager/settings/folders";
+        }
+        int n = folderRetentionService.purgeMessagesForFolder(folderName);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_USER_DELETE,
+                "Message", null, "folder-purge folder=" + folderName + " count=" + n);
+        ra.addFlashAttribute("flashSuccess",
+                "フォルダ「" + (folderName == null || folderName.isEmpty() ? "（未設定）" : folderName)
+                + "」内ユーザーの一斉送信返信履歴を " + n + " 件削除しました");
+        return "redirect:/manager/settings/folders";
+    }
+
+    /** Manual one-shot: delete every CARRIER_USER_BINDING for users in this folder. */
+    @PostMapping("/folders/purge-bindings")
+    public String foldersPurgeBindings(@RequestParam("folderName") String folderName,
+                                        @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
+                                        javax.servlet.http.HttpSession session,
+                                        RedirectAttributes ra) {
+        Long adminId = (Long) session.getAttribute(com.crm.interceptor.AuthInterceptor.SESSION_ADMIN_ID);
+        if (!adminAuthService.verifyPassword(adminId, confirmPassword)) {
+            ra.addFlashAttribute("flashError", "キャリア解除には管理者パスワードの確認が必要です");
+            return "redirect:/manager/settings/folders";
+        }
+        int n = folderRetentionService.purgeBindingsForFolder(folderName);
+        ra.addFlashAttribute("flashSuccess",
+                "フォルダ「" + (folderName == null || folderName.isEmpty() ? "（未設定）" : folderName)
+                + "」内ユーザーのキャリア登録割り当てを " + n + " 件削除しました");
+        return "redirect:/manager/settings/folders";
+    }
+
+    /** Save the per-folder retention days (operator slider). 0 = disable. */
+    @PostMapping("/folders/retention")
+    public String foldersSaveRetention(@RequestParam("folderName") String folderName,
+                                        @RequestParam("days") Integer days,
+                                        RedirectAttributes ra) {
+        folderRetentionService.setRetentionDays(folderName, days == null ? 0 : days);
+        ra.addFlashAttribute("flashSuccess",
+                "フォルダ「" + folderName + "」の自動削除を "
+                + ((days == null || days == 0) ? "無効" : days + " 日") + " に設定しました");
+        return "redirect:/manager/settings/folders";
     }
 
     @PostMapping("/folders")

@@ -46,6 +46,8 @@ public class ScheduledTaskService {
     private final com.crm.repository.CarrierUserBindingRepository bindingRepo;
     private final DomainSettingService domainSettings;
     private final com.crm.repository.BroadcastRepository broadcastRepo;
+    private final FolderSettingService folderSettingService;
+    private final FolderRetentionService folderRetentionService;
 
     public ScheduledTaskService(MessageRepository messageRepository,
                                 CarrierAddressPoolRepository poolRepository,
@@ -53,7 +55,9 @@ public class ScheduledTaskService {
                                 com.crm.repository.CrmSettingRepository settingRepo,
                                 com.crm.repository.CarrierUserBindingRepository bindingRepo,
                                 DomainSettingService domainSettings,
-                                com.crm.repository.BroadcastRepository broadcastRepo) {
+                                com.crm.repository.BroadcastRepository broadcastRepo,
+                                FolderSettingService folderSettingService,
+                                FolderRetentionService folderRetentionService) {
         this.messageRepository = messageRepository;
         this.poolRepository = poolRepository;
         this.messageService = messageService;
@@ -61,6 +65,37 @@ public class ScheduledTaskService {
         this.bindingRepo = bindingRepo;
         this.domainSettings = domainSettings;
         this.broadcastRepo = broadcastRepo;
+        this.folderSettingService = folderSettingService;
+        this.folderRetentionService = folderRetentionService;
+    }
+
+    /**
+     * Daily at 00:00 — for every configured folder with retention_days > 0, drop MESSAGE
+     * rows older than that many days for users currently in the folder. Operator-requested
+     * 2026-05-26 to keep DB and memory pressure under control.
+     *
+     * <p>Carrier bindings are NOT auto-purged here — that's a heavier consequence (the
+     * user can no longer send/receive) and stays on the manual button only.
+     */
+    @Scheduled(cron = "0 0 0 * * *")
+    public void purgePerFolderRetention() {
+        if (!acquireOrRefreshLock()) return;
+        java.util.List<String> folders = folderSettingService.listFolders();
+        int totalDeleted = 0;
+        for (String folder : folders) {
+            int days = folderRetentionService.getRetentionDays(folder);
+            if (days <= 0) continue;
+            try {
+                int n = folderRetentionService.purgeOldMessagesForFolder(folder, days);
+                totalDeleted += n;
+            } catch (Exception e) {
+                log.warn("Retention purge failed for folder {}: {}", folder, e.toString());
+            }
+        }
+        if (totalDeleted > 0) {
+            log.info("Daily folder-retention purge: {} MESSAGE rows deleted across {} folders",
+                    totalDeleted, folders.size());
+        }
     }
 
     /**
