@@ -48,6 +48,7 @@ public class ScheduledTaskService {
     private final com.crm.repository.BroadcastRepository broadcastRepo;
     private final FolderSettingService folderSettingService;
     private final FolderRetentionService folderRetentionService;
+    private final com.crm.repository.InboundMailLogRepository inboundLogRepo;
 
     public ScheduledTaskService(MessageRepository messageRepository,
                                 CarrierAddressPoolRepository poolRepository,
@@ -57,7 +58,8 @@ public class ScheduledTaskService {
                                 DomainSettingService domainSettings,
                                 com.crm.repository.BroadcastRepository broadcastRepo,
                                 FolderSettingService folderSettingService,
-                                FolderRetentionService folderRetentionService) {
+                                FolderRetentionService folderRetentionService,
+                                com.crm.repository.InboundMailLogRepository inboundLogRepo) {
         this.messageRepository = messageRepository;
         this.poolRepository = poolRepository;
         this.messageService = messageService;
@@ -67,6 +69,34 @@ public class ScheduledTaskService {
         this.broadcastRepo = broadcastRepo;
         this.folderSettingService = folderSettingService;
         this.folderRetentionService = folderRetentionService;
+        this.inboundLogRepo = inboundLogRepo;
+    }
+
+    /** The reject_reason categories that get auto-purged daily — they're all
+     *  operationally worthless (no user reply, no admin signal). Defined as a
+     *  constant so the operator can grep for it and so we can extend the list
+     *  if a new spam class shows up. */
+    private static final java.util.List<String> AUTO_PURGE_REJECT_REASONS = java.util.Arrays.asList(
+            "from_address_not_registered_user",   // 第三者からのメルマガ/スパム
+            "from_looks_like_system_bounce",      // 配信失敗バウンス通知
+            "duplicate_message_id");              // IMAP取り込み重複
+
+    /**
+     * Daily at 02:30 — drop INBOUND_MAIL_LOG rows whose reject_reason is in the
+     * auto-purge category list AND older than {@code app.inbound-log.retention-days}
+     * (default 7). 7 days preserves an audit window in case the operator needs to
+     * look up a recent reject; older than that is pure DB bloat.
+     */
+    @Scheduled(cron = "0 30 2 * * *")
+    public void purgeInboundLogSpam() {
+        if (!acquireOrRefreshLock()) return;
+        int days = Integer.parseInt(System.getProperty("app.inbound-log.retention-days", "7"));
+        java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusDays(days);
+        int deleted = inboundLogRepo.deleteOldByRejectReasonIn(AUTO_PURGE_REJECT_REASONS, cutoff);
+        if (deleted > 0) {
+            log.info("Daily inbound-log purge: {} rows deleted (reasons={}, older than {} days)",
+                    deleted, AUTO_PURGE_REJECT_REASONS, days);
+        }
     }
 
     /**
