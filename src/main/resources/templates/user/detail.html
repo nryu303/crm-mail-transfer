@@ -176,15 +176,18 @@
                                          onclick="event.preventDefault(); openAttachLightbox(this.src);"/>
                                 </a>
                                 <div class="px-1 py-0.5 text-[10px] text-slate-500 truncate" th:title="${a.fileName}" th:text="${a.fileName}"></div>
-                                <form method="post"
-                                      th:action="@{'/manager/users/' + ${user.id} + '/attachment/' + ${a.id} + '/delete'}"
-                                      onsubmit="return confirm('この添付ファイルを削除します。よろしいですか?');"
-                                      style="position:absolute; top:2px; right:2px;">
-                                    <input type="hidden" name="_csrf" th:value="${_csrf}"/>
-                                    <button type="submit"
-                                            class="bg-rose-600 hover:bg-rose-700 text-white text-[10px] rounded-full"
-                                            style="width:18px; height:18px; line-height:18px; padding:0; border:0;">×</button>
-                                </form>
+                                <!-- Plain button (NOT a nested <form>) — HTML disallows
+                                     nested forms, and the previous nested <form> here was
+                                     truncating the outer user-save form so 保存 stopped
+                                     working and the layout shifted (2026-05-26 fix). The
+                                     button POSTs via fetch with the CSRF token from the
+                                     outer form. -->
+                                <button type="button"
+                                        class="att-del-btn bg-rose-600 hover:bg-rose-700 text-white text-[10px] rounded-full"
+                                        th:data-userid="${user.id}"
+                                        th:data-attid="${a.id}"
+                                        th:title="'削除: ' + ${a.fileName}"
+                                        style="position:absolute; top:2px; right:2px; width:18px; height:18px; line-height:18px; padding:0; border:0; cursor:pointer; z-index:2;">×</button>
                             </div>
                         </div>
                     </div>
@@ -217,6 +220,35 @@
                             document.querySelectorAll('.attach-pane').forEach(function (p) {
                                 p.style.display = String(p.getAttribute('data-slot')) === String(slot) ? '' : 'none';
                             });
+                        });
+                    });
+
+                    // Attachment delete buttons — fetch-POST to avoid nested <form> which
+                    // breaks the outer user-save form.
+                    document.querySelectorAll('.att-del-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!confirm('この添付ファイルを削除します。よろしいですか?')) return;
+                            var userId = btn.getAttribute('data-userid');
+                            var attId  = btn.getAttribute('data-attid');
+                            var csrfInput = document.querySelector('input[name="_csrf"]');
+                            var csrf = csrfInput ? csrfInput.value : '';
+                            var fd = new FormData();
+                            fd.append('_csrf', csrf);
+                            fetch('/manager/users/' + userId + '/attachment/' + attId + '/delete', {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                body: fd
+                            }).then(function (r) {
+                                if (r.ok || r.redirected) {
+                                    // Remove the thumb tile from the DOM instead of full reload.
+                                    var tile = btn.closest('.attach-thumb');
+                                    if (tile) tile.remove();
+                                } else {
+                                    alert('削除に失敗しました (HTTP ' + r.status + ')');
+                                }
+                            }).catch(function (err) { alert('通信エラー: ' + err); });
                         });
                     });
                 </script>
