@@ -88,6 +88,15 @@ public class ReplyAttachmentService {
     @Transactional
     public ReplyPageAttachment upload(Long userId, int slot, MultipartFile file, String uploadedBy)
             throws AttachmentException, IOException {
+        return upload(userId, slot, file, uploadedBy, null);
+    }
+
+    /** Variant that also links the attachment to a specific MESSAGE row (used when the
+     *  attachment is uploaded as part of a reply send). */
+    @Transactional
+    public ReplyPageAttachment upload(Long userId, int slot, MultipartFile file,
+                                       String uploadedBy, Long messageId)
+            throws AttachmentException, IOException {
         if (userId == null) throw new AttachmentException("user not resolved");
         if (file == null || file.isEmpty()) throw new AttachmentException("ファイルが空です");
         if (file.getSize() > MAX_SIZE_BYTES) {
@@ -116,6 +125,7 @@ public class ReplyAttachmentService {
 
         ReplyPageAttachment a = new ReplyPageAttachment();
         a.setUserId(userId);
+        a.setMessageId(messageId);
         a.setSlotNo(s);
         a.setFileName(sanitiseFilename(file.getOriginalFilename(), ext));
         a.setStoredPath(rel);

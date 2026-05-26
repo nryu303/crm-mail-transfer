@@ -232,8 +232,26 @@
             <div th:if="${thread.empty}" class="text-center text-xs text-slate-400 py-6">まだメッセージはありません</div>
             <div th:each="m : ${thread}" class="hist-item"
                  th:classappend="${m.direction == 'OUT'} ? 'out' : (${m.channel == 'WEB_REPLY'} ? 'in web' : 'in')">
-                <div class="font-medium" th:text="${m.subject} ?: '(件名なし)'"></div>
+                <div class="font-medium">
+                    <span th:text="${m.subject} ?: '(件名なし)'"></span>
+                    <!-- 📎 badge next to subject when this inbound carries images -->
+                    <span th:if="${attachmentsByMessageId.get(m.id) != null and !attachmentsByMessageId.get(m.id).empty}"
+                          class="ml-1 text-xs"
+                          th:text="'📎 ' + ${attachmentsByMessageId.get(m.id).size()}"
+                          title="添付画像あり"></span>
+                </div>
                 <div class="whitespace-pre-wrap" th:text="${m.bodyText}"></div>
+                <!-- Inbound attachment thumbnails — click opens the lightbox. -->
+                <div th:if="${attachmentsByMessageId.get(m.id) != null and !attachmentsByMessageId.get(m.id).empty}"
+                     class="mt-1 flex flex-wrap gap-1">
+                    <img th:each="a : ${attachmentsByMessageId.get(m.id)}"
+                         th:src="@{'/manager/users/' + ${user.id} + '/attachment/' + ${a.id}}"
+                         th:alt="${a.fileName}"
+                         th:title="${a.fileName}"
+                         class="hist-att-thumb"
+                         style="width:60px; height:60px; object-fit:cover; border:1px solid #cbd5e1; border-radius:3px; cursor:zoom-in;"
+                         onclick="openThreadLightbox(this.src);"/>
+                </div>
                 <div class="meta">
                     <span th:if="${m.direction == 'OUT' and m.status == 'FAILED'}"
                           style="font-weight:700;background:#fecaca;color:#991b1b;padding:1px 6px;border-radius:3px;">NG</span>
@@ -250,6 +268,28 @@
                           th:text="${#strings.abbreviate(m.errorMessage, 80)}"></span>
                 </div>
             </div>
+
+            <!-- Lightbox overlay for thread thumbnails -->
+            <div id="threadLightbox" onclick="this.style.display='none'"
+                 style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; cursor:zoom-out;">
+                <img id="threadLightboxImg" src="" alt=""
+                     style="max-width:92vw; max-height:92vh; box-shadow:0 4px 30px rgba(0,0,0,0.5);"/>
+            </div>
+            <script>
+                function openThreadLightbox(src) {
+                    var lb = document.getElementById('threadLightbox');
+                    var im = document.getElementById('threadLightboxImg');
+                    if (!lb || !im) return;
+                    im.src = src;
+                    lb.style.display = 'flex';
+                }
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') {
+                        var lb = document.getElementById('threadLightbox');
+                        if (lb) lb.style.display = 'none';
+                    }
+                });
+            </script>
         </div>
     </div>
 

@@ -17,4 +17,11 @@ public interface ReplyPageAttachmentRepository extends JpaRepository<ReplyPageAt
     List<ReplyPageAttachment> findByUserIdOrderByCreatedAtDesc(Long userId);
 
     long countByUserIdAndSlotNo(Long userId, Integer slotNo);
+
+    /** Attachments attached to a specific received MESSAGE row. Used by the thread
+     *  view to render thumbnails next to that inbound. */
+    List<ReplyPageAttachment> findByMessageIdOrderByCreatedAtAsc(Long messageId);
+
+    /** Bulk fetch across many inbound messages for the per-row map in the thread page. */
+    List<ReplyPageAttachment> findByMessageIdIn(java.util.Collection<Long> messageIds);
 }

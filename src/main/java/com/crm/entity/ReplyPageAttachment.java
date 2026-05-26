@@ -26,6 +26,11 @@ public class ReplyPageAttachment {
     @Column(name = "USER_ID", nullable = false)
     private Long userId;
 
+    /** Optional link to the MESSAGE row this attachment was sent with. Lets the thread
+     *  view render thumbnails next to the specific inbound reply that carried them. */
+    @Column(name = "MESSAGE_ID")
+    private Long messageId;
+
     /** Reply-HTML slot (1..6) — operator switches between them via CrmUser.activeMemoSlot. */
     @Column(name = "SLOT_NO", nullable = false)
     private Integer slotNo;
@@ -62,6 +67,8 @@ public class ReplyPageAttachment {
     public void setId(Long id) { this.id = id; }
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
+    public Long getMessageId() { return messageId; }
+    public void setMessageId(Long messageId) { this.messageId = messageId; }
     public Integer getSlotNo() { return slotNo; }
     public void setSlotNo(Integer slotNo) { this.slotNo = slotNo; }
     public String getFileName() { return fileName; }

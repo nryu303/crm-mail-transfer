@@ -217,6 +217,8 @@ public class ReplyPageController {
     public String submit(@PathVariable String token,
                          @RequestParam(required = false) String subject,
                          @RequestParam(required = false) String body,
+                         @RequestParam(name = "files", required = false)
+                                 org.springframework.web.multipart.MultipartFile[] files,
                          HttpServletRequest request,
                          Model model) {
         Optional<ReplyPage> rpOpt = replyPageService.findByToken(token);
@@ -274,10 +276,34 @@ public class ReplyPageController {
         msg.setSentAt(LocalDateTime.now());
         msg.setReplyPageToken(token);
         msg.setReplyToMessageId(rp.getMessageId());
-        messageRepository.save(msg);
+        Message savedMsg = messageRepository.save(msg);
+
+        // Save each uploaded image with message_id = saved.id so the thread view can show
+        // the attachments next to this specific received reply. Individual file failures
+        // (size / mime) are reported as a flash but don't block the reply itself.
+        java.util.List<String> attachErrors = new java.util.ArrayList<>();
+        if (files != null && user.isPresent()) {
+            int slot = user.get().getActiveMemoSlot();
+            for (org.springframework.web.multipart.MultipartFile f : files) {
+                if (f == null || f.isEmpty()) continue;
+                try {
+                    attachmentService.upload(user.get().getId(), slot, f, clientIp, savedMsg.getId());
+                } catch (com.crm.service.ReplyAttachmentService.AttachmentException e) {
+                    attachErrors.add(f.getOriginalFilename() + ": " + e.getMessage());
+                } catch (java.io.IOException e) {
+                    log.warn("attachment upload io error on /send: {}", e.toString());
+                    attachErrors.add(f.getOriginalFilename() + ": アップロードに失敗しました");
+                }
+            }
+        }
 
         user.ifPresent(userActivityService::touchLastLogin);
 
+        if (!attachErrors.isEmpty()) {
+            // Reply was saved, but at least one attachment failed — surface the issue on
+            // the sent page so the operator sees it instead of silent loss.
+            model.addAttribute("attachmentWarnings", attachErrors);
+        }
         return "reply/sent";
     }
 

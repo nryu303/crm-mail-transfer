@@ -36,6 +36,7 @@ public class MessageController {
     private final CarrierBindingService bindingService;
     private final com.crm.service.AdminAuthService adminAuthService;
     private final com.crm.service.PaymentService paymentService;
+    private final com.crm.repository.ReplyPageAttachmentRepository attachmentRepo;
 
     public MessageController(MessageService messageService,
                              CrmUserService userService,
@@ -43,7 +44,8 @@ public class MessageController {
                              MessageTemplateService templateService,
                              CarrierBindingService bindingService,
                              com.crm.service.AdminAuthService adminAuthService,
-                             com.crm.service.PaymentService paymentService) {
+                             com.crm.service.PaymentService paymentService,
+                             com.crm.repository.ReplyPageAttachmentRepository attachmentRepo) {
         this.messageService = messageService;
         this.userService = userService;
         this.placeholderService = placeholderService;
@@ -51,6 +53,7 @@ public class MessageController {
         this.bindingService = bindingService;
         this.adminAuthService = adminAuthService;
         this.paymentService = paymentService;
+        this.attachmentRepo = attachmentRepo;
     }
 
     /** Global recent-messages list with tab filtering. */
@@ -140,6 +143,20 @@ public class MessageController {
         model.addAttribute("templatePageTitles", templateService.listPageTitles());
         model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
         model.addAttribute("boundAddresses", bindingService.listBoundFor(userId));
+        // Inbound attachment thumbnails — fetch every attachment linked to any IN-message
+        // in this thread, group by message_id so the template can render the badge + grid.
+        java.util.Map<Long, java.util.List<com.crm.entity.ReplyPageAttachment>> attsByMsg
+                = new java.util.HashMap<>();
+        java.util.List<Long> inMsgIds = new java.util.ArrayList<>();
+        for (com.crm.entity.Message m : thread) {
+            if (com.crm.entity.Message.DIR_IN.equals(m.getDirection())) inMsgIds.add(m.getId());
+        }
+        if (!inMsgIds.isEmpty()) {
+            for (com.crm.entity.ReplyPageAttachment a : attachmentRepo.findByMessageIdIn(inMsgIds)) {
+                attsByMsg.computeIfAbsent(a.getMessageId(), k -> new java.util.ArrayList<>()).add(a);
+            }
+        }
+        model.addAttribute("attachmentsByMessageId", attsByMsg);
         // Left-upper inbox list (all users with any inbound, newest first).
         model.addAttribute("inboxRows", messageService.inboxByUser(false));
         if (!model.containsAttribute("form")) {
