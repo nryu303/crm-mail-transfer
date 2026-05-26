@@ -59,7 +59,7 @@ public class CsrfInterceptor implements HandlerInterceptor {
      * under /reply/ does NOT silently inherit the CSRF bypass.
      */
     private static final Pattern REPLY_EXEMPT = Pattern.compile(
-            "^/reply/[A-Za-z0-9_-]+(/send)?$");
+            "^/reply/[A-Za-z0-9_-]+(/send|/attachment)?$");
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {

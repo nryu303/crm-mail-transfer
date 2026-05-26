@@ -58,6 +58,7 @@ public class ReplyPageController {
     private final UserActivityService userActivityService;
     private final ReplyRateLimitService rateLimitService;
     private final com.crm.service.PlaceholderService placeholderService;
+    private final com.crm.service.ReplyAttachmentService attachmentService;
 
     public ReplyPageController(ReplyPageService replyPageService,
                                CrmUserRepository userRepository,
@@ -65,7 +66,8 @@ public class ReplyPageController {
                                ReplyPageSettingService settingService,
                                UserActivityService userActivityService,
                                ReplyRateLimitService rateLimitService,
-                               com.crm.service.PlaceholderService placeholderService) {
+                               com.crm.service.PlaceholderService placeholderService,
+                               com.crm.service.ReplyAttachmentService attachmentService) {
         this.replyPageService = replyPageService;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
@@ -73,6 +75,7 @@ public class ReplyPageController {
         this.userActivityService = userActivityService;
         this.rateLimitService = rateLimitService;
         this.placeholderService = placeholderService;
+        this.attachmentService = attachmentService;
     }
 
     /**
@@ -138,12 +141,76 @@ public class ReplyPageController {
             footerHtml = placeholderService.substitute(footerHtml, user.get());
         }
 
+        // Pull every attachment the user has uploaded against their CURRENT active slot.
+        // If the operator switches the active slot in /manager/users/{id}, the next page
+        // load here picks up the new slot's attachments and hides the old slot's — exactly
+        // the "添付した専用返信画面HTMLに戻った場合は再表示" behaviour the operator asked for.
+        java.util.List<com.crm.entity.ReplyPageAttachment> attachments = java.util.Collections.emptyList();
+        if (user.isPresent()) {
+            attachments = attachmentService.listForActiveSlot(
+                    user.get().getId(), user.get().getActiveMemoSlot());
+        }
+
         model.addAttribute("token", token);
         model.addAttribute("headerHtml", headerHtml);
         model.addAttribute("footerHtml", footerHtml);
         model.addAttribute("customCss", settings.getDefaultCss());
         model.addAttribute("form", new ReplyForm());
+        model.addAttribute("attachments", attachments);
+        model.addAttribute("maxAttachmentSizeMB",
+                com.crm.service.ReplyAttachmentService.MAX_SIZE_BYTES / 1024 / 1024);
         return "reply/page";
+    }
+
+    /** Public attachment upload — the user clicks the "画像添付" button on /reply/{token}.
+     *  The new image is tied to whichever slot is currently active for that user. */
+    @PostMapping("/reply/{token}/attachment")
+    public String uploadAttachment(@PathVariable String token,
+                                    @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+                                    HttpServletRequest request,
+                                    org.springframework.web.servlet.mvc.support.RedirectAttributes ra) {
+        Optional<ReplyPage> rpOpt = replyPageService.findByToken(token);
+        if (!rpOpt.isPresent() || !replyPageService.isUsable(rpOpt.get())) {
+            return "reply/expired";
+        }
+        ReplyPage rp = rpOpt.get();
+        Optional<CrmUser> uOpt = userRepository.findById(rp.getUserId());
+        if (!uOpt.isPresent() || !CrmUser.STATUS_ACTIVE.equals(uOpt.get().getStatus())) {
+            return renderNotFoundWithVisitorInfo(request, null, "user_suspended_on_attach");
+        }
+        String clientIp = com.crm.util.ClientIpResolver.resolve(request);
+        if (!rateLimitService.tryAcquire(token, clientIp)) {
+            ra.addFlashAttribute("errorMessage", "短時間に送信が多すぎます。少し時間を置いてから再度お試しください。");
+            return "redirect:/reply/" + token;
+        }
+        try {
+            attachmentService.upload(uOpt.get().getId(), uOpt.get().getActiveMemoSlot(), file, clientIp);
+        } catch (com.crm.service.ReplyAttachmentService.AttachmentException e) {
+            ra.addFlashAttribute("errorMessage", e.getMessage());
+        } catch (java.io.IOException e) {
+            log.warn("attachment upload io error: {}", e.toString());
+            ra.addFlashAttribute("errorMessage", "アップロードに失敗しました。再度お試しください。");
+        }
+        return "redirect:/reply/" + token;
+    }
+
+    /** Public serve — anyone with a valid token for this user can view the image. */
+    @GetMapping("/reply/{token}/attachment/{attId}")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource>
+            serveAttachmentPublic(@PathVariable String token, @PathVariable Long attId) {
+        Optional<ReplyPage> rpOpt = replyPageService.findByToken(token);
+        if (!rpOpt.isPresent() || !replyPageService.isUsable(rpOpt.get())) {
+            return org.springframework.http.ResponseEntity.notFound().build();
+        }
+        com.crm.entity.ReplyPageAttachment att =
+                attachmentService.findById(attId, rpOpt.get().getUserId()).orElse(null);
+        if (att == null) return org.springframework.http.ResponseEntity.notFound().build();
+        java.io.File f = attachmentService.fileFor(att);
+        if (f == null) return org.springframework.http.ResponseEntity.notFound().build();
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(att.getContentType()))
+                .header("Cache-Control", "private, max-age=300")
+                .body(new org.springframework.core.io.FileSystemResource(f));
     }
 
     @PostMapping("/reply/{token}/send")

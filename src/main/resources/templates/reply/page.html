@@ -18,6 +18,37 @@
             display: block; width: 100%; height: 500px;
             border: 0; background: #fff;
         }
+        /* Image-attach block (2026-05-26) — sits between the send form and the footer
+           on the public reply page. Plain, restrained style so user-supplied custom
+           CSS doesn't have to fight with it. */
+        .reply-attach-block {
+            margin: 16px 0; padding: 14px 16px;
+            border: 1px solid #e2e8f0; border-radius: 8px;
+            background: #f8fafc; font-size: 14px;
+        }
+        .reply-attach-label { font-weight: 600; color: #1e293b; margin-bottom: 8px; }
+        .reply-attach-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        .reply-attach-form input[type=file] { font-size: 13px; }
+        .reply-attach-form button {
+            padding: 6px 14px; background: #2563eb; color: #fff;
+            border: 0; border-radius: 4px; cursor: pointer;
+        }
+        .reply-attach-form button:hover { background: #1d4ed8; }
+        .reply-attach-hint { font-size: 12px; color: #64748b; }
+        .reply-attach-err { margin-top: 8px; color: #b91c1c; font-size: 13px; }
+        .reply-attach-list-title { margin: 12px 0 6px; font-size: 13px; color: #475569; }
+        .reply-attach-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 8px;
+        }
+        .reply-attach-thumb {
+            display: block; aspect-ratio: 1 / 1; overflow: hidden;
+            border: 1px solid #cbd5e1; border-radius: 4px;
+            background: #fff;
+        }
+        .reply-attach-thumb img {
+            width: 100%; height: 100%; object-fit: cover;
+        }
     </style>
 </head>
 <body>
@@ -45,6 +76,32 @@
             <button type="submit">送信する</button>
         </div>
     </form>
+
+    <!-- ===== Image attachment (separate form so user can attach without sending text) ===== -->
+    <div class="reply-attach-block">
+        <div class="reply-attach-label">画像添付</div>
+        <form th:action="@{'/reply/' + ${token} + '/attachment'}" method="post" enctype="multipart/form-data" class="reply-attach-form">
+            <input type="file" name="file" accept="image/jpeg,image/png,image/gif,image/webp" required/>
+            <button type="submit">添付する</button>
+            <span class="reply-attach-hint" th:text="'JPEG / PNG / GIF / WebP, 最大 ' + ${maxAttachmentSizeMB} + ' MB'"></span>
+        </form>
+        <div th:if="${errorMessage != null}" class="reply-attach-err" th:text="${errorMessage}"></div>
+
+        <!-- User-visible confirmation that their attachments are present.
+             Empty grid = no attachments yet on this slot. -->
+        <div class="reply-attach-list" th:if="${attachments != null and !attachments.empty}">
+            <div th:text="'添付済み画像 (' + ${attachments.size()} + ' 件)'" class="reply-attach-list-title"></div>
+            <div class="reply-attach-grid">
+                <a th:each="a : ${attachments}"
+                   th:href="@{'/reply/' + ${token} + '/attachment/' + ${a.id}}"
+                   target="_blank"
+                   class="reply-attach-thumb">
+                    <img th:src="@{'/reply/' + ${token} + '/attachment/' + ${a.id}}"
+                         th:alt="${a.fileName}"/>
+                </a>
+            </div>
+        </div>
+    </div>
 
     <div th:if="${footerHtml}" class="reply-footer" th:utext="${footerHtml}"></div>
 </div>

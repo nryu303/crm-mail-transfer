@@ -145,6 +145,81 @@
                               th:placeholder="${memoSlotTitles[5]} + ' の HTML を入力'"></textarea>
                 </div>
                 <p class="mt-1 text-xs text-slate-500">タブのラジオボタンが「使用中」マークです。クリックでパネル切替、ラジオで公開反映スロットを変更し、保存後に反映されます。空白で保存すると該当スロットは削除扱いになります。スロットの表示名は<a class="text-blue-600 hover:underline" th:href="@{/manager/settings/memo-html-bulk}" target="_blank">一括編集ページ</a>から変更できます。</p>
+
+                <!-- Per-slot attachment grid — user-uploaded images via the public reply page,
+                     filed under whichever slot was active when they uploaded. Each pane shows
+                     only its own slot's attachments and follows the same display/hide rule as
+                     the textareas above (display:none when activeMemoSlot != this slot). -->
+                <div class="mt-3">
+                    <div th:each="i : ${#numbers.sequence(1, 6)}" class="attach-pane"
+                         th:attr="data-slot=${i}"
+                         th:style="${form.activeMemoSlot == i ? '' : 'display:none;'}">
+                        <div class="text-xs text-slate-600 mb-1.5">
+                            <span th:text="${memoSlotTitles[i - 1]}">タイトル</span>
+                            に添付された画像
+                            (<span th:text="${attachmentsBySlot[i - 1].size()}">0</span> 件)
+                        </div>
+                        <div th:if="${attachmentsBySlot[i - 1].empty}"
+                             class="text-xs text-slate-400 py-3">
+                            まだ添付ファイルはありません。返信ページ (/reply/&lt;token&gt;) から「画像添付」できます。
+                        </div>
+                        <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));">
+                            <div th:each="a : ${attachmentsBySlot[i - 1]}"
+                                 class="attach-thumb relative border border-slate-200 rounded overflow-hidden bg-slate-50">
+                                <a th:href="@{'/manager/users/' + ${user.id} + '/attachment/' + ${a.id}}"
+                                   target="_blank"
+                                   class="block"
+                                   style="aspect-ratio:1/1; overflow:hidden;">
+                                    <img th:src="@{'/manager/users/' + ${user.id} + '/attachment/' + ${a.id}}"
+                                         th:alt="${a.fileName}"
+                                         style="width:100%; height:100%; object-fit:cover; cursor:zoom-in;"
+                                         onclick="event.preventDefault(); openAttachLightbox(this.src);"/>
+                                </a>
+                                <div class="px-1 py-0.5 text-[10px] text-slate-500 truncate" th:title="${a.fileName}" th:text="${a.fileName}"></div>
+                                <form method="post"
+                                      th:action="@{'/manager/users/' + ${user.id} + '/attachment/' + ${a.id} + '/delete'}"
+                                      onsubmit="return confirm('この添付ファイルを削除します。よろしいですか?');"
+                                      style="position:absolute; top:2px; right:2px;">
+                                    <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                                    <button type="submit"
+                                            class="bg-rose-600 hover:bg-rose-700 text-white text-[10px] rounded-full"
+                                            style="width:18px; height:18px; line-height:18px; padding:0; border:0;">×</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lightbox overlay — click outside or press Esc to close. Built once and
+                     reused across slot tab switches. -->
+                <div id="attachLightbox" onclick="this.style.display='none'"
+                     style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.85); align-items:center; justify-content:center; cursor:zoom-out;">
+                    <img id="attachLightboxImg" src="" alt="" style="max-width:92vw; max-height:92vh; box-shadow:0 4px 30px rgba(0,0,0,0.5);"/>
+                </div>
+                <script>
+                    function openAttachLightbox(src) {
+                        var lb = document.getElementById('attachLightbox');
+                        var im = document.getElementById('attachLightboxImg');
+                        if (!lb || !im) return;
+                        im.src = src;
+                        lb.style.display = 'flex';
+                    }
+                    document.addEventListener('keydown', function (e) {
+                        if (e.key === 'Escape') {
+                            var lb = document.getElementById('attachLightbox');
+                            if (lb) lb.style.display = 'none';
+                        }
+                    });
+                    // Slot tab clicks need to also hide/show .attach-pane in addition to memo-pane.
+                    document.querySelectorAll('.memo-tab').forEach(function (tab) {
+                        tab.addEventListener('click', function () {
+                            var slot = tab.getAttribute('data-slot');
+                            document.querySelectorAll('.attach-pane').forEach(function (p) {
+                                p.style.display = String(p.getAttribute('data-slot')) === String(slot) ? '' : 'none';
+                            });
+                        });
+                    });
+                </script>
             </div>
             <script>
                 (function(){

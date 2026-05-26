@@ -51,6 +51,7 @@ public class UserController {
     private final com.crm.service.ReplyPageSettingService replyPageSettingService;
     private final com.crm.service.AuditLogService auditLog;
     private final com.crm.service.ReplyHtmlSlotService replyHtmlSlotService;
+    private final com.crm.service.ReplyAttachmentService attachmentService;
 
     public UserController(CrmUserService service,
                           CarrierBindingService bindingService,
@@ -63,7 +64,8 @@ public class UserController {
                           com.crm.service.AdCodeService adCodeService,
                           com.crm.service.ReplyPageSettingService replyPageSettingService,
                           com.crm.service.AuditLogService auditLog,
-                          com.crm.service.ReplyHtmlSlotService replyHtmlSlotService) {
+                          com.crm.service.ReplyHtmlSlotService replyHtmlSlotService,
+                          com.crm.service.ReplyAttachmentService attachmentService) {
         this.service = service;
         this.bindingService = bindingService;
         this.placeholderService = placeholderService;
@@ -76,6 +78,7 @@ public class UserController {
         this.replyPageSettingService = replyPageSettingService;
         this.auditLog = auditLog;
         this.replyHtmlSlotService = replyHtmlSlotService;
+        this.attachmentService = attachmentService;
     }
 
     /** Active ad-code choices for autocomplete on the user-detail form. */
@@ -509,7 +512,44 @@ public class UserController {
         model.addAttribute("statTotalPaid",  totalPaid != null ? totalPaid : java.math.BigDecimal.ZERO);
         // 6-slot reply-HTML titles for the tab labels
         model.addAttribute("memoSlotTitles", replyHtmlSlotService.listSlotTitles());
+        // Per-slot attachment lists for the bottom-left attachment grids. Indexed 0..5
+        // (slot 1..6) so the template can do attachmentsBySlot[i] cleanly.
+        java.util.List<java.util.List<com.crm.entity.ReplyPageAttachment>> attachmentsBySlot =
+                new java.util.ArrayList<>(6);
+        for (int s = 1; s <= 6; s++) {
+            attachmentsBySlot.add(attachmentService.listForUserSlot(id, s));
+        }
+        model.addAttribute("attachmentsBySlot", attachmentsBySlot);
         return "user/detail";
+    }
+
+    /** Admin-side image serve — needs an active admin session (interceptor gates this). */
+    @GetMapping("/{userId}/attachment/{attId}")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.Resource>
+            serveAttachment(@PathVariable Long userId, @PathVariable Long attId) {
+        com.crm.entity.ReplyPageAttachment att = attachmentService.findById(attId, userId).orElse(null);
+        if (att == null) return org.springframework.http.ResponseEntity.notFound().build();
+        java.io.File f = attachmentService.fileFor(att);
+        if (f == null) return org.springframework.http.ResponseEntity.notFound().build();
+        return org.springframework.http.ResponseEntity.ok()
+                .contentType(org.springframework.http.MediaType.parseMediaType(att.getContentType()))
+                .header("Cache-Control", "private, max-age=300")
+                .body(new org.springframework.core.io.FileSystemResource(f));
+    }
+
+    @PostMapping("/{userId}/attachment/{attId}/delete")
+    public String deleteAttachment(@PathVariable Long userId,
+                                    @PathVariable Long attId,
+                                    RedirectAttributes ra) {
+        com.crm.entity.ReplyPageAttachment att = attachmentService.findById(attId, userId).orElse(null);
+        if (att == null) {
+            ra.addFlashAttribute("flashError", "添付ファイルが見つかりません");
+        } else if (attachmentService.deleteById(attId)) {
+            ra.addFlashAttribute("flashSuccess", "添付ファイル「" + att.getFileName() + "」を削除しました");
+        } else {
+            ra.addFlashAttribute("flashError", "添付ファイルの削除に失敗しました");
+        }
+        return "redirect:/manager/users/" + userId;
     }
 
     private static final List<String> PAYMENT_METHODS = Arrays.asList(
