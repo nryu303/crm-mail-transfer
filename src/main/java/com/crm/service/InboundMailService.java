@@ -66,6 +66,26 @@ public class InboundMailService {
      *  {@link #DEFERRAL_EXPIRY_MINUTES} minutes. */
     public static final String REASON_PENDING_POOL = "pending_pool_retry";
 
+    /** Inbound where the TO header CCs a carrier abuse-reporting address (e.g. SoftBank's
+     *  meiwaku@... mailbox). Keeping such a user on the active list risks the relay's IP
+     *  being added to a carrier-side block — we auto-suspend the user AND drop the reply
+     *  from the operator's thread view. The original mail is still preserved in
+     *  INBOUND_MAIL_LOG for post-incident review. */
+    public static final String REASON_SPAM_COMPLAINT = "spam_complaint_to_reporting_address";
+
+    /** Carrier and 3rd-party anti-spam reporting addresses. If any of these appear in the
+     *  raw TO header of an inbound message we treat the sender as a complainant. The match
+     *  is case-insensitive substring search on the full TO header (since these addresses
+     *  typically arrive as one entry of a comma-separated list, not the primary TO). */
+    private static final java.util.Set<String> ABUSE_REPORT_ADDRESSES =
+            java.util.Collections.unmodifiableSet(new java.util.HashSet<>(java.util.Arrays.asList(
+                    "stop@meiwaku.softbankmobile.co.jp",
+                    "imode-meiwaku@nttdocomo.co.jp",
+                    "info@antiphishing.jp",
+                    "mailagain@dekyo.or.jp",
+                    "meiwaku@kddi.com"
+            )));
+
     /** Operator-controlled actions like CSV pool re-import touch the pool table; any new
      *  pool row inserted within this many minutes counts as "churn in progress". */
     private static final int POOL_CHURN_MINUTES = 5;
@@ -214,6 +234,18 @@ public class InboundMailService {
         long outCount = messageRepository.countByUserIdAndDirection(user.getId(), Message.DIR_OUT);
         if (outCount == 0) {
             return reject(entry, REASON_NO_OUT_HISTORY);
+        }
+
+        // Complaint guard: user is CC-ing a carrier abuse address. Auto-suspend so the
+        // next dispatcher tick excludes them, and drop the reply from the thread view.
+        // The raw TO header (not just the parsed primary recipient) is what we scan, since
+        // these abuse addresses normally appear as one entry of a comma-separated list.
+        if (containsAbuseReportAddress(dto.getTo())) {
+            user.setStatus(CrmUser.STATUS_SUSPENDED);
+            userRepository.save(user);
+            log.warn("Inbound flagged as spam complaint — auto-suspending user {} ({}). Full TO: {}",
+                    user.getId(), LogSafe.of(user.getEmail()), LogSafe.of(dto.getTo()));
+            return reject(entry, REASON_SPAM_COMPLAINT);
         }
 
         // 3) Pool/user binding must exist. Client confirmed 2026-05-27 that the receive-only
@@ -393,6 +425,15 @@ public class InboundMailService {
      * Falls back to the trimmed input when no angle brackets are present and no whitespace
      * is detected — keeps already-clean addresses intact.
      */
+    static boolean containsAbuseReportAddress(String rawToHeader) {
+        if (rawToHeader == null || rawToHeader.isEmpty()) return false;
+        String lc = rawToHeader.toLowerCase();
+        for (String addr : ABUSE_REPORT_ADDRESSES) {
+            if (lc.contains(addr)) return true;
+        }
+        return false;
+    }
+
     static String extractEmailAddress(String raw) {
         if (raw == null) return null;
         String s = raw.trim();
