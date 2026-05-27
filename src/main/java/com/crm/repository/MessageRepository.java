@@ -86,6 +86,15 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
     long countByUserIdAndDirection(@org.springframework.data.repository.query.Param("userId") Long userId,
                                    @org.springframework.data.repository.query.Param("direction") String direction);
 
+    /** Earliest OUTbound timestamp for a user — used by InboundMailService to detect
+     *  inbound mail whose Date predates our first send (= reply to a previous owner of
+     *  the same softbank carrier address, not a real reply to us). Returns null if the
+     *  user has no OUT history yet. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT MIN(m.createdAt) FROM Message m WHERE m.userId = :userId AND m.direction = 'OUT'")
+    java.time.LocalDateTime findEarliestOutboundDate(
+            @org.springframework.data.repository.query.Param("userId") Long userId);
+
     /** How many MESSAGE rows in this broadcast still hold the given status. Used by
      *  the stuck-broadcast sweeper to detect parents whose children all finalised. */
     long countByBroadcastIdAndStatus(Long broadcastId, String status);

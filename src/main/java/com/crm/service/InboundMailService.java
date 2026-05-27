@@ -73,6 +73,13 @@ public class InboundMailService {
      *  INBOUND_MAIL_LOG for post-incident review. */
     public static final String REASON_SPAM_COMPLAINT = "spam_complaint_to_reporting_address";
 
+    /** Inbound is a reply to a message that was sent BEFORE we ever sent anything to this
+     *  user — i.e. the SoftBank carrier mailbox we now own previously belonged to someone
+     *  else, the prior owner exchanged mail with this user, and that reply was sitting
+     *  unread until we enabled IMAP monitoring. Detected by comparing the inbound's
+     *  RFC5322 Date: header to the user's earliest OUTbound CREATED_AT. */
+    public static final String REASON_STALE_PRE_RELATIONSHIP = "reply_predates_first_send_to_user";
+
     /** Carrier and 3rd-party anti-spam reporting addresses. If any of these appear in the
      *  raw TO header of an inbound message we treat the sender as a complainant. The match
      *  is case-insensitive substring search on the full TO header (since these addresses
@@ -234,6 +241,21 @@ public class InboundMailService {
         long outCount = messageRepository.countByUserIdAndDirection(user.getId(), Message.DIR_OUT);
         if (outCount == 0) {
             return reject(entry, REASON_NO_OUT_HISTORY);
+        }
+
+        // Pre-relationship-stale guard: if the inbound's Date: header (RFC 5322) is BEFORE
+        // our first send to this user, the reply can't be to us — it's the previous owner's
+        // mail. We discovered this on 2026-05-27 when the IMAP monitoring expansion (15→43
+        // pool addresses) suddenly pulled a 10-day-old reply that had been waiting in a
+        // newly-monitored mailbox. Apply 5-min slack for clock skew.
+        java.time.LocalDateTime inboundDate = parseRfc5322Date(extractRawHeader(dto.getRaw(), "Date"));
+        if (inboundDate != null) {
+            java.time.LocalDateTime firstOut = messageRepository.findEarliestOutboundDate(user.getId());
+            if (firstOut != null && inboundDate.isBefore(firstOut.minusMinutes(5))) {
+                log.info("Inbound rejected as pre-relationship stale: user={} inboundDate={} firstOut={}",
+                        user.getId(), inboundDate, firstOut);
+                return reject(entry, REASON_STALE_PRE_RELATIONSHIP);
+            }
         }
 
         // Complaint guard: user is CC-ing a carrier abuse address. Auto-suspend so the
@@ -425,6 +447,61 @@ public class InboundMailService {
      * Falls back to the trimmed input when no angle brackets are present and no whitespace
      * is detected — keeps already-clean addresses intact.
      */
+    /** Pull a single header value out of a raw RFC 5322 message. Returns null if the
+     *  header is absent or the input is null. Handles folded continuation lines (lines
+     *  that start with whitespace are joined onto the previous header). Case-insensitive
+     *  match on the header name. */
+    static String extractRawHeader(String raw, String headerName) {
+        if (raw == null || headerName == null) return null;
+        String[] lines = raw.split("\\r?\\n");
+        String want = headerName.toLowerCase();
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (line.isEmpty()) return null; // headers ended
+            int colon = line.indexOf(':');
+            if (colon <= 0) continue;
+            String name = line.substring(0, colon).trim().toLowerCase();
+            if (!name.equals(want)) continue;
+            StringBuilder val = new StringBuilder(line.substring(colon + 1).trim());
+            // Fold continuation lines.
+            for (int j = i + 1; j < lines.length; j++) {
+                String cont = lines[j];
+                if (cont.isEmpty() || (!cont.startsWith(" ") && !cont.startsWith("\t"))) break;
+                val.append(' ').append(cont.trim());
+            }
+            return val.toString();
+        }
+        return null;
+    }
+
+    /** Best-effort RFC 5322 Date parser. Accepts forms like
+     *    "Sun, 17 May 2026 21:13:45 +0900"
+     *    "17 May 2026 21:13:45 +0900"
+     *    "Sun, 17 May 2026 21:13:45 +0900 (JST)"
+     *  Returns null on any parsing failure — the caller treats that as "unknown date,
+     *  skip the stale-reply check". */
+    static java.time.LocalDateTime parseRfc5322Date(String dateLine) {
+        if (dateLine == null) return null;
+        String s = dateLine.trim();
+        // Strip trailing parenthesised tz comment like "(JST)".
+        int paren = s.indexOf('(');
+        if (paren > 0) s = s.substring(0, paren).trim();
+        java.time.format.DateTimeFormatter[] fmts = new java.time.format.DateTimeFormatter[]{
+                java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss Z", java.util.Locale.ENGLISH),
+                java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy HH:mm:ss Z",      java.util.Locale.ENGLISH),
+                java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss XXX", java.util.Locale.ENGLISH),
+                java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy HH:mm:ss XXX",      java.util.Locale.ENGLISH),
+        };
+        for (java.time.format.DateTimeFormatter fmt : fmts) {
+            try {
+                return java.time.ZonedDateTime.parse(s, fmt)
+                        .withZoneSameInstant(java.time.ZoneId.systemDefault())
+                        .toLocalDateTime();
+            } catch (Exception ignored) { /* try next */ }
+        }
+        return null;
+    }
+
     static boolean containsAbuseReportAddress(String rawToHeader) {
         if (rawToHeader == null || rawToHeader.isEmpty()) return false;
         String lc = rawToHeader.toLowerCase();
