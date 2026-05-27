@@ -44,6 +44,7 @@ public class SettingController {
     private final com.crm.service.CrmUserService crmUserService;
     private final com.crm.service.ReplyHtmlSlotService replyHtmlSlotService;
     private final com.crm.service.FolderRetentionService folderRetentionService;
+    private final com.crm.service.ImapEnvSyncService imapEnvSyncService;
 
     public SettingController(RelayServerService relayServerService,
                              MessageTemplateService templateService,
@@ -56,7 +57,8 @@ public class SettingController {
                              com.crm.service.HomeHtmlService homeHtmlService,
                              com.crm.service.CrmUserService crmUserService,
                              com.crm.service.ReplyHtmlSlotService replyHtmlSlotService,
-                             com.crm.service.FolderRetentionService folderRetentionService) {
+                             com.crm.service.FolderRetentionService folderRetentionService,
+                             com.crm.service.ImapEnvSyncService imapEnvSyncService) {
         this.relayServerService = relayServerService;
         this.templateService = templateService;
         this.replyPageSettingService = replyPageSettingService;
@@ -69,6 +71,31 @@ public class SettingController {
         this.crmUserService = crmUserService;
         this.replyHtmlSlotService = replyHtmlSlotService;
         this.folderRetentionService = folderRetentionService;
+        this.imapEnvSyncService = imapEnvSyncService;
+    }
+
+    /** Stage a fresh /etc/softbank-fetcher.env from the current pool table. Writes to a
+     *  centos-owned path; a small setuid-wrapped install script (run separately by an
+     *  operator with sudo) moves the file into /etc and restarts the fetcher. */
+    @PostMapping("/imap-env/sync")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public java.util.Map<String, Object> syncImapEnv() {
+        try {
+            com.crm.service.ImapEnvSyncService.Result r = imapEnvSyncService.rebuildEnvFile();
+            java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+            body.put("ok", true);
+            body.put("total", r.total);
+            body.put("included", r.included);
+            body.put("skipped", r.skipped);
+            body.put("skippedAddrs", r.skippedAddrs);
+            body.put("stagingPath", r.stagingPath);
+            return body;
+        } catch (Exception e) {
+            java.util.Map<String, Object> body = new java.util.HashMap<>();
+            body.put("ok", false);
+            body.put("error", e.toString());
+            return body;
+        }
     }
 
     // ====== Folder settings ======
