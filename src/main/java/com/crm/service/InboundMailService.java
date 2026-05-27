@@ -216,14 +216,24 @@ public class InboundMailService {
             return reject(entry, REASON_NO_OUT_HISTORY);
         }
 
-        // 3) Pool/user binding is informational only as of the 2026-05 receive-only-pool
-        //    refactor. The user's policy ("キャリアプール=受信専用に固定") means the pool
-        //    address is just the inbound landing point — the FROM already identifies the
-        //    user uniquely, so we no longer reject when the explicit binding row is absent.
-        //    We still log at debug level for diagnostics.
+        // 3) Pool/user binding must exist. Client confirmed 2026-05-27 that the receive-only
+        //    relaxation was wrong for their workflow — unbound users (e.g. a user whose
+        //    docomo addr they never assigned a softbank inbox to) were having stray inbound
+        //    mail glued onto their thread. Re-enforce strict binding. During the brief window
+        //    after an operator re-imports the pool (CASCADE drops bindings) we defer so the
+        //    operator's follow-up bind ops aren't raced by inbound delivery.
         if (!bindingService.isBound(pool.get().getId(), user.getId())) {
-            log.debug("Inbound: user {} replied via pool {} without an explicit binding — accepting anyway",
-                    user.getId(), pool.get().getId());
+            if (recentPoolChurn()) {
+                entry.setMatchedUserId(user.getId());
+                entry.setIsProcessed(false);
+                entry.setIsRejected(false);
+                entry.setRejectReason(REASON_PENDING_POOL);
+                logRepository.save(entry);
+                log.info("Inbound mail deferred — binding pending during pool churn: user={} to={}",
+                        user.getId(), LogSafe.of(toAddr));
+                return ProcessResult.rejected(REASON_PENDING_POOL);
+            }
+            return reject(entry, REASON_NOT_BOUND);
         }
 
         // Matched — create the inbound MESSAGE record on the user's thread.
@@ -325,6 +335,14 @@ public class InboundMailService {
             entry.setIsProcessed(false);
             entry.setIsRejected(true);
             entry.setRejectReason(REASON_NO_OUT_HISTORY);
+            logRepository.save(entry);
+            return true;
+        }
+
+        if (!bindingService.isBound(pool.get().getId(), user.getId())) {
+            entry.setIsProcessed(false);
+            entry.setIsRejected(true);
+            entry.setRejectReason(REASON_NOT_BOUND);
             logRepository.save(entry);
             return true;
         }
