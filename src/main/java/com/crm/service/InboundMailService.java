@@ -57,6 +57,21 @@ public class InboundMailService {
      *  user, but we never actually sent them anything, so the "reply" is meaningless. */
     public static final String REASON_NO_OUT_HISTORY = "user_has_no_outbound_history";
 
+    /** Soft hold (NOT a final rejection) — the to_address has no pool row right now,
+     *  BUT the pool table was modified within the last few minutes, so this is most likely
+     *  a delete-then-recreate operator action in flight. We park the row in INBOUND_MAIL_LOG
+     *  with is_processed=false / is_rejected=false / reject_reason=PENDING_POOL, and a
+     *  separate scheduled task ({@code ScheduledTaskService.retryDeferredInbounds}) re-evaluates
+     *  every 2 minutes. Final rejection only happens if the row is still un-resolvable after
+     *  {@link #DEFERRAL_EXPIRY_MINUTES} minutes. */
+    public static final String REASON_PENDING_POOL = "pending_pool_retry";
+
+    /** Operator-controlled actions like CSV pool re-import touch the pool table; any new
+     *  pool row inserted within this many minutes counts as "churn in progress". */
+    private static final int POOL_CHURN_MINUTES = 5;
+    /** Give up on retry after this many minutes — anything older is unlikely to ever match. */
+    public static final int DEFERRAL_EXPIRY_MINUTES = 30;
+
     private final InboundMailLogRepository logRepository;
     private final CarrierAddressPoolRepository poolRepository;
     private final CrmUserRepository userRepository;
@@ -158,6 +173,19 @@ public class InboundMailService {
             }
         }
         if (!pool.isPresent()) {
+            // Soft-hold during pool churn so a "delete-then-recreate" operator action
+            // doesn't silently drop in-flight replies (2026-05-27 incident: 1 user reply
+            // lost during a 4-minute pool re-creation gap). The deferred row is picked
+            // up later by ScheduledTaskService.retryDeferredInbounds.
+            if (recentPoolChurn()) {
+                entry.setIsProcessed(false);
+                entry.setIsRejected(false);
+                entry.setRejectReason(REASON_PENDING_POOL);
+                logRepository.save(entry);
+                log.info("Inbound mail deferred during pool churn: to={} (will retry)",
+                        LogSafe.of(toAddr));
+                return ProcessResult.rejected(REASON_PENDING_POOL);
+            }
             return reject(entry, REASON_TO_NOT_IN_POOL);
         }
 
@@ -230,6 +258,105 @@ public class InboundMailService {
         log.info("Inbound mail rejected: from={} to={} reason={}",
                 LogSafe.of(entry.getFromAddress()), LogSafe.of(entry.getToAddress()), LogSafe.of(reason));
         return ProcessResult.rejected(reason);
+    }
+
+    /** True if the pool table has any row inserted within the last
+     *  {@link #POOL_CHURN_MINUTES} minutes — taken as evidence that an operator
+     *  delete-then-recreate (e.g. CSV pool re-import) is in progress. */
+    private boolean recentPoolChurn() {
+        java.time.LocalDateTime since = java.time.LocalDateTime.now().minusMinutes(POOL_CHURN_MINUTES);
+        return poolRepository.existsByCreatedAtAfter(since);
+    }
+
+    /**
+     * Re-evaluate a previously-deferred INBOUND_MAIL_LOG row now that the pool may have
+     * settled. Called by the scheduled retry task. Operates on the EXISTING row (we don't
+     * create a new one — the dedup key is preserved). Returns true if the row reached
+     * a terminal state (matched OR expired), false if still pending.
+     */
+    @Transactional
+    public boolean retryDeferred(InboundMailLog entry) {
+        if (entry == null || !REASON_PENDING_POOL.equals(entry.getRejectReason())) return true;
+
+        // Expired? Convert to final reject.
+        java.time.LocalDateTime cutoff = java.time.LocalDateTime.now()
+                .minusMinutes(DEFERRAL_EXPIRY_MINUTES);
+        if (entry.getCreatedAt() != null && entry.getCreatedAt().isBefore(cutoff)) {
+            entry.setIsProcessed(false);
+            entry.setIsRejected(true);
+            entry.setRejectReason(REASON_TO_NOT_IN_POOL);
+            logRepository.save(entry);
+            log.info("Inbound deferred entry expired after {}min: to={} (final reject)",
+                    DEFERRAL_EXPIRY_MINUTES, LogSafe.of(entry.getToAddress()));
+            return true;
+        }
+
+        // Re-attempt pool lookup with the same to_address.
+        String toAddr = extractEmailAddress(safe(entry.getToAddress()).trim());
+        Optional<CarrierAddressPool> pool = poolRepository.findByAddress(toAddr.toLowerCase());
+        if (!pool.isPresent()) pool = poolRepository.findByAddress(toAddr);
+        if (!pool.isPresent()) {
+            // Still no match — leave deferred for next tick (unless we hit expiry above).
+            return false;
+        }
+
+        // Pool now exists — finish the same downstream flow as process().
+        String fromAddr = extractEmailAddress(safe(entry.getFromAddress()).trim());
+        Optional<CrmUser> userOpt = userRepository.findByEmail(fromAddr.toLowerCase());
+        if (!userOpt.isPresent()) userOpt = userRepository.findByEmail(fromAddr);
+        if (!userOpt.isPresent()) {
+            entry.setIsProcessed(false);
+            entry.setIsRejected(true);
+            entry.setRejectReason(REASON_FROM_NOT_A_USER);
+            logRepository.save(entry);
+            return true;
+        }
+        CrmUser user = userOpt.get();
+        entry.setMatchedUserId(user.getId());
+        if (!CrmUser.STATUS_ACTIVE.equals(user.getStatus())) {
+            entry.setIsProcessed(false);
+            entry.setIsRejected(true);
+            entry.setRejectReason(REASON_USER_NOT_ACTIVE);
+            logRepository.save(entry);
+            return true;
+        }
+        long outCount = messageRepository.countByUserIdAndDirection(user.getId(), Message.DIR_OUT);
+        if (outCount == 0) {
+            entry.setIsProcessed(false);
+            entry.setIsRejected(true);
+            entry.setRejectReason(REASON_NO_OUT_HISTORY);
+            logRepository.save(entry);
+            return true;
+        }
+
+        Message msg = new Message();
+        msg.setUserId(user.getId());
+        msg.setDirection(Message.DIR_IN);
+        msg.setChannel(Message.CHANNEL_EMAIL);
+        msg.setSubject(entry.getSubject());
+        msg.setBodyText(entry.getBodyText());
+        msg.setFromAddress(fromAddr);
+        msg.setToAddress(toAddr);
+        msg.setMessageIdHeader(entry.getMessageIdHeader());
+        msg.setStatus(Message.STATUS_SENT);
+        msg.setSentAt(java.time.LocalDateTime.now());
+        messageRepository.save(msg);
+
+        userActivityService.touchLastLogin(user);
+
+        entry.setIsProcessed(true);
+        entry.setIsRejected(false);
+        entry.setRejectReason(null);
+        logRepository.save(entry);
+        log.info("Inbound deferred entry recovered: from={} to={} user={} (msg {})",
+                LogSafe.of(entry.getFromAddress()), LogSafe.of(entry.getToAddress()),
+                user.getId(), msg.getId());
+        return true;
+    }
+
+    /** Public lister so the scheduler can find what's pending. */
+    public java.util.List<InboundMailLog> listPendingPool() {
+        return logRepository.findByRejectReasonAndIsProcessedFalse(REASON_PENDING_POOL);
     }
 
     private static String localPartOf(String email) {

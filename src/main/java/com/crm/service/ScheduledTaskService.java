@@ -49,6 +49,7 @@ public class ScheduledTaskService {
     private final FolderSettingService folderSettingService;
     private final FolderRetentionService folderRetentionService;
     private final com.crm.repository.InboundMailLogRepository inboundLogRepo;
+    private final InboundMailService inboundMailService;
 
     public ScheduledTaskService(MessageRepository messageRepository,
                                 CarrierAddressPoolRepository poolRepository,
@@ -59,7 +60,8 @@ public class ScheduledTaskService {
                                 com.crm.repository.BroadcastRepository broadcastRepo,
                                 FolderSettingService folderSettingService,
                                 FolderRetentionService folderRetentionService,
-                                com.crm.repository.InboundMailLogRepository inboundLogRepo) {
+                                com.crm.repository.InboundMailLogRepository inboundLogRepo,
+                                InboundMailService inboundMailService) {
         this.messageRepository = messageRepository;
         this.poolRepository = poolRepository;
         this.messageService = messageService;
@@ -70,6 +72,36 @@ public class ScheduledTaskService {
         this.folderSettingService = folderSettingService;
         this.folderRetentionService = folderRetentionService;
         this.inboundLogRepo = inboundLogRepo;
+        this.inboundMailService = inboundMailService;
+    }
+
+    /**
+     * Every 2 minutes — re-attempt inbound rows that were soft-held during pool churn
+     * (REASON_PENDING_POOL). Rows older than the deferral expiry get converted to a
+     * final to_address_not_in_pool reject. Keeps the 2026-05-27 incident from recurring:
+     * if an operator deletes + re-imports the pool, replies that arrive in the gap are
+     * recovered as soon as the new pool rows land.
+     */
+    @Scheduled(fixedRateString = "${app.scheduler.inbound-pool-retry-ms:120000}",
+               initialDelayString = "${app.scheduler.inbound-pool-retry-initial-ms:45000}")
+    public void retryDeferredInbounds() {
+        if (!acquireOrRefreshLock()) return;
+        java.util.List<com.crm.entity.InboundMailLog> pending = inboundMailService.listPendingPool();
+        if (pending.isEmpty()) return;
+        int recovered = 0, expired = 0, stillWaiting = 0;
+        for (com.crm.entity.InboundMailLog row : pending) {
+            try {
+                boolean terminal = inboundMailService.retryDeferred(row);
+                if (!terminal) { stillWaiting++; continue; }
+                // Terminal — either matched (no reject reason) or expired (final reject).
+                if (Boolean.TRUE.equals(row.getIsProcessed()) || row.getRejectReason() == null) recovered++;
+                else expired++;
+            } catch (Exception e) {
+                log.warn("Inbound retry failed for log id {}: {}", row.getId(), e.toString());
+            }
+        }
+        log.info("Inbound pool-retry: {} pending, {} recovered, {} expired, {} still waiting",
+                pending.size(), recovered, expired, stillWaiting);
     }
 
     /** The reject_reason categories that get auto-purged daily — they're all

@@ -27,6 +27,11 @@ public interface CarrierAddressPoolRepository
 
     boolean existsByAddress(String address);
 
+    /** True if ANY pool row was inserted after the given cutoff. Used by InboundMailService
+     *  to detect operator-driven pool churn (delete-then-recreate via CSV re-import) so we
+     *  can soft-hold incoming replies during the gap instead of hard-rejecting them. */
+    boolean existsByCreatedAtAfter(java.time.LocalDateTime cutoff);
+
     List<CarrierAddressPool> findByIsActiveTrueOrderByIdAsc();
 
     @Query("SELECT p FROM CarrierAddressPool p " +

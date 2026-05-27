@@ -60,9 +60,10 @@ class ScheduledTaskServiceTest {
         FolderRetentionService folderRetention = mock(FolderRetentionService.class);
         com.crm.repository.InboundMailLogRepository inboundLogRepo =
                 mock(com.crm.repository.InboundMailLogRepository.class);
+        InboundMailService inboundMail = mock(InboundMailService.class);
         svc = new ScheduledTaskService(msgRepo, poolRepo, messageService,
                 settingRepo, bindingRepo, domainSettings, broadcastRepo,
-                folderSettings, folderRetention, inboundLogRepo);
+                folderSettings, folderRetention, inboundLogRepo, inboundMail);
     }
 
     private static Message scheduledBroadcastRow(Long id, Long userId, Long broadcastId,

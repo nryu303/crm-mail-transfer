@@ -9,6 +9,11 @@ public interface InboundMailLogRepository extends JpaRepository<InboundMailLog, 
     Page<InboundMailLog> findAllByOrderByCreatedAtDesc(Pageable pageable);
     Page<InboundMailLog> findByIsRejectedTrueOrderByCreatedAtDesc(Pageable pageable);
 
+    /** Deferred inbounds waiting for pool re-creation to settle. The scheduler picks these up
+     *  every couple of minutes and re-evaluates the pool lookup; rows older than the deferral
+     *  expiry are converted to a final REASON_TO_NOT_IN_POOL reject. */
+    java.util.List<InboundMailLog> findByRejectReasonAndIsProcessedFalse(String rejectReason);
+
     /** Delete every rejected row whose reject_reason matches one of {@code reasons}.
      *  Used by the daily inbound-spam purge — these categories have no operational
      *  value (unregistered-sender third-party mail, postmaster bounces, IMAP duplicate
