@@ -40,7 +40,8 @@ class CarrierPoolServiceTest {
         aes = mock(AesEncryptionUtil.class);
         when(aes.encrypt(anyString())).thenAnswer(inv -> "ENC[" + inv.getArgument(0) + "]");
         when(poolRepo.save(any(CarrierAddressPool.class))).thenAnswer(inv -> inv.getArgument(0));
-        svc = new CarrierPoolService(poolRepo, bindingRepo, aes);
+        com.crm.service.ImapEnvSyncService imapEnvSync = mock(com.crm.service.ImapEnvSyncService.class);
+        svc = new CarrierPoolService(poolRepo, bindingRepo, aes, imapEnvSync);
     }
 
     private static CarrierAddressPool existing(Long id, String address, String encPw) {

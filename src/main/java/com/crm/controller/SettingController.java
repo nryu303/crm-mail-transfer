@@ -74,9 +74,22 @@ public class SettingController {
         this.imapEnvSyncService = imapEnvSyncService;
     }
 
+    /** Page: current IMAP-monitor sync state + manual re-sync button. Auto-sync also fires
+     *  whenever CarrierPoolService mutates the pool table; this page exists so the operator
+     *  can verify counts and force a rebuild if anything looks off. */
+    @GetMapping("/imap-env")
+    public String imapEnvPage(Model model) {
+        long poolSb = imapEnvSyncService.countActiveSoftbankPoolRows();
+        com.crm.service.ImapEnvSyncService.EnvFileInfo info = imapEnvSyncService.readLiveEnvFileInfo();
+        model.addAttribute("poolSoftbankCount", poolSb);
+        model.addAttribute("envMonitoredCount", info.accountCount);
+        model.addAttribute("envMtime", info.mtimeDisplay);
+        return "setting/imap-env";
+    }
+
     /** Stage a fresh /etc/softbank-fetcher.env from the current pool table. Writes to a
-     *  centos-owned path; a small setuid-wrapped install script (run separately by an
-     *  operator with sudo) moves the file into /etc and restarts the fetcher. */
+     *  centos-owned path; a systemd path-watcher (softbank-env-install.path) copies the
+     *  file into /etc with root privileges so the JVM doesn't need sudo. */
     @PostMapping("/imap-env/sync")
     @org.springframework.web.bind.annotation.ResponseBody
     public java.util.Map<String, Object> syncImapEnv() {

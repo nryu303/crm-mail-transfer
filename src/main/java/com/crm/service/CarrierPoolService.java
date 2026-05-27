@@ -49,13 +49,16 @@ public class CarrierPoolService {
     private final CarrierAddressPoolRepository repository;
     private final com.crm.repository.CarrierUserBindingRepository bindingRepository;
     private final AesEncryptionUtil aes;
+    private final ImapEnvSyncService imapEnvSyncService;
 
     public CarrierPoolService(CarrierAddressPoolRepository repository,
                               com.crm.repository.CarrierUserBindingRepository bindingRepository,
-                              AesEncryptionUtil aes) {
+                              AesEncryptionUtil aes,
+                              ImapEnvSyncService imapEnvSyncService) {
         this.repository = repository;
         this.bindingRepository = bindingRepository;
         this.aes = aes;
+        this.imapEnvSyncService = imapEnvSyncService;
     }
 
     public Page<CarrierAddressPool> search(CarrierPoolSearchForm form) {
@@ -91,7 +94,9 @@ public class CarrierPoolService {
         p.setSmtpUsername(form.getSmtpUsername().trim());
         p.setSmtpPassword(aes.encrypt(form.getSmtpPassword()));
         p.setIsActive(true);
-        return repository.save(p);
+        CarrierAddressPool saved = repository.save(p);
+        imapEnvSyncService.triggerAfterCommit();
+        return saved;
     }
 
     @Transactional
@@ -114,12 +119,15 @@ public class CarrierPoolService {
             p.setSmtpPassword(aes.encrypt(form.getSmtpPassword()));
         }
         if (form.getIsActive() != null) p.setIsActive(form.getIsActive());
-        return repository.save(p);
+        CarrierAddressPool saved = repository.save(p);
+        imapEnvSyncService.triggerAfterCommit();
+        return saved;
     }
 
     @Transactional
     public void delete(Long id) {
         repository.deleteById(id);
+        imapEnvSyncService.triggerAfterCommit();
     }
 
     @Transactional
@@ -130,6 +138,7 @@ public class CarrierPoolService {
             if (id == null) continue;
             try { repository.deleteById(id); n++; } catch (Exception ignored) {}
         }
+        if (n > 0) imapEnvSyncService.triggerAfterCommit();
         return n;
     }
 
@@ -155,6 +164,10 @@ public class CarrierPoolService {
             }
         } catch (CsvValidationException e) {
             result.addError(0, "CSVの読み込みに失敗しました: " + e.getMessage());
+        }
+        // CSV import is a multi-row pool mutation; fire one sync at end after commit.
+        if (result.getSuccessCount() > 0) {
+            imapEnvSyncService.triggerAfterCommit();
         }
         return result;
     }

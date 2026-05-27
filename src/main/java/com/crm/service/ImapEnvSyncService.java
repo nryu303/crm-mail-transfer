@@ -35,6 +35,8 @@ public class ImapEnvSyncService {
 
     /** Staging path the JVM can write to without root. */
     public static final String STAGING_PATH = "/tmp/softbank-fetcher.env.new";
+    /** Live env consumed by softbank-inbound-fetcher (read-only from the JVM, 0600 root:root). */
+    public static final String LIVE_PATH = "/etc/softbank-fetcher.env";
 
     private final CarrierAddressPoolRepository poolRepository;
     private final AesEncryptionUtil aes;
@@ -42,6 +44,73 @@ public class ImapEnvSyncService {
     public ImapEnvSyncService(CarrierAddressPoolRepository poolRepository, AesEncryptionUtil aes) {
         this.poolRepository = poolRepository;
         this.aes = aes;
+    }
+
+    /** Schedule {@link #rebuildEnvFile()} to run after the current transaction commits.
+     *  No-op (executes immediately) if called outside a transaction. Designed for
+     *  CarrierPoolService — pool create/update/delete should re-stage the env so the
+     *  IMAP fetcher list stays in lock-step with the carrier-assignment table. */
+    public void triggerAfterCommit() {
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronizationAdapter() {
+                        @Override public void afterCommit() {
+                            try { rebuildEnvFile(); }
+                            catch (Exception e) { log.warn("IMAP env auto-sync failed after commit: {}", e.toString()); }
+                        }
+                    });
+        } else {
+            try { rebuildEnvFile(); }
+            catch (Exception e) { log.warn("IMAP env auto-sync failed (no tx): {}", e.toString()); }
+        }
+    }
+
+    /** For the settings page: how many active SoftBank pool rows currently exist. */
+    public long countActiveSoftbankPoolRows() {
+        long n = 0;
+        for (CarrierAddressPool p : poolRepository.findByIsActiveTrueOrderByIdAsc()) {
+            if (p.getAddress() != null && p.getAddress().endsWith("@i.softbank.jp")) n++;
+        }
+        return n;
+    }
+
+    public static class EnvFileInfo {
+        public final int accountCount;
+        public final String mtimeDisplay;
+        public EnvFileInfo(int n, String m) { this.accountCount = n; this.mtimeDisplay = m; }
+    }
+
+    /** Reads the live env file (0644 readable copy or via systemd path-install ACL) and
+     *  reports how many accounts the IMAP fetcher will actually log into on its next tick.
+     *  Returns (0, "—") when the file is missing or unreadable — that's expected on a fresh
+     *  install before the first sync. */
+    public EnvFileInfo readLiveEnvFileInfo() {
+        try {
+            Path p = Paths.get(LIVE_PATH);
+            if (!Files.isReadable(p)) {
+                // Fall back to staging path so the dashboard still shows something useful.
+                p = Paths.get(STAGING_PATH);
+                if (!Files.isReadable(p)) return new EnvFileInfo(0, "—");
+            }
+            String content = new String(Files.readAllBytes(p), "UTF-8");
+            int count = 0;
+            for (String line : content.split("\n")) {
+                if (line.startsWith("SOFTBANK_IMAP_ACCOUNTS=")) {
+                    String v = line.substring("SOFTBANK_IMAP_ACCOUNTS=".length()).trim();
+                    if (v.isEmpty()) { count = 0; break; }
+                    count = v.split(";").length;
+                    break;
+                }
+            }
+            java.nio.file.attribute.FileTime mt = Files.getLastModifiedTime(p);
+            String mtimeStr = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                    .withZone(java.time.ZoneId.systemDefault())
+                    .format(mt.toInstant());
+            return new EnvFileInfo(count, mtimeStr);
+        } catch (Exception e) {
+            log.debug("readLiveEnvFileInfo failed: {}", e.toString());
+            return new EnvFileInfo(0, "—");
+        }
     }
 
     /** Returns a summary of what was written: total pool rows, included, skipped (bad
