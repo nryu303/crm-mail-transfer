@@ -37,6 +37,9 @@ public class ImapEnvSyncService {
     public static final String STAGING_PATH = "/tmp/softbank-fetcher.env.new";
     /** Live env consumed by softbank-inbound-fetcher (read-only from the JVM, 0600 root:root). */
     public static final String LIVE_PATH = "/etc/softbank-fetcher.env";
+    /** Same shape but for au (ezweb IMAP — see au-inbound-fetcher.py). */
+    public static final String AU_STAGING_PATH = "/tmp/au-fetcher.env.new";
+    public static final String AU_LIVE_PATH = "/etc/au-fetcher.env";
 
     private final CarrierAddressPoolRepository poolRepository;
     private final AesEncryptionUtil aes;
@@ -46,22 +49,26 @@ public class ImapEnvSyncService {
         this.aes = aes;
     }
 
-    /** Schedule {@link #rebuildEnvFile()} to run after the current transaction commits.
-     *  No-op (executes immediately) if called outside a transaction. Designed for
-     *  CarrierPoolService — pool create/update/delete should re-stage the env so the
-     *  IMAP fetcher list stays in lock-step with the carrier-assignment table. */
+    /** Schedule both {@link #rebuildEnvFile()} (softbank) and {@link #rebuildAuEnvFile()}
+     *  to run after the current transaction commits. No-op (executes immediately) if called
+     *  outside a transaction. Designed for CarrierPoolService — pool create/update/delete
+     *  should re-stage the env so the IMAP fetcher list stays in lock-step with the
+     *  carrier-assignment table. Failures are logged at warn, not propagated, so a stuck
+     *  filesystem can't roll back the underlying pool change. */
     public void triggerAfterCommit() {
+        Runnable task = () -> {
+            try { rebuildEnvFile(); }
+            catch (Exception e) { log.warn("IMAP env auto-sync (softbank) failed: {}", e.toString()); }
+            try { rebuildAuEnvFile(); }
+            catch (Exception e) { log.warn("IMAP env auto-sync (au) failed: {}", e.toString()); }
+        };
         if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
             org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
                     new org.springframework.transaction.support.TransactionSynchronizationAdapter() {
-                        @Override public void afterCommit() {
-                            try { rebuildEnvFile(); }
-                            catch (Exception e) { log.warn("IMAP env auto-sync failed after commit: {}", e.toString()); }
-                        }
+                        @Override public void afterCommit() { task.run(); }
                     });
         } else {
-            try { rebuildEnvFile(); }
-            catch (Exception e) { log.warn("IMAP env auto-sync failed (no tx): {}", e.toString()); }
+            task.run();
         }
     }
 
@@ -161,6 +168,72 @@ public class ImapEnvSyncService {
         log.info("ImapEnvSync: wrote {} (total={}, included={}, skipped={})",
                 STAGING_PATH, total, included, skipped);
         return new Result(total, included, skipped, skippedAddrs, STAGING_PATH);
+    }
+
+    /** Same shape as {@link #rebuildEnvFile()} but for the au IMAP fetcher.
+     *
+     *  <p>Format difference: au's ezweb IMAP authenticates against the SMTP USERNAME, not
+     *  the @au.com address (verified from {@code au-inbound-fetcher.py}). So we write
+     *  {@code AU_IMAP_ACCOUNTS=<smtp_user>|<password>;...} rather than {@code <addr>|<pw>}.
+     *
+     *  <p>Safety: when the pool has zero au rows we do NOT write the staging file. The
+     *  operator may have a manually-configured /etc/au-fetcher.env from before this
+     *  service existed, and wiping it would silently disable au inbound. The first au
+     *  pool row added (via the carrier-pool UI or CSV import) flips this on.
+     */
+    public Result rebuildAuEnvFile() throws IOException {
+        StringBuilder body = new StringBuilder(2048);
+        body.append("# AU IMAP fetcher credentials — root:root 0600\n");
+        body.append("# AUTO-GENERATED FROM CARRIER_ADDRESS_POOL via ImapEnvSyncService — do not hand-edit.\n");
+        body.append("# Format: AU_IMAP_ACCOUNTS=<smtp_username>|<password>;... (NOT email — see au-inbound-fetcher.py).\n");
+        body.append("AU_IMAP_ACCOUNTS=");
+
+        int total = 0, included = 0, skipped = 0;
+        List<String> skippedAddrs = new ArrayList<>();
+        boolean first = true;
+        List<CarrierAddressPool> rows = poolRepository.findByIsActiveTrueOrderByIdAsc();
+        for (CarrierAddressPool p : rows) {
+            if (!"au".equalsIgnoreCase(p.getCarrierCode())) continue;
+            total++;
+            String smtpUser = p.getSmtpUsername();
+            if (smtpUser == null || smtpUser.trim().isEmpty()) {
+                skipped++;
+                skippedAddrs.add(p.getAddress());
+                continue;
+            }
+            String pw;
+            try {
+                pw = aes.decrypt(p.getSmtpPassword());
+            } catch (Exception e) {
+                log.warn("Failed to decrypt au password for pool {}: {}", p.getAddress(), e.toString());
+                skipped++;
+                skippedAddrs.add(p.getAddress());
+                continue;
+            }
+            if (pw == null || pw.isEmpty()) {
+                skipped++;
+                skippedAddrs.add(p.getAddress());
+                continue;
+            }
+            if (!first) body.append(';');
+            body.append(smtpUser.trim()).append('|').append(pw);
+            first = false;
+            included++;
+        }
+        body.append('\n');
+
+        if (total == 0) {
+            log.info("ImapEnvSync(au): pool has 0 au rows; preserving existing /etc/au-fetcher.env (not writing staging).");
+            return new Result(0, 0, 0, java.util.Collections.<String>emptyList(),
+                    AU_STAGING_PATH + " (skipped — pool empty)");
+        }
+
+        Path out = Paths.get(AU_STAGING_PATH);
+        Files.write(out, body.toString().getBytes("UTF-8"),
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        log.info("ImapEnvSync(au): wrote {} (total={}, included={}, skipped={})",
+                AU_STAGING_PATH, total, included, skipped);
+        return new Result(total, included, skipped, skippedAddrs, AU_STAGING_PATH);
     }
 
     public static class Result {

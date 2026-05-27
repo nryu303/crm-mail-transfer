@@ -93,22 +93,35 @@ public class SettingController {
     @PostMapping("/imap-env/sync")
     @org.springframework.web.bind.annotation.ResponseBody
     public java.util.Map<String, Object> syncImapEnv() {
+        java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
         try {
-            com.crm.service.ImapEnvSyncService.Result r = imapEnvSyncService.rebuildEnvFile();
-            java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+            com.crm.service.ImapEnvSyncService.Result sb = imapEnvSyncService.rebuildEnvFile();
+            com.crm.service.ImapEnvSyncService.Result au = imapEnvSyncService.rebuildAuEnvFile();
             body.put("ok", true);
-            body.put("total", r.total);
-            body.put("included", r.included);
-            body.put("skipped", r.skipped);
-            body.put("skippedAddrs", r.skippedAddrs);
-            body.put("stagingPath", r.stagingPath);
-            return body;
+            body.put("softbank", toMap(sb));
+            body.put("au", toMap(au));
+            // Back-compat fields (older JS reads these flat keys — they show the softbank result).
+            body.put("total", sb.total);
+            body.put("included", sb.included);
+            body.put("skipped", sb.skipped);
+            body.put("skippedAddrs", sb.skippedAddrs);
+            body.put("stagingPath", sb.stagingPath);
         } catch (Exception e) {
-            java.util.Map<String, Object> body = new java.util.HashMap<>();
+            body.clear();
             body.put("ok", false);
             body.put("error", e.toString());
-            return body;
         }
+        return body;
+    }
+
+    private static java.util.Map<String, Object> toMap(com.crm.service.ImapEnvSyncService.Result r) {
+        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("total", r.total);
+        m.put("included", r.included);
+        m.put("skipped", r.skipped);
+        m.put("skippedAddrs", r.skippedAddrs);
+        m.put("stagingPath", r.stagingPath);
+        return m;
     }
 
     // ====== Folder settings ======
