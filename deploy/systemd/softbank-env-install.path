@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch /tmp/softbank-fetcher.env.new and install it into /etc on every write
+
+[Path]
+# PathChanged fires when the file is closed after being opened for writing —
+# i.e. once per JVM rebuild, not per fsync. This is the right granularity.
+PathChanged=/tmp/softbank-fetcher.env.new
+Unit=softbank-env-install.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Install staged softbank-fetcher.env into /etc (root-side hand-off from CRM JVM)
+# Triggered by softbank-env-install.path when /tmp/softbank-fetcher.env.new is closed
+# after write by the JVM (running as centos, NoNewPrivileges so it can't sudo). The
+# IMAP fetcher is a timer-driven oneshot that re-reads EnvironmentFile= each tick,
+# so no restart is needed — the next tick picks up the new credentials.
+
+[Service]
+Type=oneshot
+# Refuse to copy anything that doesn't start with the expected magic header —
+# narrow guard against a stray /tmp clobber being promoted to /etc. The header
+# line is written by ImapEnvSyncService.rebuildEnvFile() and is stable.
+ExecStartPre=/bin/bash -c 'head -1 /tmp/softbank-fetcher.env.new | grep -q "^# SoftBank IMAP fetcher credentials" || { echo "softbank-env-install: refusing to install staging file with unexpected header"; exit 1; }'
+ExecStart=/usr/bin/install -o root -g root -m 0600 /tmp/softbank-fetcher.env.new /etc/softbank-fetcher.env
