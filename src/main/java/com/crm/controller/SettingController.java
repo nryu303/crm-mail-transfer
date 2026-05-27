@@ -80,10 +80,25 @@ public class SettingController {
     @GetMapping("/imap-env")
     public String imapEnvPage(Model model) {
         long poolSb = imapEnvSyncService.countActiveSoftbankPoolRows();
-        com.crm.service.ImapEnvSyncService.EnvFileInfo info = imapEnvSyncService.readLiveEnvFileInfo();
+        long poolAu = imapEnvSyncService.countActiveAuPoolRows();
+        com.crm.service.ImapEnvSyncService.EnvFileInfo sbInfo =
+                imapEnvSyncService.readEnvFileInfoFor(
+                        com.crm.service.ImapEnvSyncService.LIVE_PATH,
+                        com.crm.service.ImapEnvSyncService.STAGING_PATH,
+                        "SOFTBANK_IMAP_ACCOUNTS");
+        com.crm.service.ImapEnvSyncService.EnvFileInfo auInfo =
+                imapEnvSyncService.readEnvFileInfoFor(
+                        com.crm.service.ImapEnvSyncService.AU_LIVE_PATH,
+                        com.crm.service.ImapEnvSyncService.AU_STAGING_PATH,
+                        "AU_IMAP_ACCOUNTS");
         model.addAttribute("poolSoftbankCount", poolSb);
-        model.addAttribute("envMonitoredCount", info.accountCount);
-        model.addAttribute("envMtime", info.mtimeDisplay);
+        model.addAttribute("envMonitoredCount", sbInfo.accountCount);
+        model.addAttribute("envMtime", sbInfo.mtimeDisplay);
+        model.addAttribute("envLiveExists", sbInfo.liveExistsButUnreadable);
+        model.addAttribute("poolAuCount", poolAu);
+        model.addAttribute("auEnvMonitoredCount", auInfo.accountCount);
+        model.addAttribute("auEnvMtime", auInfo.mtimeDisplay);
+        model.addAttribute("auEnvLiveExists", auInfo.liveExistsButUnreadable);
         return "setting/imap-env";
     }
 

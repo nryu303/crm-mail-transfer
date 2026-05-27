@@ -14,20 +14,48 @@
 
     <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-5 mb-4">
         <h2 class="text-base font-semibold text-slate-800 mb-2">現在の状態</h2>
-        <dl class="grid grid-cols-2 gap-y-1 text-sm text-slate-700 max-w-md">
-            <dt class="text-slate-500">プール登録済 SoftBank アドレス</dt>
-            <dd><span th:text="${poolSoftbankCount}">0</span> 件</dd>
-            <dt class="text-slate-500">現在 IMAP 監視中 (env ファイル)</dt>
-            <dd><span th:text="${envMonitoredCount}">0</span> 件</dd>
-            <dt class="text-slate-500">env ファイル最終更新</dt>
-            <dd><span th:text="${envMtime ?: '—'}">—</span></dd>
-        </dl>
-        <p class="text-xs text-slate-500 mt-3" th:if="${poolSoftbankCount > envMonitoredCount}">
-            <span class="text-amber-600 font-medium">プール件数と監視件数が一致していません。</span>
-            手動で「同期を実行」を押すか、キャリア登録割り当ての変更を待てば自動同期されます。
-        </p>
-        <p class="text-xs text-slate-500 mt-3" th:if="${poolSoftbankCount == envMonitoredCount && envMonitoredCount > 0}">
-            <span class="text-emerald-600 font-medium">同期済</span> — プール登録済の全アドレスが監視対象になっています。
+        <table class="w-full text-sm text-slate-700 max-w-2xl">
+            <thead>
+                <tr class="text-xs text-slate-500 border-b border-slate-200">
+                    <th class="text-left py-1.5 pr-3">キャリア</th>
+                    <th class="text-right py-1.5 px-3">プール登録済</th>
+                    <th class="text-right py-1.5 px-3">IMAP 監視中</th>
+                    <th class="text-left py-1.5 pl-3">env ファイル最終更新</th>
+                    <th class="text-left py-1.5 pl-3">状態</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="border-b border-slate-100">
+                    <td class="py-1.5 pr-3 font-medium">SoftBank</td>
+                    <td class="py-1.5 px-3 text-right"><span th:text="${poolSoftbankCount}">0</span> 件</td>
+                    <td class="py-1.5 px-3 text-right"><span th:text="${envMonitoredCount}">0</span> 件</td>
+                    <td class="py-1.5 pl-3 text-xs text-slate-500" th:text="${envMtime ?: '—'}">—</td>
+                    <td class="py-1.5 pl-3 text-xs">
+                        <span th:if="${poolSoftbankCount == envMonitoredCount && envMonitoredCount > 0}" class="text-emerald-600 font-medium">同期済</span>
+                        <span th:if="${poolSoftbankCount > envMonitoredCount}" class="text-amber-600 font-medium">差分あり</span>
+                        <span th:if="${envMonitoredCount == 0 && poolSoftbankCount == 0}" class="text-slate-400">未設定</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="py-1.5 pr-3 font-medium">au</td>
+                    <td class="py-1.5 px-3 text-right"><span th:text="${poolAuCount}">0</span> 件</td>
+                    <td class="py-1.5 px-3 text-right">
+                        <span th:if="${auEnvMonitoredCount > 0}"><span th:text="${auEnvMonitoredCount}">0</span> 件</span>
+                        <span th:if="${auEnvMonitoredCount == 0 && auEnvLiveExists}" class="text-slate-500">— (root権限のため不可視)</span>
+                        <span th:if="${auEnvMonitoredCount == 0 && !auEnvLiveExists}">0 件</span>
+                    </td>
+                    <td class="py-1.5 pl-3 text-xs text-slate-500" th:text="${auEnvMtime ?: '—'}">—</td>
+                    <td class="py-1.5 pl-3 text-xs">
+                        <span th:if="${poolAuCount == auEnvMonitoredCount && auEnvMonitoredCount > 0}" class="text-emerald-600 font-medium">同期済</span>
+                        <span th:if="${poolAuCount > auEnvMonitoredCount && !auEnvLiveExists}" class="text-amber-600 font-medium">差分あり</span>
+                        <span th:if="${poolAuCount == 0 && auEnvLiveExists}" class="text-slate-500">手動設定 (保護中)</span>
+                        <span th:if="${poolAuCount == 0 && !auEnvLiveExists}" class="text-slate-400">未設定</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="text-xs text-slate-500 mt-3">
+            au のプールが 0件のときは <code>/etc/au-fetcher.env</code> を保護 (上書きしません) — 旧来の手動設定を維持する設計です。
         </p>
     </div>
 

@@ -81,10 +81,80 @@ public class ImapEnvSyncService {
         return n;
     }
 
+    /** For the settings page: how many active au pool rows currently exist. */
+    public long countActiveAuPoolRows() {
+        long n = 0;
+        for (CarrierAddressPool p : poolRepository.findByIsActiveTrueOrderByIdAsc()) {
+            if ("au".equalsIgnoreCase(p.getCarrierCode())) n++;
+        }
+        return n;
+    }
+
+    /** Parametrised version of {@link #readLiveEnvFileInfo()} so the settings page can
+     *  display both SoftBank and au counts.
+     *
+     *  @param livePath the OS path of the active env file consumed by the fetcher
+     *  @param stagingPath the path the JVM writes into; checked as a fallback when the
+     *         live file is unreadable (e.g. before the first install)
+     *  @param accountVar env-var name to look for (SOFTBANK_IMAP_ACCOUNTS / AU_IMAP_ACCOUNTS)
+     */
+    public EnvFileInfo readEnvFileInfoFor(String livePath, String stagingPath, String accountVar) {
+        Path live = Paths.get(livePath);
+        // Existence check works even when the file is 0600 root:root, as long as /etc itself
+        // is world-readable (the default). Lets us tell "no env yet" from "we just can't read it".
+        boolean liveExists = Files.exists(live);
+        try {
+            Path p = live;
+            if (!Files.isReadable(p)) {
+                p = Paths.get(stagingPath);
+                if (!Files.isReadable(p)) {
+                    // Pull mtime from live if possible (Files.getLastModifiedTime works on
+                    // 0600 files via /etc's read perm); otherwise show '—'.
+                    String mtime = "—";
+                    if (liveExists) {
+                        try {
+                            mtime = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                                    .withZone(java.time.ZoneId.systemDefault())
+                                    .format(Files.getLastModifiedTime(live).toInstant());
+                        } catch (Exception ignored) { /* leave as '—' */ }
+                    }
+                    return new EnvFileInfo(0, mtime, liveExists);
+                }
+            }
+            String content = new String(Files.readAllBytes(p), "UTF-8");
+            int count = 0;
+            String prefix = accountVar + "=";
+            for (String line : content.split("\n")) {
+                if (line.startsWith(prefix)) {
+                    String v = line.substring(prefix.length()).trim();
+                    if (v.isEmpty()) { count = 0; break; }
+                    count = v.split(";").length;
+                    break;
+                }
+            }
+            java.nio.file.attribute.FileTime mt = Files.getLastModifiedTime(p);
+            String mtimeStr = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                    .withZone(java.time.ZoneId.systemDefault())
+                    .format(mt.toInstant());
+            return new EnvFileInfo(count, mtimeStr, liveExists && !p.equals(live));
+        } catch (Exception e) {
+            log.debug("readEnvFileInfoFor({}) failed: {}", livePath, e.toString());
+            return new EnvFileInfo(0, "—", liveExists);
+        }
+    }
+
     public static class EnvFileInfo {
         public final int accountCount;
         public final String mtimeDisplay;
-        public EnvFileInfo(int n, String m) { this.accountCount = n; this.mtimeDisplay = m; }
+        /** True when /etc/<file> exists but is unreadable by the JVM (centos vs root:root 0600).
+         *  Lets the settings page distinguish "no env file at all" from "an env file exists but
+         *  we counted via the staging fallback / can't count at all". */
+        public final boolean liveExistsButUnreadable;
+        public EnvFileInfo(int n, String m) { this(n, m, false); }
+        public EnvFileInfo(int n, String m, boolean liveExistsButUnreadable) {
+            this.accountCount = n; this.mtimeDisplay = m;
+            this.liveExistsButUnreadable = liveExistsButUnreadable;
+        }
     }
 
     /** Reads the live env file (0644 readable copy or via systemd path-install ACL) and
