@@ -9,13 +9,11 @@ import com.crm.repository.CrmSettingRepository;
 import com.crm.repository.MessageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -25,9 +23,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Scheduled broadcast snapshot-exclude logic: when a QUEUED broadcast row fires AFTER the
- * user already received another OUT message (sent between broadcast.createdAt and the
- * row's scheduledAt), the row must be cancelled, NOT sent.
+ * Scheduled broadcast snapshot semantics: every materialised MESSAGE row of a scheduled
+ * broadcast fires at dispatch time regardless of intermediate OUT activity for the same
+ * user. Cancel-race protection (operator cancelled the parent broadcast) is still honoured.
  *
  * The scheduler-lock branch is short-circuited by stubbing the CrmSettingRepository so the
  * lock is always claimable; we focus on the per-message exclusion path.
@@ -91,7 +89,11 @@ class ScheduledTaskServiceTest {
     }
 
     @Test
-    void cancelsBroadcastRow_whenUserReceivedAnotherSendAfterBroadcastCreation() {
+    void dispatchesScheduledBroadcastRow_evenWhenUserReceivedOtherSendsInBetween() {
+        // 2026-05-29: client requested snapshot semantics — every materialised MESSAGE
+        // row of a scheduled broadcast must fire at dispatch time, regardless of any
+        // other OUT activity for the same user in the gap between schedule and dispatch.
+        // (Earlier exclusion logic was removed; this test asserts the new behaviour.)
         LocalDateTime bCreated = LocalDateTime.now().minusHours(2);
         LocalDateTime scheduled = LocalDateTime.now().minusMinutes(1); // due
         Message m = scheduledBroadcastRow(1L, 7L, 99L, bCreated, scheduled);
@@ -99,40 +101,18 @@ class ScheduledTaskServiceTest {
         when(msgRepo.findDueForDispatch(eq(Message.STATUS_QUEUED), any())).thenReturn(
                 Collections.singletonList(m));
         when(broadcastRepo.findById(99L)).thenReturn(Optional.of(broadcast(99L, bCreated)));
-        // User has 1 other finalised send after the broadcast was scheduled — exclusion fires.
-        when(msgRepo.countOutboundFinalisedSince(7L, bCreated, 1L)).thenReturn(1L);
 
         svc.dispatchQueued();
 
-        // sendNow MUST NOT be called for this row.
-        verify(messageService, never()).sendNow(any(), any());
-        // Row is marked CANCELLED and saved with a reason.
-        ArgumentCaptor<Message> cap = ArgumentCaptor.forClass(Message.class);
-        verify(msgRepo).save(cap.capture());
-        assertThat(cap.getValue().getStatus()).isEqualTo(Message.STATUS_CANCELLED);
-        assertThat(cap.getValue().getErrorMessage()).contains("excluded");
-    }
-
-    @Test
-    void dispatchesNormally_whenNoOtherSendsHappenedAfterBroadcastCreation() {
-        LocalDateTime bCreated = LocalDateTime.now().minusHours(2);
-        LocalDateTime scheduled = LocalDateTime.now().minusMinutes(1);
-        Message m = scheduledBroadcastRow(2L, 7L, 99L, bCreated, scheduled);
-
-        when(msgRepo.findDueForDispatch(eq(Message.STATUS_QUEUED), any())).thenReturn(
-                Collections.singletonList(m));
-        when(broadcastRepo.findById(99L)).thenReturn(Optional.of(broadcast(99L, bCreated)));
-        when(msgRepo.countOutboundFinalisedSince(7L, bCreated, 2L)).thenReturn(0L);
-
-        svc.dispatchQueued();
-
+        // Row must be sent normally — no CANCELLED save.
         verify(messageService).sendNow(eq(m), any());
         verify(msgRepo, never()).save(any(Message.class));
+        verify(msgRepo, never()).countOutboundFinalisedSince(anyLong(), any(), anyLong());
     }
 
     @Test
-    void ignoresExclusion_forNonBroadcastQueuedMessage() {
-        // No broadcastId → exclusion logic should be skipped entirely.
+    void dispatchesNormally_forNonBroadcastQueuedMessage() {
+        // No broadcastId → broadcast-cancel check is skipped entirely, message is sent.
         Message m = scheduledBroadcastRow(3L, 7L, null,
                 LocalDateTime.now().minusHours(2), LocalDateTime.now().minusMinutes(1));
 
@@ -147,18 +127,14 @@ class ScheduledTaskServiceTest {
     }
 
     @Test
-    void ignoresExclusion_whenScheduledAtEqualsCreatedAt_immediateSend() {
-        // Immediate broadcast row: scheduledAt is not strictly after createdAt → no exclusion.
-        // (The cancel-race gate added 2026-05-21 DOES still call findById to check whether
-        // the parent broadcast was cancelled — that's orthogonal to the exclusion logic and
-        // necessary even for immediate-send broadcasts. The test no longer requires the
-        // broadcast to be looked up zero times; it just confirms exclusion-via-other-sends
-        // doesn't fire.)
+    void dispatchesImmediateBroadcast_whenScheduledAtEqualsCreatedAt() {
+        // Immediate (non-scheduled) broadcast row dispatches normally.
         LocalDateTime t = LocalDateTime.now().minusMinutes(1);
         Message m = scheduledBroadcastRow(4L, 7L, 99L, t, t);
 
         when(msgRepo.findDueForDispatch(eq(Message.STATUS_QUEUED), any())).thenReturn(
                 Collections.singletonList(m));
+        when(broadcastRepo.findById(99L)).thenReturn(Optional.of(broadcast(99L, t)));
 
         svc.dispatchQueued();
 

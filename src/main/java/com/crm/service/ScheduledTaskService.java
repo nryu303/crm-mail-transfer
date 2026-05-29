@@ -297,33 +297,15 @@ public class ScheduledTaskService {
                 }
             }
 
-            // Scheduled-broadcast exclusion: if this row belongs to a broadcast and the
-            // user has ALREADY received some other OUT message between the broadcast
-            // creation time and this message's scheduled time, drop this row.
-            if (msg.getBroadcastId() != null && msg.getScheduledAt() != null
-                    && msg.getScheduledAt().isAfter(msg.getCreatedAt())) {
-                com.crm.entity.Broadcast b = broadcastRepo.findById(msg.getBroadcastId()).orElse(null);
-                if (b != null && b.getCreatedAt() != null) {
-                    long otherSends = messageRepository.countOutboundFinalisedSince(
-                            msg.getUserId(), b.getCreatedAt(), msg.getId());
-                    if (otherSends > 0) {
-                        msg.setStatus(Message.STATUS_CANCELLED);
-                        msg.setErrorMessage("excluded: user received " + otherSends
-                                + " other send(s) after broadcast was scheduled");
-                        messageRepository.save(msg);
-                        // Count the exclusion toward failed_count so the parent broadcast's
-                        // markCompletedIfDone gate fires. Without this the broadcast stays
-                        // SCHEDULED/SENDING forever even when every message has finalised
-                        // (broadcast 108 / 121 hit this on 2026-05-23/24).
-                        java.time.LocalDateTime now = java.time.LocalDateTime.now();
-                        broadcastRepo.incrementCounters(msg.getBroadcastId(), 0, 1, now);
-                        broadcastRepo.markCompletedIfDone(msg.getBroadcastId(), now);
-                        log.info("Scheduler: excluded msg {} (user {} got {} other sends after broadcast {})",
-                                msg.getId(), msg.getUserId(), otherSends, msg.getBroadcastId());
-                        return;
-                    }
-                }
-            }
+            // Scheduled-broadcast snapshot semantics: the recipient list is FROZEN at
+            // schedule creation time (each MESSAGE row materialises one recipient). At
+            // dispatch we send to every materialised row regardless of intermediate
+            // activity. The earlier "exclude if user received another OUT in between"
+            // gate was removed 2026-05-29 per operator request — they want scheduled
+            // broadcasts to fire to all originally-listed recipients, even if those
+            // users received other content in the gap between schedule and dispatch.
+            // Cancel-race (broadcastCancelled check above) is preserved — only an
+            // explicit operator cancel suppresses delivery now.
 
             CarrierAddressPool pool = poolRepository.findByAddress(msg.getFromAddress()).orElse(null);
             messageService.sendNow(msg, pool);

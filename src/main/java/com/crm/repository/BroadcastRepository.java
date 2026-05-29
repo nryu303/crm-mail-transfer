@@ -9,7 +9,12 @@ public interface BroadcastRepository extends JpaRepository<Broadcast, Long> {
     Page<Broadcast> findAllByOrderByCreatedAtDesc(Pageable pageable);
     java.util.List<Broadcast> findByStatusInOrderByCreatedAtDesc(java.util.Collection<String> statuses);
 
-    /** Atomic increment of counters — avoids read-modify-write races when multiple senders finalise concurrently. */
+    /** Atomic increment of counters — avoids read-modify-write races when multiple senders finalise concurrently.
+     *  Self-transactional: callers in the scheduler worker pool are not in a Spring tx,
+     *  and a missing tx wrapper here surfaced 2026-05-28 as TransactionRequiredException
+     *  on every excluded broadcast row (operator saw broadcasts stuck SCHEDULED with all
+     *  MESSAGE rows FAILED). */
+    @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query(
             "UPDATE Broadcast b SET b.sentCount = b.sentCount + :sentInc, b.failedCount = b.failedCount + :failInc, b.updatedAt = :now " +
@@ -20,6 +25,7 @@ public interface BroadcastRepository extends JpaRepository<Broadcast, Long> {
                           @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 
     /** Claim the broadcast as COMPLETED when all messages have finalised. Atomic. */
+    @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query(
             "UPDATE Broadcast b SET b.status = 'COMPLETED', b.updatedAt = :now " +
@@ -32,6 +38,7 @@ public interface BroadcastRepository extends JpaRepository<Broadcast, Long> {
      *  caller has verified that zero MESSAGE rows remain in QUEUED state. Separate from
      *  markCompletedIfDone because we want to recover broadcasts whose counters drifted
      *  (e.g. excluded messages whose failed_count bump was lost before 2026-05-25). */
+    @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query(
             "UPDATE Broadcast b SET b.status = 'COMPLETED', b.updatedAt = :now " +
