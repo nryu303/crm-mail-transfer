@@ -47,3 +47,39 @@ sudo systemctl disable --now softbank-env-install.path
 sudo rm /etc/systemd/system/softbank-env-install.{path,service}
 sudo systemctl daemon-reload
 ```
+
+---
+
+# crm.service drop-in: TimeoutStopSec=90
+
+Why: the base `crm.service` ships with `TimeoutStopSec=30`. Spring Boot
+graceful shutdown for this app routinely takes 30–60s (8-worker dispatcher
+pool draining + open HTTP connections), so every restart was tripping the
+30s timeout → systemd `SIGKILL` → noisy `NoClassDefFoundError` traces in
+the journal and a small risk of in-flight dispatch loss. Raising to 90s
+gives the graceful shutdown room to actually finish.
+
+## Install (one-off operator action)
+
+```
+sudo mkdir -p /etc/systemd/system/crm.service.d
+sudo install -o root -g root -m 0644 deploy/systemd/crm-service.d/timeout.conf /etc/systemd/system/crm.service.d/
+sudo systemctl daemon-reload
+```
+
+(No service restart required — the new TimeoutStopSec applies on the next
+`systemctl restart crm`.)
+
+## Verify
+
+```
+systemctl show crm -p TimeoutStopUSec    # should print TimeoutStopUSec=1min 30s
+```
+
+## Uninstall
+
+```
+sudo rm /etc/systemd/system/crm.service.d/timeout.conf
+sudo rmdir --ignore-fail-on-non-empty /etc/systemd/system/crm.service.d
+sudo systemctl daemon-reload
+```
