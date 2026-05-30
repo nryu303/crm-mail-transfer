@@ -259,7 +259,12 @@
                           th:text="${m.status}"></span>
                     <span th:if="${m.direction == 'IN'}">RECV</span>
                     ·
-                    <span th:text="${#temporals.format(m.createdAt, 'yyyy-MM-dd HH:mm')}"></span>
+                    <!-- Prefer sentAt over createdAt: for scheduled broadcast OUT rows,
+                         createdAt = when the row was queued (often hours earlier),
+                         sentAt = the actual relay timestamp (= what the recipient sees).
+                         Falls back to createdAt only when the message hasn't been sent
+                         yet (QUEUED / SCHEDULED). -->
+                    <span th:text="${#temporals.format(m.sentAt != null ? m.sentAt : m.createdAt, 'yyyy-MM-dd HH:mm')}"></span>
                     <span th:if="${m.scheduledAt != null and m.status == 'QUEUED'}"
                           class="text-amber-700 font-semibold ml-2"
                           th:text="'予約: ' + ${#temporals.format(m.scheduledAt, 'yyyy-MM-dd HH:mm')}"></span>

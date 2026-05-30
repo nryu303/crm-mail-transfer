@@ -519,7 +519,7 @@
                                th:text="${userLabels.get(m.userId)} ?: ('ID=' + ${m.userId})">name</a>
                         </td>
                         <td class="px-3 py-1.5 text-slate-700 truncate" th:text="${m.subject}"></td>
-                        <td class="px-3 py-1.5 text-slate-500 text-xs" th:text="${m.createdAt != null} ? ${#temporals.format(m.createdAt, 'MM-dd HH:mm')} : '-'"></td>
+                        <td class="px-3 py-1.5 text-slate-500 text-xs" th:text="${m.sentAt != null} ? ${#temporals.format(m.sentAt, 'MM-dd HH:mm')} : (${m.createdAt != null} ? ${#temporals.format(m.createdAt, 'MM-dd HH:mm')} : '-')"></td>
                     </tr>
                     </tbody>
                 </table>

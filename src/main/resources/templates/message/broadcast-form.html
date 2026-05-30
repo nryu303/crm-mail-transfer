@@ -168,7 +168,7 @@
                 <div class="sub">
                     <div class="title" th:text="${m.subject} ?: '(件名なし)'"></div>
                     <div class="meta"
-                         th:text="${m.createdAt != null} ? ${#temporals.format(m.createdAt, 'MM-dd HH:mm')} : '-'"></div>
+                         th:text="${m.sentAt != null} ? ${#temporals.format(m.sentAt, 'MM-dd HH:mm')} : (${m.createdAt != null} ? ${#temporals.format(m.createdAt, 'MM-dd HH:mm')} : '-')"></div>
                     <div class="sched"
                          th:if="${m.scheduledAt != null and m.status == 'QUEUED'}"
                          th:text="'予約: ' + ${#temporals.format(m.scheduledAt, 'yyyy-MM-dd HH:mm')}"></div>
