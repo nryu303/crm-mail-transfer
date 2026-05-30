@@ -24,10 +24,12 @@ public interface CarrierUserBindingRepository extends JpaRepository<CarrierUserB
     long countByPoolId(Long poolId);
 
     @Modifying
+    @org.springframework.transaction.annotation.Transactional
     @Query("DELETE FROM CarrierUserBinding b WHERE b.userId = :userId")
     int deleteAllByUserId(@Param("userId") Long userId);
 
     @Modifying
+    @org.springframework.transaction.annotation.Transactional
     @Query("DELETE FROM CarrierUserBinding b WHERE b.poolId = :poolId")
     int deleteAllByPoolId(@Param("poolId") Long poolId);
 
@@ -66,8 +68,13 @@ public interface CarrierUserBindingRepository extends JpaRepository<CarrierUserB
            "NOT EXISTS (SELECT 1 FROM CarrierUserBinding b WHERE b.poolId = p.id)")
     long countActivePoolsWithNoBindings();
 
-    /** Bindings that were created on or before the cutoff (used by the auto-expire scheduler). */
+    /** Bindings that were created on or before the cutoff (used by the auto-expire scheduler).
+     *  Self-transactional: caller is ScheduledTaskService.purgeExpiredBindings which is NOT
+     *  inside a Spring tx, and without this annotation the cron-fired delete throws
+     *  TransactionRequiredException the moment the operator enables binding.auto_expire
+     *  (same pattern as the broadcast counter bug fixed 2026-05-29). */
     @Modifying
+    @org.springframework.transaction.annotation.Transactional
     @Query("DELETE FROM CarrierUserBinding b WHERE b.createdAt <= :cutoff")
     int deleteOlderThan(@Param("cutoff") java.time.LocalDateTime cutoff);
 

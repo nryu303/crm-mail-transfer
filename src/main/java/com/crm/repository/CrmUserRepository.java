@@ -27,6 +27,7 @@ public interface CrmUserRepository extends JpaRepository<CrmUser, Long>, JpaSpec
 
     /** Bulk-clear ad_code on every user that referenced a now-deleted AD_CODE row. */
     @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
     @Query(value = "UPDATE CRM_USER SET AD_CODE = NULL WHERE AD_CODE = :code", nativeQuery = true)
     int clearAdCodeForCode(@org.springframework.data.repository.query.Param("code") String code);
 

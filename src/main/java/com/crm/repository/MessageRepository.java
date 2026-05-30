@@ -44,6 +44,7 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
                          @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from);
 
     @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query(
             "UPDATE Message m SET m.readAt = :now WHERE m.userId = :userId AND m.direction = :dir AND m.readAt IS NULL")
     int markReadByUserAndDirection(@org.springframework.data.repository.query.Param("userId") Long userId,
@@ -207,6 +208,7 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
      * 過去のやり取り pane and per-user thread view are unaffected.
      */
     @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
     @org.springframework.data.jpa.repository.Query(
             "UPDATE Message m SET m.inboxDismissedAt = :now " +
             "WHERE m.userId = :userId AND m.direction = 'IN' AND m.inboxDismissedAt IS NULL")
