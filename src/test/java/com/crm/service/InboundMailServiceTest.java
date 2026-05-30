@@ -55,15 +55,22 @@ class InboundMailServiceTest {
         userActivityService = mock(UserActivityService.class);
         settings = mock(DomainSettingService.class);
 
-        // Defaults: no dedup hit, no FROM-domain override, no implicit pool/user binding.
+        // Defaults: no dedup hit, no FROM-domain override.
         when(messageRepo.existsByMessageIdHeader(anyString())).thenReturn(false);
         when(settings.getFromBaseDomain()).thenReturn(null);
-        when(bindingService.isBound(anyLong(), anyLong())).thenReturn(false);
+        // Binding default flipped 2026-05-27 to TRUE alongside the strict-binding restoration —
+        // most acceptance-path tests need the bound state to reach the save() call. The few
+        // tests that exercise REASON_NOT_BOUND override to false explicitly.
+        when(bindingService.isBound(anyLong(), anyLong())).thenReturn(true);
         // Stale-mail guard (REASON_NO_OUT_HISTORY) requires at least one OUT message
         // from the matched user. Default to 1 here so existing tests that assert
         // 'accepts when from-user matches' continue to pass — tests specifically
         // checking the no-OUT-history path can override.
         when(messageRepo.countByUserIdAndDirection(anyLong(), anyString())).thenReturn(1L);
+        // Earliest OUT date default — far enough in the past that the new pre-relationship
+        // stale check (added 2026-05-27) accepts any reasonable inbound Date header.
+        when(messageRepo.findEarliestOutboundDate(anyLong()))
+                .thenReturn(java.time.LocalDateTime.now().minusYears(10));
         when(messageRepo.save(any(Message.class))).thenAnswer(inv -> {
             Message m = inv.getArgument(0);
             m.setId(42L);
@@ -156,9 +163,11 @@ class InboundMailServiceTest {
     // ─────────────── acceptance paths ─────────────────────────────────────
 
     @Test
-    void acceptsWhenFromUserAndPoolAddressMatch_evenWithoutExplicitBinding() {
-        // Regression: prior to 2026-05 a missing CARRIER_USER_BINDING row caused REASON_NOT_BOUND
-        // rejection. The pool-is-receive-only refactor accepts as long as FROM identifies a user.
+    void rejectsWhenNoExplicitBinding_perStrictBindingPolicy() {
+        // 2026-05-27: client confirmed that the 2026-05 "receive-only-pool" relaxation was
+        // wrong for their workflow (unbound users were having stray inbound mail glued onto
+        // their thread). Strict CARRIER_USER_BINDING enforcement is back. Pool-churn grace
+        // (recentPoolChurn() within 5 min) defers instead of rejecting; covered separately.
         when(poolRepo.findByAddress("rifc6h1c65@avu74g.jp"))
                 .thenReturn(Optional.of(pool(7L, "rifc6h1c65@avu74g.jp")));
         when(userRepo.findByEmail("alice@gmail.com")).thenReturn(Optional.of(user(99L, "alice@gmail.com")));
@@ -167,16 +176,11 @@ class InboundMailServiceTest {
         InboundMailService.ProcessResult result = svc.process(
                 dto("alice@gmail.com", "rifc6h1c65@avu74g.jp", "Re: hello", "thanks!"));
 
-        assertThat(result.accepted).isTrue();
-        assertThat(result.userId).isEqualTo(99L);
-        ArgumentCaptor<Message> cap = ArgumentCaptor.forClass(Message.class);
-        verify(messageRepo).save(cap.capture());
-        Message saved = cap.getValue();
-        assertThat(saved.getDirection()).isEqualTo(Message.DIR_IN);
-        assertThat(saved.getUserId()).isEqualTo(99L);
-        assertThat(saved.getFromAddress()).isEqualTo("alice@gmail.com");
-        assertThat(saved.getToAddress()).isEqualTo("rifc6h1c65@avu74g.jp");
-        verify(userActivityService).touchLastLogin(any(CrmUser.class));
+        assertThat(result.accepted).isFalse();
+        assertThat(result.reason).isEqualTo(InboundMailService.REASON_NOT_BOUND);
+        // No MESSAGE row should be created on the user's thread.
+        verify(messageRepo, org.mockito.Mockito.never()).save(any(Message.class));
+        verify(userActivityService, org.mockito.Mockito.never()).touchLastLogin(any(CrmUser.class));
     }
 
     @Test
