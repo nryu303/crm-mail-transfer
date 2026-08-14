@@ -24,7 +24,7 @@ import java.util.UUID;
  *
  * Used when the active RELAY_SERVER row points to a relay other than the legacy
  * 133.88.116.190 HTTP-bridge — for example AMG (157.7.89.36) directly. The receiving
- * host is expected to whitelist our source IP (49.212.164.254) and accept unauthenticated
+ * host is expected to whitelist our source IP (103.96.120.13) and accept unauthenticated
  * SMTP from us.
  *
  * Encoding strategy (after empirically observing AMG mangle outbound headers):

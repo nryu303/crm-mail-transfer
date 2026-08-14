@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>&#8203;</title>
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; }
+        .landing-frame { display: block; width: 100%; height: 100vh; border: 0; }
+    </style>
+</head>
+<body>
+<!-- 外部リンクドメイン生成: CUSTOM_HTML landing mode. The access was already logged by
+     ReplyPageController before this view was chosen — this page's only job is to display
+     the operator-supplied full-page HTML with no CRM chrome around it. Hosted in a sandboxed
+     iframe (same technique as reply/page.html's header frame) so the pasted HTML can be a
+     complete document (own <head>/<style>/<script>) without being mangled by inline injection. -->
+<iframe class="landing-frame"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms"
+        th:attr="srcdoc=${landingHtml}"></iframe>
+</body>
+</html>

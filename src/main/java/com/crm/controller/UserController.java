@@ -45,6 +45,7 @@ public class UserController {
     private final PaymentService paymentService;
     private final com.crm.repository.CrmUserRepository userRepository;
     private final com.crm.repository.MessageRepository messageRepository;
+    private final com.crm.repository.UserAccessLogRepository userAccessLogRepository;
     private final com.crm.service.FolderSettingService folderSettingService;
     private final com.crm.service.AdminAuthService adminAuthService;
     private final com.crm.service.AdCodeService adCodeService;
@@ -52,6 +53,7 @@ public class UserController {
     private final com.crm.service.AuditLogService auditLog;
     private final com.crm.service.ReplyHtmlSlotService replyHtmlSlotService;
     private final com.crm.service.ReplyAttachmentService attachmentService;
+    private final com.crm.service.MessageBoxService messageBoxService;
 
     public UserController(CrmUserService service,
                           CarrierBindingService bindingService,
@@ -59,19 +61,22 @@ public class UserController {
                           PaymentService paymentService,
                           com.crm.repository.CrmUserRepository userRepository,
                           com.crm.repository.MessageRepository messageRepository,
+                          com.crm.repository.UserAccessLogRepository userAccessLogRepository,
                           com.crm.service.FolderSettingService folderSettingService,
                           com.crm.service.AdminAuthService adminAuthService,
                           com.crm.service.AdCodeService adCodeService,
                           com.crm.service.ReplyPageSettingService replyPageSettingService,
                           com.crm.service.AuditLogService auditLog,
                           com.crm.service.ReplyHtmlSlotService replyHtmlSlotService,
-                          com.crm.service.ReplyAttachmentService attachmentService) {
+                          com.crm.service.ReplyAttachmentService attachmentService,
+                          com.crm.service.MessageBoxService messageBoxService) {
         this.service = service;
         this.bindingService = bindingService;
         this.placeholderService = placeholderService;
         this.paymentService = paymentService;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
+        this.userAccessLogRepository = userAccessLogRepository;
         this.folderSettingService = folderSettingService;
         this.adminAuthService = adminAuthService;
         this.adCodeService = adCodeService;
@@ -79,6 +84,7 @@ public class UserController {
         this.auditLog = auditLog;
         this.replyHtmlSlotService = replyHtmlSlotService;
         this.attachmentService = attachmentService;
+        this.messageBoxService = messageBoxService;
     }
 
     /** Active ad-code choices for autocomplete on the user-detail form. */
@@ -500,6 +506,9 @@ public class UserController {
         }
         model.addAttribute("userId", id);
         model.addAttribute("payments", paymentService.listForUser(id));
+        // Access log (アクセスログ) — recent link-click history, newest first, capped at 20 rows.
+        model.addAttribute("accessLogs", userAccessLogRepository.findByUserIdOrderByCreatedAtDesc(
+                id, org.springframework.data.domain.PageRequest.of(0, 20)));
         model.addAttribute("boundAddresses", bindingService.listBoundFor(id));
         model.addAttribute("paymentForm", paymentFormFor(id));
         model.addAttribute("paymentMethods", PAYMENT_METHODS);
@@ -550,6 +559,35 @@ public class UserController {
             ra.addFlashAttribute("flashError", "添付ファイルの削除に失敗しました");
         }
         return "redirect:/manager/users/" + userId;
+    }
+
+    /** Admin-side メッセージボックス preview — same HTML/CSS as the public /reply/{token}
+     *  message-box section, but with an admin-only 選択削除 affordance and, per operator
+     *  request, real reply forms that post through the existing /messages(/sms) endpoints. */
+    @GetMapping("/{id}/message-box")
+    public String messageBox(@PathVariable Long id,
+                             @RequestParam(name = "page", defaultValue = "0") int page,
+                             Model model, RedirectAttributes ra) {
+        Optional<CrmUser> user = service.findById(id);
+        if (!user.isPresent()) {
+            ra.addFlashAttribute("flashError", "ユーザーが見つかりません");
+            return "redirect:/manager/users";
+        }
+        model.addAttribute("user", user.get());
+        model.addAttribute("messageBox", messageBoxService.listFor(id, page));
+        model.addAttribute("messageBoxPage", page);
+        return "user/message-box";
+    }
+
+    @PostMapping("/{id}/message-box/delete")
+    public String messageBoxDelete(@PathVariable Long id,
+                                   @RequestParam(name = "ids", required = false) List<Long> ids,
+                                   RedirectAttributes ra) {
+        int n = messageBoxService.dismissSelected(id, ids);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_MESSAGE_BOX_DELETE, "Message",
+                ids == null ? "" : ids.toString(), n + " 件削除 (user=" + id + ")");
+        ra.addFlashAttribute("flashSuccess", n + " 件削除しました");
+        return "redirect:/manager/users/" + id + "/message-box";
     }
 
     private static final List<String> PAYMENT_METHODS = Arrays.asList(

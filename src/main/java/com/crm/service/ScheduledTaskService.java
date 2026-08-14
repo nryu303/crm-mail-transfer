@@ -50,6 +50,12 @@ public class ScheduledTaskService {
     private final FolderRetentionService folderRetentionService;
     private final com.crm.repository.InboundMailLogRepository inboundLogRepo;
     private final InboundMailService inboundMailService;
+    private final com.crm.repository.UserAccessLogRepository userAccessLogRepository;
+    private final SmsSettingService smsSettingService;
+
+    /** Wall-clock time (nanoTime) the SMS serial lane is next allowed to send. Guards against
+     *  two dispatchQueued() ticks racing on SMS pacing — see dispatchSmsSerially(). */
+    private volatile long nextSmsSendAtNanos = 0L;
 
     public ScheduledTaskService(MessageRepository messageRepository,
                                 CarrierAddressPoolRepository poolRepository,
@@ -61,7 +67,9 @@ public class ScheduledTaskService {
                                 FolderSettingService folderSettingService,
                                 FolderRetentionService folderRetentionService,
                                 com.crm.repository.InboundMailLogRepository inboundLogRepo,
-                                InboundMailService inboundMailService) {
+                                InboundMailService inboundMailService,
+                                com.crm.repository.UserAccessLogRepository userAccessLogRepository,
+                                SmsSettingService smsSettingService) {
         this.messageRepository = messageRepository;
         this.poolRepository = poolRepository;
         this.messageService = messageService;
@@ -73,6 +81,26 @@ public class ScheduledTaskService {
         this.folderRetentionService = folderRetentionService;
         this.inboundLogRepo = inboundLogRepo;
         this.inboundMailService = inboundMailService;
+        this.userAccessLogRepository = userAccessLogRepository;
+        this.smsSettingService = smsSettingService;
+    }
+
+    /** How long USER_ACCESS_LOG rows are kept before the daily purge removes them. */
+    private static final int ACCESS_LOG_RETENTION_DAYS = 90;
+
+    /**
+     * Daily at 03:30 — purge USER_ACCESS_LOG rows older than {@link #ACCESS_LOG_RETENTION_DAYS}.
+     * Unlike CARRIER_USER_BINDING expiry this has no admin on/off switch: access-log rows are
+     * pure click-history for operator confirmation, not something whose loss is operationally
+     * risky, so a fixed cutoff is enough.
+     */
+    @Scheduled(cron = "0 30 3 * * *")
+    public void purgeOldAccessLogs() {
+        java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusDays(ACCESS_LOG_RETENTION_DAYS);
+        int deleted = userAccessLogRepository.deleteByCreatedAtBefore(cutoff);
+        if (deleted > 0) {
+            log.info("Access-log purge: removed {} rows older than {} days", deleted, ACCESS_LOG_RETENTION_DAYS);
+        }
     }
 
     /**
@@ -208,6 +236,23 @@ public class ScheduledTaskService {
             });
 
     /**
+     * Single dedicated thread for SMS dispatch — deliberately NOT part of workerPool. Keeps
+     * SMS sends strictly serial (see dispatchSmsSerially) while running off the shared
+     * @Scheduled single-thread scheduler, so a large SMS batch's send-interval pacing doesn't
+     * block dispatchQueued()'s email path or any other @Scheduled method in this class.
+     */
+    private final java.util.concurrent.ExecutorService smsDispatchExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "crm-sms-dispatch");
+                t.setDaemon(true);
+                return t;
+            });
+    /** True while smsDispatchExecutor is still draining a previously-submitted batch — guards
+     *  against dispatchQueued() re-submitting the same not-yet-claimed rows on the next tick. */
+    private final java.util.concurrent.atomic.AtomicBoolean smsDispatchInFlight =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /**
      * Every 5 minutes — find broadcasts stuck in SCHEDULED/SENDING with no remaining
      * QUEUED messages and flip them to COMPLETED. Belt-and-braces for the (now-fixed)
      * exclusion path that historically forgot to bump the parent counters; also covers
@@ -245,14 +290,46 @@ public class ScheduledTaskService {
         LocalDateTime now = LocalDateTime.now();
         List<Message> due = messageRepository.findDueForDispatch(Message.STATUS_QUEUED, now);
         if (due.isEmpty()) return;
-        log.info("Scheduler: {} queued messages due, dispatching across {} workers", due.size(), parallelWorkers);
+
+        // SMS is dispatched on its own strictly-serial lane (see dispatchSmsSerially) — the
+        // relay's own rate-limiter (sms-relay.py on the 転送機) is not safe under concurrent
+        // requests: a 500-message SMS broadcast (id 438, 2026-08-06) failed ~150 messages with
+        // "relay returned 502" because our 8-worker parallel dispatch hit its hourly-counter
+        // file from multiple threads at once, corrupting the file and crashing mid-request.
+        // Email keeps the existing parallel path — it has no such shared-mutable-state relay.
+        java.util.List<Message> smsDue = new java.util.ArrayList<>();
+        java.util.List<Message> emailDue = new java.util.ArrayList<>();
+        for (Message m : due) {
+            if (Message.CHANNEL_SMS.equals(m.getChannel())) smsDue.add(m);
+            else emailDue.add(m);
+        }
+
+        final java.util.concurrent.ConcurrentMap<Long, Boolean> broadcastCancelled =
+                new java.util.concurrent.ConcurrentHashMap<>();
+
+        if (!smsDue.isEmpty()) {
+            if (smsDispatchInFlight.compareAndSet(false, true)) {
+                log.info("Scheduler: {} SMS messages due, dispatching serially", smsDue.size());
+                smsDispatchExecutor.submit(() -> {
+                    try {
+                        dispatchSmsSerially(smsDue, broadcastCancelled);
+                    } finally {
+                        smsDispatchInFlight.set(false);
+                    }
+                });
+            } else {
+                log.debug("Scheduler: SMS dispatch still draining a previous batch; " +
+                        "leaving {} messages queued for a later tick", smsDue.size());
+            }
+        }
+
+        if (emailDue.isEmpty()) return;
+        log.info("Scheduler: {} queued messages due, dispatching across {} workers", emailDue.size(), parallelWorkers);
         // Cache broadcast cancel-state lookups per tick: a 5K-message batch hits the same
         // broadcast row 5K times, so we want one DB read per broadcast, not per message.
         // Concurrent because the parallel workers race on it.
-        final java.util.concurrent.ConcurrentMap<Long, Boolean> broadcastCancelled =
-                new java.util.concurrent.ConcurrentHashMap<>();
-        java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>(due.size());
-        for (final Message initialMsg : due) {
+        java.util.List<java.util.concurrent.Future<?>> futures = new java.util.ArrayList<>(emailDue.size());
+        for (final Message initialMsg : emailDue) {
             futures.add(workerPool.submit(() -> dispatchOne(initialMsg, broadcastCancelled)));
         }
         // Wait for every task in this tick to finish before returning. Bounds tick wall-time
@@ -262,6 +339,34 @@ public class ScheduledTaskService {
         for (java.util.concurrent.Future<?> f : futures) {
             try { f.get(); }
             catch (Exception e) { log.warn("Scheduler: worker task failed: {}", e.toString()); }
+        }
+    }
+
+    /**
+     * Send every due SMS message one at a time, on the calling thread (this tick's own thread,
+     * NOT the parallel workerPool), spaced by {@link SmsSettingService#getRatePerMinute()}.
+     * This guarantees the relay's /api/sms/send never receives two concurrent requests from us,
+     * regardless of batch size — see the 2026-08-06 postmortem comment on dispatchQueued().
+     *
+     * <p>{@link #nextSmsSendAtNanos} persists the pacing cursor across ticks (not just within
+     * one batch) so a tick that dispatches only 1 message doesn't reset the clock and let the
+     * next tick's first message fire immediately after — the interval is enforced continuously.
+     */
+    private void dispatchSmsSerially(java.util.List<Message> smsDue,
+                                     java.util.concurrent.ConcurrentMap<Long, Boolean> broadcastCancelled) {
+        long intervalNanos = 60_000_000_000L / smsSettingService.getRatePerMinute();
+        for (Message msg : smsDue) {
+            long waitNanos = nextSmsSendAtNanos - System.nanoTime();
+            if (waitNanos > 0) {
+                try {
+                    java.util.concurrent.TimeUnit.NANOSECONDS.sleep(waitNanos);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return; // JVM shutting down — abandon the rest of this tick's SMS batch
+                }
+            }
+            nextSmsSendAtNanos = System.nanoTime() + intervalNanos;
+            dispatchOne(msg, broadcastCancelled);
         }
     }
 

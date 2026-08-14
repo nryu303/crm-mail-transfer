@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title th:text="${editing} ? '外部リンクドメイン編集' : '外部リンクドメイン追加'">外部リンクドメイン</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1"
+            th:text="${editing} ? '外部リンクドメイン編集' : '外部リンクドメイン追加'"></h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings/external-link-domains}">一覧に戻る</a>
+    </div>
+
+    <form method="post"
+          th:action="${editing} ? @{'/manager/settings/external-link-domains/' + ${domainId}} : @{/manager/settings/external-link-domains}"
+          th:object="${form}"
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6" style="max-width: 640px;">
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">外部リンクドメイン (http:// または https://) <span class="text-red-500">*</span></label>
+            <input type="text" class="tw-input" th:field="*{domainUrl}"
+                   placeholder="例: https://ii5gh9ge.jp"
+                   th:classappend="${#fields.hasErrors('domainUrl')} ? 'border-red-400'"/>
+            <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('domainUrl')}" th:errors="*{domainUrl}"></p>
+            <div class="mt-1 flex items-center gap-2" th:if="${editing}">
+                <span th:if="${certStatus == 'SUCCESS'}" class="text-xs text-emerald-600">✓ TLS証明書 発行済み</span>
+                <span th:if="${certStatus == 'PENDING'}" class="text-xs text-amber-600">⏳ TLS証明書 発行待ち (発行には1〜2分ほどかかります。時間を置いてこのページを再読み込みしてください)</span>
+                <span th:if="${certStatus != null and certStatus != 'SUCCESS' and certStatus != 'PENDING'}" class="text-xs text-red-600">
+                    ✗ TLS証明書 発行失敗 (<span th:text="${certStatus}"></span>)
+                </span>
+                <button type="submit" form="requestCertForm" class="inline-flex items-center px-2 py-0.5 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
+                        th:text="${certStatus == 'SUCCESS'} ? '再発行' : '証明書を発行'"></button>
+            </div>
+        </div>
+
+        <div class="mb-4" id="shortTokenLengthField">
+            <label class="block text-sm font-medium text-slate-700 mb-1">SMS短縮URLのトークン長</label>
+            <input type="number" class="tw-input" style="max-width: 160px;" th:field="*{shortTokenLength}"
+                   min="4" max="20" placeholder="既定値: 10"/>
+            <p class="mt-1 text-xs text-slate-500">
+                SMS送信時に生成される返信URLのランダム部分の文字数 (4〜20)。空欄の場合は既定値10文字を使用します。
+                SMSは文字数によって送信通数（課金）が変わるため、ドメインが長い場合はここで短くできます。
+            </p>
+        </div>
+
+        <div class="mb-4 flex items-center">
+            <input type="checkbox" class="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" id="isActive" th:field="*{isActive}"/>
+            <label class="ml-2 text-sm text-slate-700" for="isActive">使用中にする (他のドメインは自動的に未使用になります)</label>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">メモ</label>
+            <textarea class="tw-input" rows="3" th:field="*{memo}"
+                      placeholder="補足事項 (任意)"></textarea>
+        </div>
+
+        <hr class="my-6 border-slate-200"/>
+
+        <h2 class="text-base font-semibold text-slate-800 mb-2">アクセス後の挙動</h2>
+        <p class="text-xs text-slate-500 mb-3">
+            このドメインのDNS Aレコードが本CRMサーバーを指している場合にのみ有効です
+            (外部の転送機ドメインの場合、CRMにアクセスが届かないためここでの設定は反映されません)。
+        </p>
+
+        <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-2" id="landingModeRadios">
+            <label class="flex items-start gap-2 border border-slate-200 rounded-md p-3 cursor-pointer has-[:checked]:border-blue-400 has-[:checked]:bg-blue-50">
+                <input type="radio" name="landingMode" value="REPLY_FORM" class="mt-1"
+                       th:checked="${form.landingMode == 'REPLY_FORM' or form.landingMode == null}"/>
+                <span>
+                    <span class="block text-sm font-medium text-slate-800">通常の返信画面</span>
+                    <span class="block text-xs text-slate-500">従来通り、CRMの返信フォームを表示します (既定値)</span>
+                </span>
+            </label>
+            <label class="flex items-start gap-2 border border-slate-200 rounded-md p-3 cursor-pointer has-[:checked]:border-blue-400 has-[:checked]:bg-blue-50">
+                <input type="radio" name="landingMode" value="REDIRECT" class="mt-1"
+                       th:checked="${form.landingMode == 'REDIRECT'}"/>
+                <span>
+                    <span class="block text-sm font-medium text-slate-800">外部URLへリダイレクト</span>
+                    <span class="block text-xs text-slate-500">アクセスを記録した後、指定したURLへ転送します</span>
+                </span>
+            </label>
+            <label class="flex items-start gap-2 border border-slate-200 rounded-md p-3 cursor-pointer has-[:checked]:border-blue-400 has-[:checked]:bg-blue-50">
+                <input type="radio" name="landingMode" value="CUSTOM_HTML" class="mt-1"
+                       th:checked="${form.landingMode == 'CUSTOM_HTML'}"/>
+                <span>
+                    <span class="block text-sm font-medium text-slate-800">カスタムHTMLを表示</span>
+                    <span class="block text-xs text-slate-500">アクセスを記録した後、登録したHTMLをそのまま表示します</span>
+                </span>
+            </label>
+        </div>
+
+        <div class="mb-4" id="redirectUrlField">
+            <label class="block text-sm font-medium text-slate-700 mb-1">リダイレクト先URL</label>
+            <input type="text" class="tw-input" th:field="*{redirectUrl}"
+                   placeholder="例: https://www.yahoo.co.jp"
+                   th:classappend="${#fields.hasErrors('redirectUrl')} ? 'border-red-400'"/>
+            <p class="text-sm text-red-600 mt-1" th:if="${#fields.hasErrors('redirectUrl')}" th:errors="*{redirectUrl}"></p>
+        </div>
+
+        <div class="mb-4" id="landingHtmlField">
+            <label class="block text-sm font-medium text-slate-700 mb-1">表示するHTML</label>
+            <textarea class="tw-input font-mono text-xs" rows="10" th:field="*{landingHtml}"
+                      placeholder="&lt;!DOCTYPE html&gt;&lt;html&gt;...&lt;/html&gt; — 完全なHTMLページを貼り付けてください"></textarea>
+            <p class="mt-1 text-xs text-slate-500">
+                サンドボックス化されたiframeで表示されます。&lt;script&gt;や独自の&lt;style&gt;を含む完全なページを貼り付け可能です。
+            </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md shadow-sm"
+                    th:text="${editing} ? '更新する' : '追加する'"></button>
+            <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings/external-link-domains}">キャンセル</a>
+        </div>
+    </form>
+
+    <!-- Sibling of the main form (NOT nested inside it — HTML forbids nested <form> elements,
+         which was silently breaking the main form's 更新する submit: the browser auto-closes
+         the outer form at the first nested <form> tag, detaching everything after it,
+         including the submit button, from the form it was supposed to belong to).
+         The button above uses form="requestCertForm" (HTML5) to stay associated with this
+         form despite living elsewhere in the DOM. -->
+    <form method="post" id="requestCertForm" th:if="${editing}"
+          th:action="@{'/manager/settings/external-link-domains/' + ${domainId} + '/request-cert'}" style="display:none;">
+        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+    </form>
+
+    <script>
+    (function () {
+        var radios = document.querySelectorAll('#landingModeRadios input[name="landingMode"]');
+        var redirectField = document.getElementById('redirectUrlField');
+        var htmlField = document.getElementById('landingHtmlField');
+        function refresh() {
+            var checked = document.querySelector('#landingModeRadios input[name="landingMode"]:checked');
+            var mode = checked ? checked.value : 'REPLY_FORM';
+            redirectField.style.display = (mode === 'REDIRECT') ? '' : 'none';
+            htmlField.style.display = (mode === 'CUSTOM_HTML') ? '' : 'none';
+        }
+        radios.forEach(function (r) { r.addEventListener('change', refresh); });
+        refresh();
+    })();
+    </script>
+</section>
+</body>
+</html>

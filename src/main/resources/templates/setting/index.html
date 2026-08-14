@@ -39,6 +39,12 @@
             <p class="text-sm text-slate-500">返信URLと送信元ドメインを設定します。ワイルドカードドメイン + ランダム文字列に対応。</p>
         </a>
 
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/external-link-domains}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">外部リンクドメイン生成</h2>
+            <p class="text-sm text-slate-500 mb-3">メール・SMS送信時の短縮URL用ドメインを複数登録し、使用中のドメインを切り替えます。クリックでユーザーの最終ログインを記録。</p>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">登録数: <span th:text="${externalLinkDomainCount}">0</span></span>
+        </a>
+
         <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/home-html}">
             <h2 class="text-base font-semibold text-slate-800 mb-2">本ドメイン表示設定</h2>
             <p class="text-sm text-slate-500">
@@ -69,6 +75,11 @@
         <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/imap-env}">
             <h2 class="text-base font-semibold text-slate-800 mb-2">IMAP 監視同期</h2>
             <p class="text-sm text-slate-500">SoftBank キャリアアドレスの IMAP 受信監視リストを、キャリア登録割り当ての現状と同期します (通常は自動・手動再生成も可)。</p>
+        </a>
+
+        <a class="block bg-white rounded-lg shadow-sm hover:shadow transition p-5 border border-slate-100 hover:border-blue-300" th:href="@{/manager/settings/sms}">
+            <h2 class="text-base font-semibold text-slate-800 mb-2">SMS配信設定</h2>
+            <p class="text-sm text-slate-500">BytePlus SMS OpenAPI (Basic認証) の Username / Password、送信者名、ローカル配信の設定を管理します。</p>
         </a>
     </div>
 </section>

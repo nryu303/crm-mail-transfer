@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>外部リンクドメイン生成</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">外部リンクドメイン生成</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2" th:href="@{/manager/settings}">設定に戻る</a>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm" th:href="@{/manager/settings/external-link-domains/new}">新規追加</a>
+    </div>
+
+    <div class="max-w-3xl rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 mb-4">
+        <p class="font-semibold mb-1">短縮URL生成の仕組み</p>
+        <ul class="list-disc list-inside space-y-1">
+            <li>「<strong>使用中</strong>」にできるドメインは <strong>常に1件のみ</strong> です
+                (別の行を使用中にすると、それまで使用中だった行は自動で未使用になります)</li>
+            <li>メール送信・SMS送信・返信の本文にある <code>%reply_url%</code> は、使用中のドメイン + ユーザーごとのトークンで
+                短縮URLとして生成されます (例: <code>https://ii5gh9ge.jp/reply/xxxxxxxxxx</code>)</li>
+            <li><strong>DNS Aレコードが本CRMサーバーを指しているドメイン</strong>の場合のみ、クリック時にアクセスログ・最終ログインへ記録されます。
+                「編集」画面の「アクセス後の挙動」で、記録後に通常の返信画面を表示するか、外部URLへリダイレクトするか、カスタムHTMLを表示するかを選択できます</li>
+            <li>外部の転送機（DNSが自社サーバーを指さないドメイン）を経由する場合、転送機がCRMを経由せず直接リダイレクトする設定であれば、クリックされてもCRM側には記録されません</li>
+            <li>使用中のドメインが1件も無い場合は、従来の「ドメイン設定」ページのベースURLが使われます</li>
+        </ul>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left" style="width: 60px;">No</th>
+                <th class="px-3 py-2 text-left">外部リンクドメイン</th>
+                <th class="px-3 py-2 text-left" style="width: 130px;">アクセス後の挙動</th>
+                <th class="px-3 py-2 text-left" style="width: 100px;">アクセス数</th>
+                <th class="px-3 py-2 text-left" style="width: 140px;">状態</th>
+                <th class="px-3 py-2 text-left">メモ</th>
+                <th class="px-3 py-2 text-right" style="width: 320px;">操作</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${domains.empty}">
+                <td colspan="7" class="px-3 py-6 text-center text-slate-400">
+                    外部リンクドメインは登録されていません — 従来のドメイン設定のベースURLが使われます
+                </td>
+            </tr>
+            <tr th:each="d,it : ${domains}" class="hover:bg-slate-50">
+                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                <td class="px-3 py-2">
+                    <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs" th:text="${d.domainUrl}"></code>
+                    <span th:if="${certStatuses.get(d.id) == 'SUCCESS'}" title="TLS証明書 発行済み" class="text-emerald-600 text-xs ml-1">🔒</span>
+                    <span th:if="${certStatuses.get(d.id) == 'PENDING'}" title="TLS証明書 発行待ち" class="text-amber-600 text-xs ml-1">⏳</span>
+                    <span th:if="${certStatuses.get(d.id) != null and certStatuses.get(d.id) != 'SUCCESS' and certStatuses.get(d.id) != 'PENDING'}"
+                          title="TLS証明書 発行失敗 — 編集画面から再発行できます" class="text-red-600 text-xs ml-1">⚠️</span>
+                </td>
+                <td class="px-3 py-2">
+                    <span th:if="${d.landingMode == 'REDIRECT'}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-violet-100 text-violet-700">リダイレクト</span>
+                    <span th:if="${d.landingMode == 'REDIRECT' and d.redirectUrl != null and !d.redirectUrl.isEmpty()}"
+                          class="ml-1 text-xs text-slate-500" th:text="'→ ' + ${d.redirectUrl}"></span>
+                    <span th:if="${d.landingMode == 'CUSTOM_HTML'}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">カスタムHTML</span>
+                    <span th:if="${d.landingMode == null or d.landingMode == 'REPLY_FORM'}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">返信画面</span>
+                </td>
+                <td class="px-3 py-2">
+                    <a class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-100 text-sky-700 hover:bg-sky-200"
+                       th:href="@{'/manager/settings/external-link-domains/' + ${d.id} + '/accesses'}"
+                       th:text="${accessCounts.get(d.id)} ?: 0"></a>
+                </td>
+                <td class="px-3 py-2">
+                    <span th:if="${d.isActive}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">使用中</span>
+                    <span th:unless="${d.isActive}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-600">未使用</span>
+                </td>
+                <td class="px-3 py-2 text-xs text-slate-500" th:text="${d.memo}"></td>
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                    <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
+                       th:href="@{'/manager/settings/external-link-domains/' + ${d.id} + '/accesses'}">アクセスユーザー</a>
+                    <form method="post" style="display:inline" class="ml-1"
+                          th:action="@{'/manager/settings/external-link-domains/' + ${d.id} + '/toggle'}">
+                        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                        <input type="hidden" name="active" th:value="${d.isActive} ? 'false' : 'true'"/>
+                        <button type="submit"
+                                th:class="${d.isActive}
+                                    ? 'inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded'
+                                    : 'inline-flex items-center px-3 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded'"
+                                th:text="${d.isActive} ? '未使用にする' : '使用中にする'"></button>
+                    </form>
+                    <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded ml-1"
+                       th:href="@{'/manager/settings/external-link-domains/' + ${d.id} + '/edit'}">編集</a>
+                    <form method="post" style="display:inline" class="ml-1"
+                          th:action="@{'/manager/settings/external-link-domains/' + ${d.id} + '/delete'}"
+                          onsubmit="return confirm('このドメインを削除しますか?');">
+                        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                        <button type="submit" class="inline-flex items-center px-3 py-1 text-xs border border-red-300 text-red-600 hover:bg-red-50 rounded">削除</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

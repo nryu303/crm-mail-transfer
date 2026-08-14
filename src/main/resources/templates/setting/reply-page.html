@@ -102,9 +102,26 @@
                           placeholder=".reply-banner { background: #003366; }"></textarea>
             </div>
             <div class="preview-pane" style="min-height:220px;">
-                <div class="preview-label">▶ CSS プレビュー (ミニ返信フォームに適用)</div>
-                <iframe id="cssPreview"
-                        sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
+                <div class="preview-label" style="display:flex; align-items:center; justify-content:space-between;">
+                    <span>▶ CSS プレビュー (ミニ返信フォームに適用)</span>
+                    <span class="css-preview-mode-toggle" style="font-weight:normal; letter-spacing:normal;">
+                        <label style="margin-right:8px;"><input type="radio" name="cssPreviewMode" th:field="*{cssPreviewMode}" value="ON"/> オン</label>
+                        <label style="margin-right:8px;"><input type="radio" name="cssPreviewMode" th:field="*{cssPreviewMode}" value="OFF"/> オフ</label>
+                        <label><input type="radio" name="cssPreviewMode" th:field="*{cssPreviewMode}" value="HIDDEN"/> 表示しない</label>
+                    </span>
+                </div>
+                <div id="cssPreviewCollapseWrap" th:if="${form.cssPreviewMode != 'HIDDEN'}">
+                    <button type="button" id="cssPreviewToggleBtn" th:if="${form.cssPreviewMode == 'OFF'}"
+                            style="font-size:.75rem; color:#475569; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:4px; padding:2px 8px; margin:6px;">
+                        プレビューを表示 ▼
+                    </button>
+                    <iframe id="cssPreview"
+                            th:style="${form.cssPreviewMode == 'OFF'} ? 'display:none;' : ''"
+                            sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
+                </div>
+                <div th:if="${form.cssPreviewMode == 'HIDDEN'}" class="text-xs text-slate-400" style="padding:10px;">
+                    CSSプレビューは非表示に設定されています
+                </div>
             </div>
         </div>
 
@@ -137,8 +154,9 @@
         function updateFooter() { footerPv.innerHTML = footerEd.value || '<span style="color:#94a3b8;">(空)</span>'; }
 
         var cssEd = document.getElementById('cssEditor');
-        var cssPv = document.getElementById('cssPreview');
+        var cssPv = document.getElementById('cssPreview'); // absent when cssPreviewMode == HIDDEN
         function updateCss() {
+            if (!cssPv) return;
             var css = cssEd.value || '/* (空) */';
             var html = '<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">'
                      + '<link rel="stylesheet" href="/css/reply.css">'
@@ -160,6 +178,17 @@
 
         // Initial render on page load.
         updateHeader(); updateFooter(); updateCss();
+
+        // OFF mode: pane starts collapsed, admin can expand it for the rest of this page view
+        // (session-local, not persisted — the stored setting stays OFF until explicitly changed
+        // via the radio buttons above and saved).
+        var cssToggleBtn = document.getElementById('cssPreviewToggleBtn');
+        if (cssToggleBtn && cssPv) {
+            cssToggleBtn.addEventListener('click', function () {
+                cssPv.style.display = '';
+                cssToggleBtn.style.display = 'none';
+            });
+        }
     })();
     </script>
 

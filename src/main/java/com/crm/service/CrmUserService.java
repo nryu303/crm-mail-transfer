@@ -49,10 +49,11 @@ public class CrmUserService {
     /** Required columns the CSV header MUST include (in this order). */
     private static final String[] CSV_HEADER_REQUIRED =
             {"email", "display_name", "carrier_domain", "memo"};
-    /** Full canonical header. {@code ad_code} (col 5) and {@code gender} (col 6) are optional
-     *  for backwards-compat with CSVs created before those features shipped. */
+    /** Full canonical header. {@code ad_code} (col 5), {@code gender} (col 6), and
+     *  {@code phone} (col 7) are optional for backwards-compat with CSVs created before
+     *  those features shipped. */
     private static final String[] CSV_HEADER =
-            {"email", "display_name", "carrier_domain", "memo", "ad_code", "gender"};
+            {"email", "display_name", "carrier_domain", "memo", "ad_code", "gender", "phone"};
 
     // Retry limit for generating a unique loginId.
     private static final int LOGIN_ID_MAX_ATTEMPTS = 10;
@@ -370,35 +371,50 @@ public class CrmUserService {
         String displayName = CsvUtil.trimOrNull(row[1]);
         String carrierDomain = CsvUtil.trimOrNull(row[2]);
         String memo = CsvUtil.trimOrNull(row[3]);
-        // ad_code (col 5) and gender (col 6) are both optional. Padding above guarantees access.
+        // ad_code (col 5), gender (col 6), and phone (col 7) are all optional. Padding above
+        // guarantees access.
         String adCode = CsvUtil.trimOrNull(row[4]);
         String gender = normalizeCsvGender(CsvUtil.trimOrNull(row[5]));
+        String phone = CsvUtil.trimOrNull(row[6]);
 
-        if (email == null) {
-            result.addError(rowNum, "メールアドレスが空です");
-            return;
-        }
-        if (!CsvUtil.isValidEmail(email)) {
-            result.addError(rowNum, "メールアドレスの形式が不正です: " + email);
-            return;
-        }
-        if (repository.existsByEmail(email)) {
-            result.incrementDuplicate();
+        // Either email or phone is required (SMS-only users have no email) — but at least
+        // one contact method must be present, otherwise there's no way to reach the user.
+        if (email == null && phone == null) {
+            result.addError(rowNum, "メールアドレスと電話番号のどちらも空です（いずれか一方は必須です）");
             return;
         }
 
-        // RFC-invalid local-part — common with docomo legacy addresses (trailing dot,
-        // double-dot). We still REGISTER the user (the mailbox exists at docomo) but
-        // flag them so broadcasts skip them and the operator sees an error notice.
-        // Surfaces in the import result table so the admin can decide before sending.
-        String addrInvalid = CsvUtil.detectInvalidLocalPart(email);
-        if (addrInvalid != null) {
-            result.addError(rowNum,
-                    "送信不可（" + CsvUtil.invalidLocalPartLabel(addrInvalid) + "）: " + email);
+        String addrInvalid = null;
+        if (email != null) {
+            if (!CsvUtil.isValidEmail(email)) {
+                result.addError(rowNum, "メールアドレスの形式が不正です: " + email);
+                return;
+            }
+            if (repository.existsByEmail(email)) {
+                result.incrementDuplicate();
+                return;
+            }
+            // RFC-invalid local-part — common with docomo legacy addresses (trailing dot,
+            // double-dot). We still REGISTER the user (the mailbox exists at docomo) but
+            // flag them so broadcasts skip them and the operator sees an error notice.
+            // Surfaces in the import result table so the admin can decide before sending.
+            addrInvalid = CsvUtil.detectInvalidLocalPart(email);
+            if (addrInvalid != null) {
+                result.addError(rowNum,
+                        "送信不可（" + CsvUtil.invalidLocalPartLabel(addrInvalid) + "）: " + email);
+            }
+        } else {
+            // SMS-only row (no email) — dedupe by phone instead, matching the email-dedupe
+            // behaviour above (existing rows with the same phone are skipped, not errored).
+            if (repository.existsByPhoneNumber(phone)) {
+                result.incrementDuplicate();
+                return;
+            }
         }
 
         CrmUser u = new CrmUser();
         u.setEmail(email);
+        u.setPhoneNumber(phone);
         u.setAddressInvalidReason(addrInvalid);
         u.setDisplayName(displayName);
         u.setCarrierDomain(deriveCarrierDomainIfBlank(carrierDomain, email));
@@ -407,10 +423,17 @@ public class CrmUserService {
         u.setGender(gender);
         IssuedCredentials cred = issueFreshCredentials(u);
         repository.save(u);
-        result.addIssuedCredential(email, cred.getLoginId(), cred.getPlainPassword());
+        result.addIssuedCredential(email != null ? email : phone, cred.getLoginId(), cred.getPlainPassword());
         result.incrementSuccess();
     }
 
+    /**
+     * CSV export intentionally leaves the memo column BLANK (2026-08-05, operator request):
+     * MEMO holds full HTML documents (the per-user reply-page header, `<!DOCTYPE html>...`),
+     * which read as unreadable noise ("\u30CF\u30C3\u30B7\u30E5\u30B3\u30FC\u30C9\u306E\u3088\u3046\u306A\u3082\u306E") once dumped into a
+     * spreadsheet cell. The column is kept in place (not removed) so the header shape still
+     * matches {@link #CSV_HEADER_REQUIRED} and an exported file can be re-imported as-is.
+     */
     public void exportCsv(UserSearchForm form, Writer writer) throws IOException {
         writer.write('\uFEFF'); // UTF-8 BOM so Excel opens as UTF-8
         try (CSVWriter csv = new CSVWriter(writer)) {
@@ -422,9 +445,10 @@ public class CrmUserService {
                         safe(u.getEmail()),
                         safe(u.getDisplayName()),
                         safe(u.getCarrierDomain()),
-                        safe(u.getMemo()),
+                        "", // memo \u2014 deliberately blank, see method javadoc
                         safe(u.getAdCode()),
-                        safe(u.getGender())
+                        safe(u.getGender()),
+                        safe(u.getPhoneNumber())
                 });
             }
         }
@@ -529,6 +553,12 @@ public class CrmUserService {
             if (!nameTokens.isEmpty()) {
                 List<Predicate> ors = new ArrayList<>(nameTokens.size());
                 for (String t : nameTokens) ors.add(cb.like(root.get("displayName"), "%" + t + "%"));
+                predicates.add(cb.or(ors.toArray(new Predicate[0])));
+            }
+            List<String> phoneTokens = form.phoneNumberTokens();
+            if (!phoneTokens.isEmpty()) {
+                List<Predicate> ors = new ArrayList<>(phoneTokens.size());
+                for (String t : phoneTokens) ors.add(cb.like(root.get("phoneNumber"), "%" + t + "%"));
                 predicates.add(cb.or(ors.toArray(new Predicate[0])));
             }
             if (hasText(form.getStatus())) {

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--
+  メッセージボックス shared fragment — rendered identically (same HTML/CSS) by:
+    - the public /reply/{token} page (isAdmin=false): read-only history + per-item reply,
+      no delete affordance at all.
+    - the admin /manager/users/{id}/message-box preview (isAdmin=true): same list, plus a
+      選択削除 checkbox/button (soft-delete, admin-only) and per-item reply forms that post
+      through the existing admin compose endpoints so a real reply is sent to the user.
+
+  Params:
+    box        — org.springframework.data.domain.Page<com.crm.dto.MessageBoxItem>
+    token      — reply-page token (public context only; null when isAdmin)
+    isAdmin    — boolean, gates the delete UI and switches the reply-form target
+    userId     — user id (admin context only; used to build the reply POST / pager URLs)
+-->
+<div th:fragment="messageBox(box, token, isAdmin, userId)" class="message-box-shell">
+    <div class="message-box-head">
+        <h2 class="message-box-title">メッセージボックス</h2>
+        <button th:if="${isAdmin}" type="submit" form="messageBoxDeleteForm"
+                class="message-box-delete-btn"
+                onclick="return confirm('選択したメッセージを削除しますか？');">選択削除</button>
+    </div>
+
+    <form th:if="${isAdmin}" id="messageBoxDeleteForm" method="post"
+          th:action="@{'/manager/users/' + ${userId} + '/message-box/delete'}"></form>
+
+    <div th:if="${box.content.empty}" class="message-box-empty">受信履歴はありません</div>
+
+    <div th:each="item : ${box.content}" class="message-box-item">
+        <div class="message-box-item-head">
+            <input th:if="${isAdmin}" type="checkbox" name="ids" th:value="${item.id}"
+                   form="messageBoxDeleteForm" class="message-box-checkbox"/>
+            <span class="message-box-date"
+                  th:text="'受信時間 : ' + ${#temporals.format(item.sentAt, 'yyyy/MM/dd HH:mm')}"></span>
+        </div>
+        <div class="message-box-body" th:text="${item.bodyText}"></div>
+
+        <div class="message-box-divider"></div>
+
+        <!-- Re: 件名 — de-emphasized, fixed display. Never deletable from the user side; only
+             the checkbox above (admin-only) can remove the whole item. -->
+        <div class="message-box-reply-label" th:text="${item.replyLabel}"></div>
+
+        <!-- Public reply form: posts to /reply/{token}/send with replyToMessageId targeting
+             this specific historical message. -->
+        <form th:if="${!isAdmin}" class="reply-form message-box-reply-form"
+              th:action="@{'/reply/' + ${token} + '/send'}" method="post">
+            <input type="hidden" name="replyToMessageId" th:value="${item.id}"/>
+            <div class="field">
+                <textarea name="body" rows="4" placeholder="返信を入力..."></textarea>
+            </div>
+            <div class="actions">
+                <button type="submit">返信</button>
+            </div>
+        </form>
+
+        <!-- Admin reply form: posts through the existing per-user compose endpoints
+             (EMAIL/BROADCAST channel → /messages, SMS channel → /messages/sms) so it reuses
+             the same send pipeline, error handling, and audit trail as the thread page. -->
+        <form th:if="${isAdmin and item.channel == 'SMS'}" class="reply-form message-box-reply-form"
+              th:action="@{'/manager/users/' + ${userId} + '/messages/sms'}" method="post">
+            <input type="hidden" name="returnTo" value="message-box"/>
+            <input type="hidden" name="replyToMessageId" th:value="${item.id}"/>
+            <div class="field">
+                <textarea name="body" rows="4" placeholder="返信を入力..."></textarea>
+            </div>
+            <div class="actions">
+                <button type="submit">返信</button>
+            </div>
+        </form>
+        <form th:if="${isAdmin and item.channel != 'SMS'}" class="reply-form message-box-reply-form"
+              th:action="@{'/manager/users/' + ${userId} + '/messages'}" method="post">
+            <input type="hidden" name="returnTo" value="message-box"/>
+            <input type="hidden" name="replyToMessageId" th:value="${item.id}"/>
+            <input type="hidden" name="subject"
+                   th:value="${item.subject != null and !item.subject.isEmpty()} ? ('Re: ' + item.subject) : 'Re:'"/>
+            <div class="field">
+                <textarea name="body" rows="4" placeholder="返信を入力..."></textarea>
+            </div>
+            <div class="actions">
+                <button type="submit">返信</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="message-box-pager" th:if="${box.totalPages > 1}">
+        <span th:each="p : ${#numbers.sequence(0, box.totalPages - 1)}">
+            <a th:if="${p != box.number and isAdmin}"
+               th:href="@{'/manager/users/' + ${userId} + '/message-box'(page=${p})}"
+               th:text="${p + 1}"></a>
+            <a th:if="${p != box.number and !isAdmin}"
+               th:href="@{'/reply/' + ${token}(box_page=${p})}"
+               th:text="${p + 1}"></a>
+            <strong th:if="${p == box.number}" th:text="${p + 1}"></strong>
+        </span>
+    </div>
+</div>
+</body>
+</html>

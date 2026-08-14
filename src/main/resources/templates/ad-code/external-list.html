@@ -79,12 +79,13 @@
 
     <table>
         <thead>
-        <tr><th colspan="8" class="group-header" th:text="'集計グループ (' + ${#lists.size(rows)} + '件 / ' + ${totalRows} + '件)'"></th></tr>
+        <tr><th th:colspan="${showLoginCount} ? 9 : 8" class="group-header" th:text="'集計グループ (' + ${#lists.size(rows)} + '件 / ' + ${totalRows} + '件)'"></th></tr>
         <tr class="col-header">
             <th style="width:160px;">代理店コード</th>
             <th class="male">登録</th>
             <th class="female">登録</th>
             <th>合計登録</th>
+            <th th:if="${showLoginCount}">ログイン数 (累計)</th>
             <th class="male">入金</th>
             <th class="female">入金</th>
             <th>入金合計</th>
@@ -93,13 +94,14 @@
         </thead>
         <tbody>
         <tr th:if="${rows.empty}">
-            <td colspan="8" style="text-align:center; color:#94a3b8; padding:24px;">該当するデータはありません</td>
+            <td th:colspan="${showLoginCount} ? 9 : 8" style="text-align:center; color:#94a3b8; padding:24px;">該当するデータはありません</td>
         </tr>
         <tr th:each="r : ${rows}">
             <td class="code" th:text="${r.code}"></td>
             <td class="male" th:text="${r.signupMale}"></td>
             <td class="female" th:text="${r.signupFemale}"></td>
             <td th:text="${r.signupTotal}"></td>
+            <td th:if="${showLoginCount}" th:text="${r.loginCount}"></td>
             <td class="male" th:text="${#numbers.formatInteger(r.paidMale, 1, 'COMMA')} + '円'"></td>
             <td class="female" th:text="${#numbers.formatInteger(r.paidFemale, 1, 'COMMA')} + '円'"></td>
             <td th:text="${#numbers.formatInteger(r.paidTotal, 1, 'COMMA')} + '円'"></td>
@@ -112,6 +114,7 @@
             <td class="male" th:text="${#aggregates.sum(rows.![signupMale])}"></td>
             <td class="female" th:text="${#aggregates.sum(rows.![signupFemale])}"></td>
             <td th:text="${#aggregates.sum(rows.![signupTotal])}"></td>
+            <td th:if="${showLoginCount}" th:text="${#aggregates.sum(rows.![loginCount])}"></td>
             <td class="male" th:text="${#numbers.formatInteger(#aggregates.sum(rows.![paidMale]), 1, 'COMMA')} + '円'"></td>
             <td class="female" th:text="${#numbers.formatInteger(#aggregates.sum(rows.![paidFemale]), 1, 'COMMA')} + '円'"></td>
             <td th:text="${#numbers.formatInteger(#aggregates.sum(rows.![paidTotal]), 1, 'COMMA')} + '円'"></td>

@@ -2,6 +2,7 @@ package com.crm.controller;
 
 import com.crm.entity.AdCode;
 import com.crm.service.AdCodeService;
+import com.crm.service.DomainSettingService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,8 +35,12 @@ import java.util.Set;
 public class AdMediaController {
 
     private final AdCodeService service;
+    private final DomainSettingService settings;
 
-    public AdMediaController(AdCodeService service) { this.service = service; }
+    public AdMediaController(AdCodeService service, DomainSettingService settings) {
+        this.service = service;
+        this.settings = settings;
+    }
 
     @GetMapping({"", "/"})
     public String list(@RequestParam(name = "ym", required = false) String ymParam,
@@ -59,6 +64,7 @@ public class AdMediaController {
         model.addAttribute("codesFilter", codesParam == null ? "" : codesParam);
         model.addAttribute("groupName", groupName);
         model.addAttribute("groupSlug", groupSlugParam == null ? "" : groupSlugParam);
+        model.addAttribute("showLoginCount", settings.isAdCodeShowLoginCount());
         return "ad-code/external-list";
     }
 

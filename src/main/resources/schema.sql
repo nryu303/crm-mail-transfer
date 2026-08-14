@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS ADMIN_USER (
 
 CREATE TABLE IF NOT EXISTS CRM_USER (
   ID                  BIGINT AUTO_INCREMENT PRIMARY KEY,
-  EMAIL               VARCHAR(255)  NOT NULL    COMMENT 'user email address',
+  EMAIL               VARCHAR(255)  DEFAULT NULL COMMENT 'user email address — optional; a user may instead have only PHONE_NUMBER (SMS-only). At least one of EMAIL/PHONE_NUMBER is enforced at the service layer, not here (MySQL allows multiple NULLs in a UNIQUE index, so relaxing NOT NULL does not weaken the email-uniqueness guarantee for users that do have one)',
+  PHONE_NUMBER        VARCHAR(20)   DEFAULT NULL COMMENT 'SMS delivery target, e.g. 09012345678 — optional unless EMAIL is blank, in which case it is required',
   ADDRESS_INVALID_REASON VARCHAR(64) DEFAULT NULL
     COMMENT 'RFC-invalid local-part flag, e.g. trailing_dot, leading_dot, double_dot — set at import time or retroactively after a relay-side SMTP reject; broadcast skips users with this flagged',
   DISPLAY_NAME        VARCHAR(255)  DEFAULT NULL,
@@ -30,6 +31,14 @@ CREATE TABLE IF NOT EXISTS CRM_USER (
   FOLDER              VARCHAR(64)   DEFAULT NULL      COMMENT 'grouping folder name',
   LAST_LOGIN_AT       DATETIME      DEFAULT NULL,
   MEMO                TEXT          DEFAULT NULL,
+  MEMO_2              LONGTEXT      DEFAULT NULL,
+  MEMO_3              LONGTEXT      DEFAULT NULL,
+  MEMO_4              LONGTEXT      DEFAULT NULL,
+  MEMO_5              LONGTEXT      DEFAULT NULL,
+  MEMO_6              LONGTEXT      DEFAULT NULL,
+  ACTIVE_MEMO_SLOT    INT           NOT NULL DEFAULT 1
+    COMMENT 'which of MEMO..MEMO_6 (1..6) the public /reply page currently renders',
+  INTERNAL_MEMO       LONGTEXT      DEFAULT NULL COMMENT 'admin-only, never shown to the user',
   TAG1_KEY            VARCHAR(64)   DEFAULT NULL,
   TAG1_VALUE          VARCHAR(500)  DEFAULT NULL,
   TAG2_KEY            VARCHAR(64)   DEFAULT NULL,
@@ -110,7 +119,7 @@ CREATE TABLE IF NOT EXISTS MESSAGE (
   USER_ID           BIGINT        NOT NULL,
   ADMIN_USER_ID     BIGINT        DEFAULT NULL,
   DIRECTION         VARCHAR(8)    NOT NULL    COMMENT 'OUT | IN',
-  CHANNEL           VARCHAR(16)   NOT NULL    COMMENT 'EMAIL | WEB_REPLY | BROADCAST',
+  CHANNEL           VARCHAR(16)   NOT NULL    COMMENT 'EMAIL | WEB_REPLY | BROADCAST | SMS',
   SUBJECT           TEXT          DEFAULT NULL,
   BODY_TEXT         LONGTEXT      DEFAULT NULL,
   BODY_HTML         LONGTEXT      DEFAULT NULL,
@@ -122,6 +131,12 @@ CREATE TABLE IF NOT EXISTS MESSAGE (
   SENT_AT           DATETIME      DEFAULT NULL,
   READ_AT           DATETIME      DEFAULT NULL,
   INBOX_DISMISSED_AT DATETIME     DEFAULT NULL COMMENT 'set when admin clicks the per-row delete button on the thread inbox; filtered out of inboxGroupByUser so the user disappears from the 受信 list, but the message row is preserved so 過去のやり取り stays intact',
+  EXCLUDED_FROM_BOX TINYINT(1)    NOT NULL DEFAULT 0
+    COMMENT 'set at compose time when the %reply_url% embedded in this OUT message was built while an EXTERNAL_LINK_DOMAIN row was active in REDIRECT or CUSTOM_HTML landing mode; such messages never render the two-way reply form so they are excluded from メッセージボックス (both /reply/{token} and /manager/users/{id}/message-box)',
+  SENT_BODY_TEXT    LONGTEXT      DEFAULT NULL
+    COMMENT 'the body actually transmitted to the carrier/SMTP relay when it differs from BODY_TEXT (currently only the 15-char %reply_url% clip rule). NULL means "same as BODY_TEXT". BODY_TEXT always holds the FULL substituted body for メッセージボックス history display regardless of what was actually sent',
+  BOX_DISMISSED_AT DATETIME      DEFAULT NULL
+    COMMENT 'admin-only per-user メッセージボックス soft-delete (選択削除 on /manager/users/{id}/message-box). Distinct from INBOX_DISMISSED_AT (a different feature — the global /manager/inbox triage list, which filters IN rows). This filters OUT rows out of one user message-box view only; the row is preserved for thread history',
   ERROR_MESSAGE     TEXT          DEFAULT NULL,
   SEND_ATTEMPTS     INT           DEFAULT 0,
   NEXT_RETRY_AT     DATETIME      DEFAULT NULL,
@@ -138,6 +153,7 @@ CREATE TABLE IF NOT EXISTS MESSAGE (
   KEY IDX_MSG_REPLY_TOKEN (REPLY_PAGE_TOKEN),
   KEY IDX_MSG_REPLY_TO (REPLY_TO_MESSAGE_ID),
   KEY IDX_MSG_MSGID (MESSAGE_ID_HEADER),
+  KEY IDX_MSG_BOX (USER_ID, DIRECTION, STATUS, EXCLUDED_FROM_BOX, BOX_DISMISSED_AT),
   CONSTRAINT FK_MSG_USER FOREIGN KEY (USER_ID) REFERENCES CRM_USER(ID) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -228,7 +244,27 @@ CREATE TABLE IF NOT EXISTS REPLY_PAGE_SETTING (
   DEFAULT_CSS         LONGTEXT  DEFAULT NULL,
   FOOTER_HTML         LONGTEXT  DEFAULT NULL,
   REQUIRE_LOGIN       TINYINT(1) DEFAULT 0,
+  CSS_PREVIEW_MODE    VARCHAR(16) NOT NULL DEFAULT 'ON'
+    COMMENT 'ON | OFF | HIDDEN — controls the "▶ CSS プレビュー" pane on /manager/settings/reply-page. ON = pane always shown. OFF = pane collapsed by default, admin can still expand it per-session. HIDDEN = pane never rendered, no way to expand',
   UPDATED_AT          DATETIME  NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS REPLY_PAGE_ATTACHMENT (
+  ID           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  USER_ID      BIGINT       NOT NULL,
+  MESSAGE_ID   BIGINT       DEFAULT NULL
+    COMMENT 'optional link to the MESSAGE row this attachment was sent with',
+  SLOT_NO      INT          NOT NULL DEFAULT 1 COMMENT 'reply-HTML slot (1..6), matches CRM_USER.ACTIVE_MEMO_SLOT',
+  FILE_NAME    VARCHAR(255) NOT NULL COMMENT 'operator-visible original filename',
+  STORED_PATH  VARCHAR(500) NOT NULL COMMENT 'path on disk relative to the app uploads dir',
+  CONTENT_TYPE VARCHAR(120) NOT NULL,
+  SIZE_BYTES   BIGINT       NOT NULL,
+  UPLOADED_BY  VARCHAR(40)  DEFAULT NULL COMMENT 'visitor IP from the reply-page POST, for audit',
+  CREATED_AT   DATETIME     NOT NULL,
+  KEY IDX_RPA_USER (USER_ID),
+  KEY IDX_RPA_MESSAGE (MESSAGE_ID),
+  KEY IDX_RPA_USER_SLOT (USER_ID, SLOT_NO),
+  CONSTRAINT FK_RPA_USER FOREIGN KEY (USER_ID) REFERENCES CRM_USER(ID) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS INBOUND_MAIL_LOG (
@@ -263,6 +299,25 @@ CREATE TABLE IF NOT EXISTS RELAY_SERVER (
   UNIQUE KEY UK_RELAY_NAME (NAME)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS EXTERNAL_LINK_DOMAIN (
+  ID BIGINT AUTO_INCREMENT PRIMARY KEY,
+  DOMAIN_URL   VARCHAR(255) NOT NULL,
+  IS_ACTIVE    TINYINT(1)   DEFAULT 0,
+  MEMO         TEXT         DEFAULT NULL,
+  LANDING_MODE VARCHAR(32)  NOT NULL DEFAULT 'REPLY_FORM'
+    COMMENT 'REPLY_FORM (default) / REDIRECT / CUSTOM_HTML — what /reply/{token} does after logging the access',
+  REDIRECT_URL VARCHAR(500) DEFAULT NULL,
+  LANDING_HTML LONGTEXT     DEFAULT NULL,
+  SHORT_TOKEN_LENGTH INT    DEFAULT NULL
+    COMMENT 'SMS short-token length override, 4-20; NULL = use TokenGenerator.DEFAULT_SHORT_LENGTH (10)',
+  CERT_STATUS  VARCHAR(32)  DEFAULT NULL
+    COMMENT 'Last durably-known TLS cert result: NULL (never requested) / PENDING / SUCCESS / FAILED_*. Persisted here because the root-side script''s /tmp result file is not guaranteed to survive.',
+  CREATED_AT   DATETIME     NOT NULL,
+  UPDATED_AT   DATETIME     NOT NULL,
+  UNIQUE KEY UK_EXTERNAL_LINK_DOMAIN_URL (DOMAIN_URL),
+  KEY IDX_EXTERNAL_LINK_DOMAIN_ACTIVE (IS_ACTIVE)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS MESSAGE_TEMPLATE (
   ID BIGINT AUTO_INCREMENT PRIMARY KEY,
   NAME          VARCHAR(255) NOT NULL,
@@ -270,10 +325,13 @@ CREATE TABLE IF NOT EXISTS MESSAGE_TEMPLATE (
   BODY          LONGTEXT     DEFAULT NULL,
   COLOR         VARCHAR(16)  DEFAULT NULL
     COMMENT 'accent color name (slate/blue/sky/cyan/emerald/lime/amber/rose/pink/violet) — shown as a left-border on the thread template panel for visual distinction',
+  PAGE_NO       INT          NOT NULL DEFAULT 1
+    COMMENT 'page bucket 1..5 — operators group templates by use-case and switch via the tab strip on the thread page',
   DISPLAY_ORDER INT          DEFAULT 0,
   CREATED_AT    DATETIME     NOT NULL,
   UPDATED_AT    DATETIME     NOT NULL,
-  KEY IDX_TEMPLATE_ORDER (DISPLAY_ORDER)
+  KEY IDX_TEMPLATE_ORDER (DISPLAY_ORDER),
+  KEY IDX_TEMPLATE_PAGE (PAGE_NO)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS AUDIT_LOG (
@@ -289,6 +347,19 @@ CREATE TABLE IF NOT EXISTS AUDIT_LOG (
   KEY IDX_AUDIT_CREATED (CREATED_AT),
   KEY IDX_AUDIT_ADMIN (ADMIN_USER_ID),
   KEY IDX_AUDIT_ACTION (ACTION)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS USER_ACCESS_LOG (
+  ID          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  USER_ID     BIGINT        NOT NULL,
+  SOURCE      VARCHAR(32)   NOT NULL,
+  IP_ADDRESS  VARCHAR(64)   DEFAULT NULL,
+  USER_AGENT  VARCHAR(500)  DEFAULT NULL,
+  DOMAIN_HOST VARCHAR(255)  DEFAULT NULL,
+  CREATED_AT  DATETIME      NOT NULL,
+  KEY IDX_USER_ACCESS_LOG_USER (USER_ID, CREATED_AT),
+  KEY IDX_USER_ACCESS_LOG_CREATED (CREATED_AT),
+  KEY IDX_USER_ACCESS_LOG_DOMAIN (DOMAIN_HOST)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS CRM_SETTING (

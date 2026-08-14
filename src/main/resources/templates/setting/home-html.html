@@ -62,7 +62,7 @@
     </div>
 
     <div class="max-w-5xl rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 mb-4">
-        <p class="font-semibold mb-1">本ドメイン (<code>https://avu74g.jp/</code>) のトップに表示するHTML</p>
+        <p class="font-semibold mb-1">本ドメイン (<code th:text="${rootDomainUrl}">https://example.jp/</code>) のトップに表示するHTML</p>
         <p class="text-xs">
             3つのパターンを保存編集できます。「現在表示」にチェックを入れたパターンが、ルートURLへのアクセス時に配信されます。
             どのパターンにもチェックを入れない場合は、管理画面ログインへのリダイレクトに戻ります（現状の動作）。

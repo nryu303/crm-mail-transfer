@@ -124,9 +124,18 @@ public class CarrierPoolService {
         return saved;
     }
 
+    /**
+     * Soft-delete only: a hard DELETE cascades to CARRIER_USER_BINDING and permanently
+     * breaks inbound reply-matching for any message already sent from this address
+     * (InboundMailService looks the address up by row existence, not by isActive).
+     * Deactivating instead keeps the row (and its bindings) so old replies still route.
+     */
     @Transactional
     public void delete(Long id) {
-        repository.deleteById(id);
+        CarrierAddressPool p = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("carrier pool entry not found: " + id));
+        p.setIsActive(false);
+        repository.save(p);
         imapEnvSyncService.triggerAfterCommit();
     }
 
@@ -136,7 +145,13 @@ public class CarrierPoolService {
         int n = 0;
         for (Long id : ids) {
             if (id == null) continue;
-            try { repository.deleteById(id); n++; } catch (Exception ignored) {}
+            try {
+                CarrierAddressPool p = repository.findById(id).orElse(null);
+                if (p == null) continue;
+                p.setIsActive(false);
+                repository.save(p);
+                n++;
+            } catch (Exception ignored) {}
         }
         if (n > 0) imapEnvSyncService.triggerAfterCommit();
         return n;
@@ -310,6 +325,9 @@ public class CarrierPoolService {
             }
             if (hasText(form.getCarrierCode())) {
                 p.add(cb.equal(root.get("carrierCode"), form.getCarrierCode()));
+            }
+            if (!form.isShowInactive()) {
+                p.add(cb.equal(root.get("isActive"), true));
             }
             if ("UNBOUND".equals(form.getBoundFilter())) {
                 // Sub-select: pools that have zero bindings

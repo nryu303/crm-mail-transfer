@@ -37,6 +37,7 @@ public class BroadcastService {
     private final PlaceholderService placeholderService;
     private final ReplyPageService replyPageService;
     private final DomainSettingService domainSettingService;
+    private final SmsSettingService smsSettingService;
 
     public BroadcastService(BroadcastRepository broadcastRepository,
                             CrmUserRepository userRepository,
@@ -45,7 +46,8 @@ public class BroadcastService {
                             MessageRepository messageRepository,
                             PlaceholderService placeholderService,
                             ReplyPageService replyPageService,
-                            DomainSettingService domainSettingService) {
+                            DomainSettingService domainSettingService,
+                            SmsSettingService smsSettingService) {
         this.broadcastRepository = broadcastRepository;
         this.userRepository = userRepository;
         this.poolRepository = poolRepository;
@@ -54,6 +56,7 @@ public class BroadcastService {
         this.placeholderService = placeholderService;
         this.domainSettingService = domainSettingService;
         this.replyPageService = replyPageService;
+        this.smsSettingService = smsSettingService;
     }
 
     public Page<Broadcast> list(int page, int size) {
@@ -73,6 +76,9 @@ public class BroadcastService {
      */
     @Transactional
     public Broadcast createAndQueue(BroadcastForm form, Long adminUserId) {
+        if ("SMS".equals(form.getChannel())) {
+            return createAndQueueSms(form, adminUserId);
+        }
         List<CrmUser> targets = findTargetUsers(form);
 
         // Pre-compute which targets are actually deliverable (have at least one active pool
@@ -93,6 +99,12 @@ public class BroadcastService {
         java.util.Map<Long, CarrierAddressPool> userToPool = new java.util.HashMap<>();
         String fallbackFrom = domainSettingService.buildFromAddress();
         for (CrmUser u : targets) {
+            // SMS-only users (registered via CSV import with phone but no email) have no
+            // TO_ADDRESS for an email broadcast — route them to createAndQueueSms instead.
+            if (u.getEmail() == null || u.getEmail().isEmpty()) {
+                unsendableIds.add(u.getId());
+                continue;
+            }
             if (u.getAddressInvalidReason() != null && !u.getAddressInvalidReason().isEmpty()
                     && !isDocomoDotIssueRescuable(u.getEmail())) {
                 unsendableIds.add(u.getId());
@@ -181,7 +193,11 @@ public class BroadcastService {
 
             if (body.contains(MessageService.REPLY_URL_PLACEHOLDER)) {
                 String url = replyPageService.createReplyPageFor(persisted);
+                // Same full-body-vs-clipped-transmit split as MessageService.compose() —
+                // see MessageService.clipForTransmission().
                 persisted.setBodyText(body.replace(MessageService.REPLY_URL_PLACEHOLDER, url));
+                persisted.setSentBodyText(MessageService.clipForTransmission(body, url));
+                persisted.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
                 messageRepository.save(persisted);
             }
         }
@@ -193,6 +209,96 @@ public class BroadcastService {
 
     public static class NoTargetsException extends RuntimeException {
         public NoTargetsException(String msg) { super(msg); }
+    }
+
+    /**
+     * SMS broadcast path — deliberately separate from the email path above, which is built
+     * around carrier-pool FROM addresses and RFC-local-part quirks that don't apply to SMS.
+     * Deliverability here is simply "has a phone number"; the sender identity comes from
+     * {@link SmsSettingService} rather than a per-user carrier pool.
+     */
+    @Transactional
+    public Broadcast createAndQueueSms(BroadcastForm form, Long adminUserId) {
+        List<CrmUser> targets = findTargetUsers(form);
+
+        List<CrmUser> deliverable = new ArrayList<>();
+        List<Long> unsendableIds = new ArrayList<>();
+        for (CrmUser u : targets) {
+            String phone = u.getPhoneNumber();
+            if (phone != null && !phone.trim().isEmpty()) {
+                deliverable.add(u);
+            } else {
+                unsendableIds.add(u.getId());
+            }
+        }
+
+        if (deliverable.isEmpty()) {
+            throw new NoTargetsException(
+                    "条件に合致し、送信可能な電話番号登録済みユーザーが見つかりませんでした。"
+                  + " (絞り込みに合致したユーザー: " + targets.size()
+                  + "件、うち電話番号未登録: " + unsendableIds.size() + "件)");
+        }
+
+        Broadcast b = new Broadcast();
+        b.setAdminUserId(adminUserId);
+        String t = form.getTitle();
+        String label = (t == null || t.trim().isEmpty()) ? "SMS配信" : t.trim();
+        b.setTitle(label);
+        b.setSubject(label);
+        b.setBodyText(form.getBody());
+        b.setChannel("SMS");
+        b.setRatePerMinute(form.getRatePerMinute() == null || form.getRatePerMinute() < 1
+                ? 60 : form.getRatePerMinute());
+        b.setTargetFilter(buildFilterSummary(form, targets.size(), unsendableIds.size()));
+        b.setTotalCount(deliverable.size());
+        b.setUnsendableCount(unsendableIds.size());
+        if (!unsendableIds.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < unsendableIds.size(); i++) {
+                if (i > 0) sb.append(',');
+                sb.append(unsendableIds.get(i));
+            }
+            b.setUnsendableUserIds(sb.toString());
+        }
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startAt = form.getScheduledAt() != null && form.getScheduledAt().isAfter(now)
+                ? form.getScheduledAt() : now;
+        b.setScheduledAt(form.getScheduledAt());
+        b.setStatus(startAt.isAfter(now) ? Broadcast.STATUS_SCHEDULED : Broadcast.STATUS_SENDING);
+        Broadcast saved = broadcastRepository.save(b);
+
+        long intervalMs = 60_000L / b.getRatePerMinute();
+        for (int i = 0; i < deliverable.size(); i++) {
+            CrmUser user = deliverable.get(i);
+            LocalDateTime when = startAt.plusNanos(intervalMs * 1_000_000L * i);
+            Message m = new Message();
+            m.setUserId(user.getId());
+            m.setAdminUserId(adminUserId);
+            m.setDirection(Message.DIR_OUT);
+            m.setChannel(Message.CHANNEL_SMS);
+            String body = placeholderService.substitute(form.getBody(), user);
+            m.setBodyText(body);
+            // Resolved per-recipient (not once for the whole broadcast) so RANDOM_* sender-name
+            // modes actually rotate identities across the batch instead of reusing one value.
+            m.setFromAddress(smsSettingService.resolveSenderName());
+            m.setToAddress(user.getPhoneNumber());
+            m.setBroadcastId(saved.getId());
+            m.setStatus(Message.STATUS_QUEUED);
+            m.setScheduledAt(when);
+            Message persisted = messageRepository.save(m);
+
+            if (body.contains(MessageService.REPLY_URL_PLACEHOLDER)) {
+                // Short (10-char) token — SMS is billed per ~65-char segment.
+                String url = replyPageService.createShortReplyPageFor(persisted);
+                persisted.setBodyText(body.replace(MessageService.REPLY_URL_PLACEHOLDER, url));
+                persisted.setSentBodyText(MessageService.clipForTransmission(body, url));
+                persisted.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
+                messageRepository.save(persisted);
+            }
+        }
+        log.info("SMS broadcast {} created: {} queued (filter matched {}, skipped no-phone {})",
+                saved.getId(), saved.getTotalCount(), targets.size(), unsendableIds.size());
+        return saved;
     }
 
     /**

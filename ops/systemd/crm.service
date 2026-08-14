@@ -1,6 +1,6 @@
 [Unit]
 Description=CRM Carrier Messaging Platform
-Documentation=https://49.212.164.254
+Documentation=https://103.96.120.13
 After=network-online.target user@1000.service
 Wants=network-online.target
 # MySQL runs as a USER systemd unit (container-crm-mysql.service under
@@ -17,7 +17,7 @@ WorkingDirectory=/home/centos/crm-platform
 Environment="JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk"
 Environment="SPRING_PROFILES_ACTIVE=dev"
 Environment="OUTBOUND_ADAPTER=relay"
-Environment="REPLY_BASE_URL=https://avu74g.jp"
+Environment="REPLY_BASE_URL=https://nbbv7g.jp"
 Environment="SESSION_COOKIE_SECURE=true"
 Environment="RELAY_URL=http://133.88.116.190:50000/api/mail/received"
 Environment="RELAY_SSH_HOST=133.88.116.190"
@@ -33,7 +33,7 @@ EnvironmentFile=-/etc/crm.env
 # eventually recover, but at the cost of a noisy boot.
 ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do (echo > /dev/tcp/127.0.0.1/3306) >/dev/null 2>&1 && exit 0; sleep 2; done; echo "MySQL on 3306 not reachable after 120s"; exit 1'
 
-ExecStart=/usr/lib/jvm/java-1.8.0-openjdk/bin/java -Xms512m -Xmx2g -jar /home/centos/crm-platform/target/crm.jar
+ExecStart=/usr/lib/jvm/java-1.8.0-openjdk/bin/java -Xms1g -Xmx8g -jar /home/centos/crm-platform/target/crm.jar
 
 SuccessExitStatus=143
 Restart=on-failure

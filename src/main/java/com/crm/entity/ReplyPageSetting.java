@@ -15,6 +15,10 @@ import java.time.LocalDateTime;
 @Table(name = "REPLY_PAGE_SETTING")
 public class ReplyPageSetting {
 
+    public static final String CSS_PREVIEW_ON = "ON";
+    public static final String CSS_PREVIEW_OFF = "OFF";
+    public static final String CSS_PREVIEW_HIDDEN = "HIDDEN";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -30,6 +34,9 @@ public class ReplyPageSetting {
 
     @Column(name = "REQUIRE_LOGIN")
     private Boolean requireLogin;
+
+    @Column(name = "CSS_PREVIEW_MODE", nullable = false, length = 16)
+    private String cssPreviewMode = CSS_PREVIEW_ON;
 
     @Column(name = "UPDATED_AT", nullable = false)
     private LocalDateTime updatedAt;
@@ -48,6 +55,8 @@ public class ReplyPageSetting {
     public void setFooterHtml(String v) { this.footerHtml = v; }
     public Boolean getRequireLogin() { return requireLogin; }
     public void setRequireLogin(Boolean v) { this.requireLogin = v; }
+    public String getCssPreviewMode() { return cssPreviewMode; }
+    public void setCssPreviewMode(String v) { this.cssPreviewMode = v; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
 }

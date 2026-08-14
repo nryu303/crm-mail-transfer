@@ -197,11 +197,19 @@ public class AdCodeService {
             else if ("F".equalsIgnoreCase(gender)) arr[1] = arr[1].add(sum);
             else arr[2] = arr[2].add(sum);
         }
+        // ログイン数（累計）: users referred by this ad_code who have logged in at least once
+        // (LAST_LOGIN_AT IS NOT NULL). Cumulative, no date window — same 累計 semantics as
+        // 登録/入金 above. See CrmUserRepository#countLoggedInByAdCode.
+        java.util.Map<String, Long> loginCountByCode = new java.util.HashMap<>();
+        for (Object[] r : userRepository.countLoggedInByAdCode()) {
+            loginCountByCode.put((String) r[0], ((Number) r[1]).longValue());
+        }
         for (AdCode a : filtered) {
             long[] s = signupsByCode.getOrDefault(a.getCode(), new long[3]);
             java.math.BigDecimal[] p = paidByCode.getOrDefault(a.getCode(),
                     new java.math.BigDecimal[]{java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO});
-            result.add(new CodeSummary(a, s[0], s[1], s[2], p[0], p[1], p[2]));
+            long loginCount = loginCountByCode.getOrDefault(a.getCode(), 0L);
+            result.add(new CodeSummary(a, s[0], s[1], s[2], p[0], p[1], p[2], loginCount));
         }
         return result;
     }
@@ -281,10 +289,12 @@ public class AdCodeService {
         public final AdCode adCode;
         public final long signupMale, signupFemale, signupOther;
         public final java.math.BigDecimal paidMale, paidFemale, paidOther;
+        /** ログイン数（累計）: users referred by this code with LAST_LOGIN_AT IS NOT NULL. */
+        public final long loginCount;
         public CodeSummary(AdCode adCode,
                            long signupMale, long signupFemale, long signupOther,
                            java.math.BigDecimal paidMale, java.math.BigDecimal paidFemale,
-                           java.math.BigDecimal paidOther) {
+                           java.math.BigDecimal paidOther, long loginCount) {
             this.adCode = adCode;
             this.signupMale = signupMale;
             this.signupFemale = signupFemale;
@@ -292,6 +302,7 @@ public class AdCodeService {
             this.paidMale = paidMale;
             this.paidFemale = paidFemale;
             this.paidOther = paidOther;
+            this.loginCount = loginCount;
         }
         public AdCode getAdCode() { return adCode; }
         public long getSignupMale() { return signupMale; }
@@ -300,6 +311,7 @@ public class AdCodeService {
         public java.math.BigDecimal getPaidMale() { return paidMale; }
         public java.math.BigDecimal getPaidFemale() { return paidFemale; }
         public java.math.BigDecimal getPaidTotal() { return paidMale.add(paidFemale).add(paidOther); }
+        public long getLoginCount() { return loginCount; }
     }
 
     public static class DailyStat {
@@ -355,6 +367,10 @@ public class AdCodeService {
             else if ("F".equalsIgnoreCase(gender)) row.paidFemale = row.paidFemale.add(sum);
             else row.paidOther = row.paidOther.add(sum);
         }
+        for (Object[] r : userRepository.countLoggedInByAdCode()) {
+            AgencyRow row = byCode.get((String) r[0]);
+            if (row != null) row.loginCount = ((Number) r[1]).longValue();
+        }
 
         return new ArrayList<>(byCode.values());
     }
@@ -389,6 +405,7 @@ public class AdCodeService {
             g.paidMale   = g.paidMale.add(c.paidMale);
             g.paidFemale = g.paidFemale.add(c.paidFemale);
             g.paidOther  = g.paidOther.add(c.paidOther);
+            g.loginCount += c.loginCount;
             if (g.firstCreatedAt == null
                     || (c.adCode.getCreatedAt() != null && c.adCode.getCreatedAt().isBefore(g.firstCreatedAt))) {
                 g.firstCreatedAt = c.adCode.getCreatedAt();
@@ -405,6 +422,8 @@ public class AdCodeService {
         public java.math.BigDecimal paidMale = java.math.BigDecimal.ZERO;
         public java.math.BigDecimal paidFemale = java.math.BigDecimal.ZERO;
         public java.math.BigDecimal paidOther = java.math.BigDecimal.ZERO;
+        /** ログイン数（累計）: sum across every code in this group. */
+        public long loginCount;
         public LocalDateTime firstCreatedAt;
         public GroupSummary(String name, String slug) { this.name = name; this.slug = slug; }
         public String getName() { return name; }
@@ -416,6 +435,7 @@ public class AdCodeService {
         public java.math.BigDecimal getPaidMale() { return paidMale; }
         public java.math.BigDecimal getPaidFemale() { return paidFemale; }
         public java.math.BigDecimal getPaidTotal() { return paidMale.add(paidFemale).add(paidOther); }
+        public long getLoginCount() { return loginCount; }
         public LocalDateTime getFirstCreatedAt() { return firstCreatedAt; }
     }
 
@@ -482,6 +502,8 @@ public class AdCodeService {
         public java.math.BigDecimal paidMale = java.math.BigDecimal.ZERO;
         public java.math.BigDecimal paidFemale = java.math.BigDecimal.ZERO;
         public java.math.BigDecimal paidOther = java.math.BigDecimal.ZERO;
+        /** ログイン数（累計）: same cumulative semantics as CodeSummary#loginCount, not month-scoped. */
+        public long loginCount;
         public AgencyRow(String code, String name) { this.code = code; this.name = name; }
         public String getCode() { return code; }
         public String getName() { return name; }
@@ -491,6 +513,7 @@ public class AdCodeService {
         public java.math.BigDecimal getPaidMale() { return paidMale; }
         public java.math.BigDecimal getPaidFemale() { return paidFemale; }
         public java.math.BigDecimal getPaidTotal() { return paidMale.add(paidFemale).add(paidOther); }
+        public long getLoginCount() { return loginCount; }
     }
 
     public static class DailyGenderStat {

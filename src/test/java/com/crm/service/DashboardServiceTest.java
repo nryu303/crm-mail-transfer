@@ -83,6 +83,26 @@ class DashboardServiceTest {
         assertThat(out.size()).isBetween(28, 31);
     }
 
+    /**
+     * The dashboard shows SMS送信数 and メール送信数 as two separate, non-summed series
+     * (operator request 2026-07-14 — previously メール送信数 silently included SMS counts,
+     * making the combined "送信数" bar look inflated relative to the SMS-only bar next to it).
+     */
+    @Test
+    void hourlySend_emailSent_excludesSmsFromCombinedTotal() {
+        when(msgRepo.countByDirectionBetween(eq(Message.DIR_OUT), any(), any())).thenReturn(10L);
+        when(msgRepo.countByDirectionAndChannelBetween(eq(Message.DIR_OUT), eq(Message.CHANNEL_SMS), any(), any()))
+                .thenReturn(4L);
+
+        List<DashboardService.HourlySend> out = svc.dailyBuckets(
+                LocalDate.of(2026, 5, 10), LocalDate.of(2026, 5, 10));
+
+        assertThat(out).hasSize(1);
+        assertThat(out.get(0).getSent()).isEqualTo(10L);
+        assertThat(out.get(0).getSmsSent()).isEqualTo(4L);
+        assertThat(out.get(0).getEmailSent()).isEqualTo(6L);
+    }
+
     @Test
     void monthlyBuckets_emitsOneBucketPerMonthIncludingEnd() {
         List<DashboardService.HourlySend> out = svc.monthlyBuckets(

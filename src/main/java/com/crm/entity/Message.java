@@ -20,6 +20,7 @@ public class Message {
     public static final String CHANNEL_EMAIL = "EMAIL";
     public static final String CHANNEL_WEB_REPLY = "WEB_REPLY";
     public static final String CHANNEL_BROADCAST = "BROADCAST";
+    public static final String CHANNEL_SMS = "SMS";
 
     public static final String STATUS_DRAFT = "DRAFT";
     public static final String STATUS_QUEUED = "QUEUED";
@@ -78,6 +79,15 @@ public class Message {
     @Column(name = "INBOX_DISMISSED_AT")
     private LocalDateTime inboxDismissedAt;
 
+    @Column(name = "EXCLUDED_FROM_BOX", nullable = false)
+    private Boolean excludedFromBox;
+
+    @Column(name = "SENT_BODY_TEXT", columnDefinition = "LONGTEXT")
+    private String sentBodyText;
+
+    @Column(name = "BOX_DISMISSED_AT")
+    private LocalDateTime boxDismissedAt;
+
     @Column(name = "ERROR_MESSAGE", columnDefinition = "TEXT")
     private String errorMessage;
 
@@ -109,6 +119,7 @@ public class Message {
         updatedAt = now;
         if (status == null) status = STATUS_DRAFT;
         if (sendAttempts == null) sendAttempts = 0;
+        if (excludedFromBox == null) excludedFromBox = Boolean.FALSE;
     }
 
     @PreUpdate
@@ -148,6 +159,12 @@ public class Message {
     public void setReadAt(LocalDateTime readAt) { this.readAt = readAt; }
     public LocalDateTime getInboxDismissedAt() { return inboxDismissedAt; }
     public void setInboxDismissedAt(LocalDateTime inboxDismissedAt) { this.inboxDismissedAt = inboxDismissedAt; }
+    public Boolean getExcludedFromBox() { return excludedFromBox; }
+    public void setExcludedFromBox(Boolean excludedFromBox) { this.excludedFromBox = excludedFromBox; }
+    public String getSentBodyText() { return sentBodyText; }
+    public void setSentBodyText(String sentBodyText) { this.sentBodyText = sentBodyText; }
+    public LocalDateTime getBoxDismissedAt() { return boxDismissedAt; }
+    public void setBoxDismissedAt(LocalDateTime boxDismissedAt) { this.boxDismissedAt = boxDismissedAt; }
     public String getErrorMessage() { return errorMessage; }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
     public Integer getSendAttempts() { return sendAttempts; }

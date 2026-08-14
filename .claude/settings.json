@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git config *)",
+      "Bash(mvn -q -DskipTests compile)",
+      "Bash(mvn -q test -Dtest=ExternalLinkDomainServiceTest,DomainSettingServiceTest,RelayServerServiceTest)",
+      "Bash(mvn -q -DskipTests package)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(timeout 15 sshpass -p 'ggg1234GG!!!' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 root@133.88.116.190 \"ls -la /etc/nginx/conf.d/; echo '---ssl.conf---'; cat /etc/nginx/conf.d/ssl.conf\")",
+      "Bash(curl -s -b /tmp/claude-0/-home-centos-crm-platform/2c0e58d4-f0e3-4d8d-a7b1-c7b7317e5062/scratchpad/obob_cookies.txt -c /tmp/claude-0/-home-centos-crm-platform/2c0e58d4-f0e3-4d8d-a7b1-c7b7317e5062/scratchpad/obob_cookies.txt -o /dev/null -w 'login POST: HTTP %{http_code}\\\\n' -d loginId=admin240 -d password=admin240 http://133.88.116.190:50000/manager/login)",
+      "Bash(curl -s -b /tmp/claude-0/-home-centos-crm-platform/2c0e58d4-f0e3-4d8d-a7b1-c7b7317e5062/scratchpad/obob_cookies.txt -c /tmp/claude-0/-home-centos-crm-platform/2c0e58d4-f0e3-4d8d-a7b1-c7b7317e5062/scratchpad/obob_cookies.txt -o /tmp/claude-0/-home-centos-crm-platform/2c0e58d4-f0e3-4d8d-a7b1-c7b7317e5062/scratchpad/obob_manager.html -w 'HTTP %{http_code}\\\\n' http://133.88.116.190:50000/manager/)",
+      "Bash(curl -sk -o /dev/null -w \"HTTP %{http_code}, cert-issue=%{ssl_verify_result}\\\\n\" -m 8 \"https://ep84ti.jp/\")",
+      "Bash(nslookup ep84ti.jp)",
+      "Bash(mysql -h127.0.0.1 -P3306 -ucrm_user -pcrm_user_dev_2026 crm -e ' *)",
+      "Bash(openssl s_client -connect 127.0.0.1:443 -servername ep84ti.jp)",
+      "Bash(openssl x509 *)",
+      "Bash(curl -s -o /dev/null -w \"https://ep84ti.jp full chain check: HTTP %{http_code}\\\\n\" -m 8 \"https://ep84ti.jp/manager/login\")",
+      "Bash(mysql -h127.0.0.1 -P3306 -ucrm_user -pcrm_user_dev_2026 crm -e \"SELECT ID, DOMAIN_URL, CERT_STATUS FROM EXTERNAL_LINK_DOMAIN;\")",
+      "Bash(timeout 15 sshpass -p 'ggg1234GG!!!' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 root@133.88.116.190 \"wc -l /usr/local/bin/sms-relay.py; echo '---'; cat /usr/local/bin/sms-relay.py\")",
+      "Bash(SSHPASS=ggg1234GG!!! sshpass -e ssh -o StrictHostKeyChecking=no root@133.88.116.190 ' *)",
+      "Bash(git log *)"
+    ]
+  }
+}

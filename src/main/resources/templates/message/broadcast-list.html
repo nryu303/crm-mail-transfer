@@ -39,7 +39,8 @@
 <body>
 <section layout:fragment="content">
     <div class="flex items-center mb-4 flex-wrap gap-2">
-        <h1 class="text-2xl font-semibold text-slate-800 flex-1">一斉送信返信履歴</h1>
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1"
+            th:text="${channel == 'SMS'} ? 'SMS配信履歴' : '一斉送信返信履歴'">一斉送信返信履歴</h1>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
            th:href="@{/manager/messages}">← 個別メッセージ管理へ</a>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
@@ -53,9 +54,11 @@
     <!-- Address search bar -->
     <form method="get" th:action="@{/manager/messages/broadcast}" class="bg-white rounded-lg shadow-sm border border-slate-100 p-3 mb-4">
         <div class="search-bar">
-            <label class="text-xs text-slate-500 font-semibold">アドレス検索:</label>
+            <label class="text-xs text-slate-500 font-semibold"
+                   th:text="${channel == 'SMS'} ? '番号検索:' : 'アドレス検索:'">アドレス検索:</label>
             <input type="text" name="addr" th:value="${addr}"
-                   placeholder="宛先 / FROM のメールアドレスで絞り込み (部分一致)"/>
+                   th:placeholder="${channel == 'SMS'} ? '宛先の電話番号で絞り込み (部分一致)' : '宛先 / FROM のメールアドレスで絞り込み (部分一致)'"/>
+            <input type="hidden" name="channel" th:value="${channel}"/>
             <button type="submit" class="btn primary">検索</button>
             <a class="btn ghost" th:href="@{/manager/messages/broadcast}" th:if="${addr != null and addr != ''}">クリア</a>
             <span class="ml-auto text-xs text-slate-400">
@@ -72,16 +75,16 @@
                 <th class="px-3 py-2 text-left" style="width:36px;"><input type="checkbox" id="bcastMsgCheckAll" title="全選択"/></th>
                 <th class="px-3 py-2 text-left" style="width:60px;">No</th>
                 <th class="px-3 py-2 text-left" style="width:90px;">種別</th>
-                <th class="px-3 py-2 text-left">メールアドレス</th>
+                <th class="px-3 py-2 text-left" th:text="${channel == 'SMS'} ? '番号' : 'メールアドレス'">メールアドレス</th>
                 <th class="px-3 py-2 text-left">FROM</th>
                 <th class="px-3 py-2 text-left">表示名</th>
                 <th class="px-3 py-2 text-left">広告コード</th>
                 <th class="px-3 py-2 text-left">フォルダ</th>
-                <th class="px-3 py-2 text-left">件名</th>
+                <th class="px-3 py-2 text-left" th:unless="${channel == 'SMS'}">件名</th>
                 <th class="px-3 py-2 text-left col-body">本文</th>
                 <th class="px-3 py-2 text-left" style="width:110px;">ステータス</th>
                 <th class="px-3 py-2 text-left" style="width:130px;">予約日時</th>
-                <th class="px-3 py-2 text-left" style="width:130px;">送信/受信日時</th>
+                <th class="px-3 py-2 text-left" style="width:130px;" th:text="${channel == 'SMS'} ? '送信日時' : '送信/受信日時'">送信/受信日時</th>
             </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -95,7 +98,10 @@
                 <td class="px-3 py-2"><input type="checkbox" class="bcast-msg-row-item" name="ids" th:value="${m.id}"/></td>
                 <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${messages.number * messages.size + it.count}"></code></td>
                 <td class="px-3 py-2">
-                    <span th:if="${m.direction == 'OUT'}"
+                    <span th:if="${m.direction == 'OUT' and m.channel == 'SMS'}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800"
+                          title="SMS配信">SMS配信</span>
+                    <span th:if="${m.direction == 'OUT' and m.channel != 'SMS'}"
                           class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700"
                           title="管理者送信">一斉送信</span>
                     <span th:if="${m.direction == 'IN' and m.channel == 'WEB_REPLY'}"
@@ -106,7 +112,10 @@
                           title="ユーザーからの直接メール返信">メール返信</span>
                 </td>
                 <td class="px-3 py-2 text-xs">
-                    <a class="text-blue-600 hover:underline whitespace-nowrap"
+                    <a th:if="${channel == 'SMS'}" class="text-blue-600 hover:underline whitespace-nowrap"
+                       th:href="@{'/manager/users/' + ${m.userId}}" target="_blank"
+                       th:text="${m.toAddress} ?: '-'">-</a>
+                    <a th:unless="${channel == 'SMS'}" class="text-blue-600 hover:underline whitespace-nowrap"
                        th:href="@{'/manager/users/' + ${m.userId}}" target="_blank"
                        th:text="${userEmails != null and userEmails.get(m.userId) != null} ? ${userEmails.get(m.userId)} : '-'">-</a>
                 </td>
@@ -118,7 +127,7 @@
                     th:text="${userAdCodes != null and userAdCodes.get(m.userId) != null} ? ${userAdCodes.get(m.userId)} : '-'"></td>
                 <td class="px-3 py-2 text-xs text-slate-500"
                     th:text="${userFolders != null and userFolders.get(m.userId) != null} ? ${userFolders.get(m.userId)} : '-'"></td>
-                <td class="px-3 py-2 text-xs text-slate-700 truncate" style="max-width:200px;" th:text="${m.subject} ?: '(件名なし)'"></td>
+                <td class="px-3 py-2 text-xs text-slate-700 truncate" style="max-width:200px;" th:unless="${channel == 'SMS'}" th:text="${m.subject} ?: '(件名なし)'"></td>
                 <td class="px-3 py-2 col-body">
                     <div class="body-text" th:text="${m.bodyText}"></div>
                 </td>
@@ -156,18 +165,18 @@
             <li>
                 <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                    th:classappend="${messages.first} ? 'opacity-50 pointer-events-none'"
-                   th:href="@{/manager/messages/broadcast(page=${messages.number - 1},addr=${addr})}">前へ</a>
+                   th:href="@{/manager/messages/broadcast(page=${messages.number - 1},addr=${addr},channel=${channel})}">前へ</a>
             </li>
             <li th:each="i : ${#numbers.sequence(0, messages.totalPages - 1)}"
                 th:if="${i &lt; 10 or (i &gt;= messages.number - 2 and i &lt;= messages.number + 2) or i &gt;= messages.totalPages - 3}">
                 <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                    th:classappend="${i == messages.number} ? 'bg-blue-600 text-white border-blue-600'"
-                   th:href="@{/manager/messages/broadcast(page=${i},addr=${addr})}" th:text="${i + 1}"></a>
+                   th:href="@{/manager/messages/broadcast(page=${i},addr=${addr},channel=${channel})}" th:text="${i + 1}"></a>
             </li>
             <li>
                 <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                    th:classappend="${messages.last} ? 'opacity-50 pointer-events-none'"
-                   th:href="@{/manager/messages/broadcast(page=${messages.number + 1},addr=${addr})}">次へ</a>
+                   th:href="@{/manager/messages/broadcast(page=${messages.number + 1},addr=${addr},channel=${channel})}">次へ</a>
             </li>
         </ul>
     </nav>

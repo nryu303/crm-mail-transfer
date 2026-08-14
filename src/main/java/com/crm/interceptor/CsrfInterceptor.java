@@ -61,6 +61,13 @@ public class CsrfInterceptor implements HandlerInterceptor {
     private static final Pattern REPLY_EXEMPT = Pattern.compile(
             "^/reply/[A-Za-z0-9_-]+(/send|/attachment)?$");
 
+    /**
+     * BytePlus SMS inbound (MO) webhook — external caller, no session, auth is the random
+     * token in the path itself (SmsInboundApiController checks it). Exact pattern (not a
+     * prefix) so no other future /api/inbound/** endpoint silently inherits the bypass.
+     */
+    private static final Pattern SMS_INBOUND_EXEMPT = Pattern.compile("^/api/inbound/sms/[A-Za-z0-9]+$");
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         HttpSession session = request.getSession(true);
@@ -83,6 +90,7 @@ public class CsrfInterceptor implements HandlerInterceptor {
         // meaningful there. Rate-limiting guards that endpoint instead. Match exact patterns
         // only (not a prefix) so future /reply/* endpoints don't auto-inherit the bypass.
         if (path != null && REPLY_EXEMPT.matcher(path).matches()) return true;
+        if (path != null && SMS_INBOUND_EXEMPT.matcher(path).matches()) return true;
         // /media/** is the agency dashboard — gated by Basic Auth, no admin session, GET-only.
         if (path != null && path.startsWith("/media/")) return true;
 

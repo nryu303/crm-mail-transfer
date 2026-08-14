@@ -1,6 +1,7 @@
 package com.crm.service;
 
 import com.crm.entity.CarrierAddressPool;
+import com.crm.entity.CrmUser;
 import com.crm.entity.Message;
 import com.crm.repository.CarrierAddressPoolRepository;
 import com.crm.repository.CrmUserRepository;
@@ -11,8 +12,11 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationContext;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -39,9 +43,13 @@ class MessageServiceTest {
     private CarrierBindingService bindingService;
     private PlaceholderService placeholderService;
     private OutboundMailService outboundMail;
+    private OutboundSmsService outboundSms;
+    private SmsSettingService smsSettingService;
     private AesEncryptionUtil aes;
     private ReplyPageService replyPageService;
     private ApplicationContext ctx;
+
+    private DomainSettingService domainSettings;
 
     private MessageService svc;
 
@@ -53,13 +61,16 @@ class MessageServiceTest {
         bindingService = mock(CarrierBindingService.class);
         placeholderService = mock(PlaceholderService.class);
         outboundMail = mock(OutboundMailService.class);
+        outboundSms = mock(OutboundSmsService.class);
+        smsSettingService = mock(SmsSettingService.class);
         aes = mock(AesEncryptionUtil.class);
         replyPageService = mock(ReplyPageService.class);
         ctx = mock(ApplicationContext.class);
-        DomainSettingService domainSettings = mock(DomainSettingService.class);
+        domainSettings = mock(DomainSettingService.class);
 
         svc = new MessageService(messageRepo, userRepo, poolRepo, bindingService,
-                placeholderService, outboundMail, aes, replyPageService, domainSettings, ctx);
+                placeholderService, outboundMail, outboundSms, smsSettingService,
+                aes, replyPageService, domainSettings, ctx);
     }
 
     private static Message queued() {
@@ -192,6 +203,55 @@ class MessageServiceTest {
         assertThat(m.getSendAttempts()).isEqualTo(1);
     }
 
+    /**
+     * composeSms() previously called placeholderService.substitute() but never handled
+     * %reply_url% (unlike compose(), the email equivalent) — an SMS reply containing that
+     * tag went out to the user with the literal placeholder text still in it. Regression
+     * test for the fix (2026-07-09): composeSms must create a reply page and substitute
+     * the real URL, exactly like compose() does.
+     */
+    @Test
+    void composeSms_replyUrlPlaceholder_isSubstitutedWithRealUrl() {
+        CrmUser user = new CrmUser();
+        user.setId(108L);
+        user.setPhoneNumber("09093749952");
+        when(userRepo.findById(108L)).thenReturn(Optional.of(user));
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createShortReplyPageFor(any(Message.class)))
+                .thenReturn("https://nbbv7g.jp/reply/abc123");
+        when(outboundSms.send(any())).thenReturn(OutboundSmsService.SendResult.ok());
+
+        com.crm.dto.SmsComposeForm form = new com.crm.dto.SmsComposeForm();
+        form.setBody("test %reply_url%");
+
+        Message saved = svc.composeSms(108L, 1L, form);
+
+        assertThat(saved.getBodyText()).isEqualTo("test https://nbbv7g.jp/reply/abc123");
+        assertThat(saved.getBodyText()).doesNotContain("%reply_url%");
+    }
+
+    @Test
+    void composeSms_withoutReplyUrlPlaceholder_doesNotCreateReplyPage() {
+        CrmUser user = new CrmUser();
+        user.setId(108L);
+        user.setPhoneNumber("09093749952");
+        when(userRepo.findById(108L)).thenReturn(Optional.of(user));
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(outboundSms.send(any())).thenReturn(OutboundSmsService.SendResult.ok());
+
+        com.crm.dto.SmsComposeForm form = new com.crm.dto.SmsComposeForm();
+        form.setBody("plain test, no tag");
+
+        Message saved = svc.composeSms(108L, 1L, form);
+
+        assertThat(saved.getBodyText()).isEqualTo("plain test, no tag");
+        verify(replyPageService, never()).createShortReplyPageFor(any());
+    }
+
     @Test
     void retryBackoff_increasesExponentiallyAndCapsAt30Min() throws Exception {
         // We exercise the private helper indirectly: attempts 1..6 give backoffs 1,2,4,8,16,30
@@ -214,5 +274,194 @@ class MessageServiceTest {
                 assertThat(actualMinutes).isBetween(expectedMinutes - 1, expectedMinutes);
             }
         }
+    }
+
+    /**
+     * compose() (individual email send) must reject an SMS-only user (email blank, phone
+     * set — the CSV-import case fixed for the client's 2,571-row import) with a clear
+     * MessageException rather than sending a message with a null TO_ADDRESS.
+     */
+    @Test
+    void compose_userHasNoEmail_throwsMessageException() {
+        CrmUser phoneOnly = new CrmUser();
+        phoneOnly.setId(7L);
+        phoneOnly.setEmail(null);
+        phoneOnly.setPhoneNumber("09012345678");
+        when(userRepo.findById(7L)).thenReturn(Optional.of(phoneOnly));
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("b");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> svc.compose(7L, 1L, form))
+                .isInstanceOf(MessageService.MessageException.class)
+                .hasMessageContaining("メールアドレスが未登録");
+    }
+
+    // ===== メッセージボックス: 15-char clip + sentBodyText / excludedFromBox =====
+
+    @Test
+    void sendNow_prefersSentBodyTextOverBodyTextWhenPresent() {
+        Message m = queued();
+        m.setBodyText("full untouched body for メッセージボックス");
+        m.setSentBodyText("clipped-transmit-text");
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        svc.sendNow(m, null);
+
+        ArgumentCaptor<OutboundMailService.OutboundRequest> reqCap =
+                ArgumentCaptor.forClass(OutboundMailService.OutboundRequest.class);
+        verify(outboundMail).send(reqCap.capture());
+        assertThat(reqCap.getValue().body).isEqualTo("clipped-transmit-text");
+        // BODY_TEXT itself must remain untouched — it's what メッセージボックス displays.
+        assertThat(m.getBodyText()).isEqualTo("full untouched body for メッセージボックス");
+    }
+
+    @Test
+    void sendNow_fallsBackToBodyTextWhenSentBodyTextNull() {
+        Message m = queued();
+        m.setBodyText("plain body, no reply url");
+        m.setSentBodyText(null);
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        svc.sendNow(m, null);
+
+        ArgumentCaptor<OutboundMailService.OutboundRequest> reqCap =
+                ArgumentCaptor.forClass(OutboundMailService.OutboundRequest.class);
+        verify(outboundMail).send(reqCap.capture());
+        assertThat(reqCap.getValue().body).isEqualTo("plain body, no reply url");
+    }
+
+    @Test
+    void clipForTransmission_keepsFirst15CharsPlusUrl() {
+        String result = MessageService.clipForTransmission(
+                "1234567890123456789%reply_url%tail", "https://x.jp/reply/abc");
+        // First 15 chars of the pre-swap string: "123456789012345"
+        assertThat(result).isEqualTo("123456789012345https://x.jp/reply/abc");
+    }
+
+    @Test
+    void clipForTransmission_tagWellWithinWindow_stripsTagCleanly() {
+        // "hi " (3 chars) + the %reply_url% tag together fit comfortably inside the 15-char
+        // window, so the tag is fully removed and only "hi " precedes the expanded URL.
+        String result = MessageService.clipForTransmission(
+                "hi %reply_url%", "https://x.jp/reply/abc");
+        assertThat(result).isEqualTo("hi https://x.jp/reply/abc");
+    }
+
+    @Test
+    void clipForTransmission_tagStraddlingWindowBoundary_leavesPartialTagText() {
+        // Edge case: the %reply_url% tag straddles the 15-char boundary, so only part of the
+        // literal tag text falls inside the clipped prefix and isn't recognised/stripped as a
+        // whole token. Documents the current (accepted) behaviour rather than asserting an
+        // idealised one — operators are expected to place %reply_url% at the end of short
+        // bodies, not mid-window, given the 15-char rule.
+        String result = MessageService.clipForTransmission(
+                "short %reply_url%", "https://x.jp/reply/abc");
+        assertThat(result).isEqualTo("short %reply_urhttps://x.jp/reply/abc");
+    }
+
+    @Test
+    void compose_withReplyUrl_clipsSentBodyTextAndKeepsFullBodyText() {
+        CrmUser user = new CrmUser();
+        user.setId(50L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(50L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(50L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createReplyPageFor(any(Message.class)))
+                .thenReturn("https://nbbv7g.jp/reply/abc123");
+        when(domainSettings.isActiveLinkDomainExternalLanding()).thenReturn(false);
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("0123456789012345678%reply_url%");
+
+        Message saved = svc.compose(50L, 1L, form);
+
+        assertThat(saved.getBodyText())
+                .isEqualTo("0123456789012345678https://nbbv7g.jp/reply/abc123");
+        assertThat(saved.getSentBodyText())
+                .isEqualTo("012345678901234https://nbbv7g.jp/reply/abc123");
+        assertThat(saved.getExcludedFromBox()).isFalse();
+    }
+
+    @Test
+    void compose_withoutReplyUrl_leavesSentBodyTextNull() {
+        CrmUser user = new CrmUser();
+        user.setId(51L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(51L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(51L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("plain body, no tag");
+
+        Message saved = svc.compose(51L, 1L, form);
+
+        assertThat(saved.getBodyText()).isEqualTo("plain body, no tag");
+        assertThat(saved.getSentBodyText()).isNull();
+        verify(replyPageService, never()).createReplyPageFor(any());
+    }
+
+    @Test
+    void compose_activeExternalLinkDomainRedirectMode_setsExcludedFromBoxTrue() {
+        CrmUser user = new CrmUser();
+        user.setId(52L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(52L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(52L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createReplyPageFor(any(Message.class)))
+                .thenReturn("https://external.jp/reply/xyz");
+        when(domainSettings.isActiveLinkDomainExternalLanding()).thenReturn(true);
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("body %reply_url%");
+
+        Message saved = svc.compose(52L, 1L, form);
+
+        assertThat(saved.getExcludedFromBox()).isTrue();
+    }
+
+    @Test
+    void composeSms_withReplyUrl_clipsSentBodyTextAndKeepsFullBodyText() {
+        CrmUser user = new CrmUser();
+        user.setId(53L);
+        user.setPhoneNumber("09012345678");
+        when(userRepo.findById(53L)).thenReturn(Optional.of(user));
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createShortReplyPageFor(any(Message.class)))
+                .thenReturn("https://nbbv7g.jp/r/ab12");
+        when(domainSettings.isActiveLinkDomainExternalLanding()).thenReturn(false);
+        when(outboundSms.send(any())).thenReturn(OutboundSmsService.SendResult.ok());
+
+        com.crm.dto.SmsComposeForm form = new com.crm.dto.SmsComposeForm();
+        form.setBody("0123456789012345678%reply_url%");
+
+        Message saved = svc.composeSms(53L, 1L, form);
+
+        assertThat(saved.getBodyText())
+                .isEqualTo("0123456789012345678https://nbbv7g.jp/r/ab12");
+        assertThat(saved.getSentBodyText())
+                .isEqualTo("012345678901234https://nbbv7g.jp/r/ab12");
+        assertThat(saved.getExcludedFromBox()).isFalse();
     }
 }

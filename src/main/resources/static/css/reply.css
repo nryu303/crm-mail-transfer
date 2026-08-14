@@ -133,3 +133,130 @@ body {
         font-size: 15px;
     }
 }
+
+/* メッセージボックス (message box / inbox history) — shared by the public /reply/{token}
+   footer section and the admin /manager/users/{id}/message-box preview (fragment/message-box.html). */
+
+.message-box-shell {
+    padding: 16px 18px 24px;
+    border-top: 1px solid #d7d7d7;
+}
+
+.message-box-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.message-box-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+.message-box-delete-btn {
+    padding: 6px 14px;
+    background: #b91c1c;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.message-box-delete-btn:hover {
+    background: #991616;
+}
+
+.message-box-empty {
+    padding: 20px 0;
+    text-align: center;
+    color: #999;
+    font-size: 14px;
+}
+
+.message-box-item {
+    background: #fff;
+    border: 1px solid #d7d7d7;
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+
+.message-box-item-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.message-box-checkbox {
+    width: 16px;
+    height: 16px;
+}
+
+.message-box-date {
+    font-size: 13px;
+    color: #666;
+}
+
+.message-box-body {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #1f1f1f;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.message-box-divider {
+    border-top: 1px dashed #d7d7d7;
+    margin: 12px 0;
+}
+
+/* Fixed, de-emphasized label so the user doesn't mistake this for something deletable —
+   the whole item can only be removed from the admin side (message-box-checkbox above). */
+.message-box-reply-label {
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 6px;
+}
+
+.message-box-reply-form {
+    padding: 0;
+    margin-top: 4px;
+}
+
+.message-box-reply-form textarea {
+    min-height: 70px;
+}
+
+.message-box-reply-form .actions {
+    margin-top: 8px;
+}
+
+.message-box-reply-form button {
+    width: auto;
+    padding: 6px 20px;
+    font-size: 14px;
+}
+
+.message-box-pager {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 14px;
+}
+
+.message-box-pager span {
+    margin: 0 4px;
+}
+
+.message-box-pager a {
+    color: #6e6e6e;
+    text-decoration: underline;
+}
+
+.message-box-pager strong {
+    color: #1f1f1f;
+}

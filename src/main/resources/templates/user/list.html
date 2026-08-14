@@ -170,9 +170,13 @@
                         <label class="block text-xs text-slate-500 mb-1">表示名 <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
                         <textarea class="tw-input" rows="2" th:field="*{displayName}" style="resize:none;font-size:.78rem;"></textarea>
                     </div>
+                    <div class="md:col-span-1">
+                        <label class="block text-xs text-slate-500 mb-1">電話番号 <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
+                        <textarea class="tw-input" rows="2" th:field="*{phoneNumber}" style="resize:none;font-size:.78rem;"></textarea>
+                    </div>
                     <!-- Compact selects (フォルダ・広告コード・性別・キャリア・累計送信・累計返信)
                          in a single row with search/clear buttons on the right edge of the row. -->
-                    <div class="md:col-span-9">
+                    <div class="md:col-span-8">
                         <div class="flex items-end gap-2 flex-wrap">
                             <div class="min-w-0" style="flex:1 1 0;">
                                 <label class="block text-xs text-slate-500 mb-1">
@@ -458,41 +462,60 @@
                 全 <strong th:text="${users.totalElements}"></strong> 件
                 （<span th:text="${users.number + 1}"></span> / <span th:text="${users.totalPages == 0 ? 1 : users.totalPages}"></span> ページ）
             </span>
+            <!-- Pagination preserves the FULL current query string (all filters — email, folders,
+                 adCodes, sentCount range, date ranges, etc.) via JS off window.location.search,
+                 swapping only the "page" param. The old approach hand-listed each filter field
+                 in every th:href here; every time a new filter was added to the search form (16+
+                 fields now) it silently stopped surviving page-2+ navigation unless someone
+                 remembered to update all 4 links here too — that's exactly the pagination bug
+                 reported 2026-08-07 (adCodes/sentCountMin/sentCountMax dropped on page 2, so the
+                 filtered 952-result search reverted to the unfiltered 5521 total). Fixed 2026-08-08. -->
             <nav th:if="${users.totalPages > 1}">
                 <ul class="flex items-center gap-1 text-sm">
                     <li>
-                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50 pagelink"
                            th:classappend="${users.first} ? 'opacity-50 pointer-events-none'"
-                           th:href="@{/manager/users(page=${users.number - 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}">前へ</a>
+                           th:attr="data-page=${users.number - 1}" href="#">前へ</a>
                     </li>
                     <!-- Windowed pagination: first page, an ellipsis,
                          a sliding window of current ± 2, an ellipsis, last page.
                          Avoids the 1..151 wall when totalPages is large. -->
                     <li th:if="${users.number > 2}">
-                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
-                           th:href="@{/manager/users(page=0,size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}">1</a>
+                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50 pagelink"
+                           th:attr="data-page=0" href="#">1</a>
                     </li>
                     <li th:if="${users.number > 3}" style="color:#94a3b8; padding:0 4px;">…</li>
                     <li th:each="i : ${#numbers.sequence(0, users.totalPages - 1)}"
                         th:if="${i >= users.number - 2 and i <= users.number + 2}">
-                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50 pagelink"
                            th:classappend="${i == users.number} ? 'bg-blue-600 text-white border-blue-600'"
-                           th:href="@{/manager/users(page=${i},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}"
-                           th:text="${i + 1}"></a>
+                           th:attr="data-page=${i}" href="#" th:text="${i + 1}"></a>
                     </li>
                     <li th:if="${users.number < users.totalPages - 4}" style="color:#94a3b8; padding:0 4px;">…</li>
                     <li th:if="${users.number < users.totalPages - 3}">
-                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
-                           th:href="@{/manager/users(page=${users.totalPages - 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}"
-                           th:text="${users.totalPages}"></a>
+                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50 pagelink"
+                           th:attr="data-page=${users.totalPages - 1}" href="#" th:text="${users.totalPages}"></a>
                     </li>
                     <li>
-                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                        <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50 pagelink"
                            th:classappend="${users.last} ? 'opacity-50 pointer-events-none'"
-                           th:href="@{/manager/users(page=${users.number + 1},size=${searchForm.size},email=${searchForm.email},displayName=${searchForm.displayName},emailDomains=${searchForm.emailDomains},status=${searchForm.status},folders=${searchForm.folders})}">次へ</a>
+                           th:attr="data-page=${users.number + 1}" href="#">次へ</a>
                     </li>
                 </ul>
             </nav>
+            <script>
+            (function () {
+                document.querySelectorAll('a.pagelink').forEach(function (a) {
+                    a.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        if (a.classList.contains('pointer-events-none')) return;
+                        var params = new URLSearchParams(window.location.search);
+                        params.set('page', a.getAttribute('data-page'));
+                        window.location.href = '/manager/users?' + params.toString();
+                    });
+                });
+            })();
+            </script>
         </div>
     </div>
 
@@ -530,6 +553,7 @@
 
         <div class="footer-divider"></div>
         <button type="button" class="btn-broadcast" id="btnBroadcast" disabled onclick="goBroadcast()">選択一斉送信</button>
+        <button type="button" class="btn-broadcast" id="btnBroadcastSms" disabled onclick="goBroadcast('SMS')">選択一斉SMS配信</button>
 
         <div class="footer-divider"></div>
         <button type="submit" class="btn-move" id="btnDelete" disabled
@@ -655,6 +679,7 @@ function formatFolderLabel(values) {
     var folderSel = document.getElementById('folderSelect');
     var btnMove = document.getElementById('btnMove');
     var btnBroad = document.getElementById('btnBroadcast');
+    var btnBroadSms = document.getElementById('btnBroadcastSms');
 
     function rows() { return document.querySelectorAll('.row-item'); }
 
@@ -711,6 +736,8 @@ function formatFolderLabel(values) {
         if (folderSel) folderSel.disabled = !enable;
         btnMove.disabled = !enable;
         btnBroad.disabled = !enable;
+        // SMS now supports folder/filter-scope targeting too (2026-08-08), same as email.
+        if (btnBroadSms) btnBroadSms.disabled = !enable;
         if (poolSel)          poolSel.disabled = !enable;
         if (btnBindCarrier)   btnBindCarrier.disabled = !enable;
         if (btnUnbindCarrier) btnUnbindCarrier.disabled = !enable;
@@ -731,6 +758,7 @@ function formatFolderLabel(values) {
             if (btnUnbindCarrier) { btnUnbindCarrier.textContent = 'フォルダ対象件数割り当て削除'; btnUnbindCarrier.style.background = '#7f1d1d'; }
             if (btnBindCarrier)   { btnBindCarrier.textContent = 'フォルダ対象件数割り当て'; btnBindCarrier.style.background = '#d97706'; }
             if (btnBroad)         { btnBroad.textContent = '対象件数一斉送信'; btnBroad.style.background = '#d97706'; }
+            if (btnBroadSms)      { btnBroadSms.textContent = '対象件数一斉SMS配信'; btnBroadSms.style.background = '#d97706'; }
         } else {
             btnMove.textContent = '選択フォルダ移動';
             btnMove.style.background = '';
@@ -738,6 +766,7 @@ function formatFolderLabel(values) {
             if (btnUnbindCarrier) { btnUnbindCarrier.textContent = '選択キャリア解除'; btnUnbindCarrier.style.background = ''; }
             if (btnBindCarrier)   { btnBindCarrier.textContent = '選択へキャリア割り当て'; btnBindCarrier.style.background = ''; }
             if (btnBroad)         { btnBroad.textContent = '選択一斉送信'; btnBroad.style.background = ''; }
+            if (btnBroadSms)      { btnBroadSms.textContent = '選択一斉SMS配信'; btnBroadSms.style.background = ''; }
         }
     }
     if (checkAll) checkAll.addEventListener('change', function () {
@@ -897,7 +926,7 @@ function formatFolderLabel(values) {
     // endpoint stays in place; if it's ever resurrected for an ops script, the poller can be
     // restored from git history.
 
-    window.goBroadcast = function () {
+    window.goBroadcast = function (channel) {
         // Mode priority matches the unified refresh() above:
         //   1. ROW SELECTION wins when any row is checked — even with a folder filter in
         //      the URL. (Client request 2026-05-19: 「フォルダ を選択した場合でも 左側のチェック
@@ -933,6 +962,14 @@ function formatFolderLabel(values) {
                 i.type = 'hidden'; i.name = 'userIds'; i.value = id;
                 f.appendChild(i);
             });
+            if (channel === 'SMS') {
+                var ch = document.createElement('input');
+                ch.type = 'hidden'; ch.name = 'channel'; ch.value = 'SMS';
+                f.appendChild(ch);
+            }
+        } else if (channel === 'SMS' && folders.length === 0) {
+            alert('SMS配信するユーザーを選択するか、フォルダで絞り込んでください。');
+            return;
         } else if (folders.length > 0) {
             // Folder-scope broadcast (no row checks, folder filter committed). Forward every
             // active filter param from the URL — folder alone is NOT enough; docomo carrier /
@@ -959,10 +996,16 @@ function formatFolderLabel(values) {
                     ? '実際の対象 ' + actualTarget.toLocaleString() + ' 名 (現在の絞り込み)'
                     : '上限 ' + (lim > 0 ? lim.toLocaleString() : '') + ' 名';
             var folderWord = folders.length === 1 ? 'フォルダ' : 'フォルダ (' + folders.length + ' 件)';
-            if (!confirm(folderWord + '「' + srcLabel + '」+ 現在の絞り込み条件で一斉送信します。\n' + actualText + '\n次の画面で本文を作成後に確定送信となります。よろしいですか?')) return;
+            var smsWord = channel === 'SMS' ? 'SMS' : '';
+            if (!confirm(folderWord + '「' + srcLabel + '」+ 現在の絞り込み条件で' + smsWord + '一斉送信します。\n' + actualText + '\n次の画面で本文を作成後に確定送信となります。よろしいですか?')) return;
 
             f.action = '/manager/messages/broadcast/new-from-folder';
             copyCsrf();
+            if (channel === 'SMS') {
+                var chf = document.createElement('input');
+                chf.type = 'hidden'; chf.name = 'channel'; chf.value = 'SMS';
+                f.appendChild(chf);
+            }
             // Mirror the URL's full filter set into the POST body so the server can re-apply
             // every filter (not just folder). page/size are stripped since broadcast wants
             // the unpaged result. URLSearchParams.forEach iterates EACH repeated key, so

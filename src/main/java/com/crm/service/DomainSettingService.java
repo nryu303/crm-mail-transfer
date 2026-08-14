@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.util.Optional;
 
 /**
  * Central source of truth for outbound FROM domain and reply-URL domain generation.
@@ -78,24 +79,53 @@ public class DomainSettingService {
      *  an explicit override. Range 1-600, default 60. */
     public static final String KEY_BROADCAST_RATE_PER_MIN = "broadcast.rate_per_min";
 
+    /** Show/hide the 「ログイン数（累計）」 column on 広告設定 (/manager/ad-codes). Off by
+     *  default so existing installs don't see a new column appear unannounced; the operator
+     *  opts in via a checkbox on the ad-codes list page. 2026-08-06, paid add-on (+5,000円). */
+    public static final String KEY_AD_CODE_SHOW_LOGIN_COUNT = "ad_code.show_login_count";
+
     private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
     private static final int MIN_LEN = 4;
     private static final int MAX_LEN = 64;
     private static final int DEFAULT_LEN = 16;
 
     private final CrmSettingRepository repository;
+    private final com.crm.repository.ExternalLinkDomainRepository externalLinkDomainRepository;
     private final SecureRandom random = new SecureRandom();
     private final String fallbackReplyBase;
 
     public DomainSettingService(CrmSettingRepository repository,
+                                com.crm.repository.ExternalLinkDomainRepository externalLinkDomainRepository,
                                 @Value("${app.reply-page.base-url:}") String fallbackReplyBase) {
         this.repository = repository;
+        this.externalLinkDomainRepository = externalLinkDomainRepository;
         this.fallbackReplyBase = (fallbackReplyBase == null) ? "" : fallbackReplyBase.replaceAll("/+$", "");
     }
 
+    /**
+     * The CRM's own base URL (本ドメイン), from the legacy single reply.base_url CRM_SETTING,
+     * falling back to app.reply-page.base-url. This is the CRM's real, fixed identity — used
+     * to display/edit ドメイン設定 and 本ドメイン表示設定, and by the agency dashboard
+     * (AdCodeController) to build its own externally-shared URLs.
+     *
+     * Deliberately does NOT consider 外部リンクドメイン生成 (EXTERNAL_LINK_DOMAIN) — that override
+     * is applied only inside {@link #buildReplyUrl(String)}, which is the one place it's
+     * semantically correct (building a %reply_url% short link). Mixing the two here previously
+     * caused ドメイン設定 / 本ドメイン表示設定 to display and even resave whichever external-link
+     * domain happened to be active, corrupting the real base-URL setting.
+     */
     public String getReplyBaseUrl() {
         String v = get(KEY_REPLY_BASE_URL);
         return (v == null || v.trim().isEmpty()) ? fallbackReplyBase : v.replaceAll("/+$", "");
+    }
+
+    /** SMS short-token length to use right now: the active 外部リンクドメイン's configured
+     *  value if set, otherwise {@link com.crm.util.TokenGenerator#DEFAULT_SHORT_LENGTH}. */
+    public int getActiveShortTokenLength() {
+        return externalLinkDomainRepository.findFirstByIsActiveTrue()
+                .map(com.crm.entity.ExternalLinkDomain::getShortTokenLength)
+                .filter(n -> n != null)
+                .orElse(com.crm.util.TokenGenerator.DEFAULT_SHORT_LENGTH);
     }
 
     public boolean isReplyRandomSubdomainEnabled() { return getBool(KEY_REPLY_RANDOM_SUBDOMAIN, true); }
@@ -168,6 +198,12 @@ public class DomainSettingService {
         if (n > 600) n = 600;
         save(KEY_BROADCAST_RATE_PER_MIN, String.valueOf(n));
     }
+
+    /** Off by default. Admin opts in via the checkbox on /manager/ad-codes. */
+    public boolean isAdCodeShowLoginCount() { return getBool(KEY_AD_CODE_SHOW_LOGIN_COUNT, false); }
+    public void setAdCodeShowLoginCount(boolean show) {
+        save(KEY_AD_CODE_SHOW_LOGIN_COUNT, show ? "true" : "false");
+    }
     public void setSenderNamePolicy(String mode, String fixedValue, String listText,
                                      int randomLength, String randomCase) {
         save(KEY_SENDER_NAME_MODE, mode == null ? "none" : mode.trim().toLowerCase());
@@ -190,8 +226,32 @@ public class DomainSettingService {
         } catch (NumberFormatException e) { return 60; }
     }
 
+    /**
+     * True when the 外部リンクドメイン that is 使用中 right now (the one {@link #buildReplyUrl}
+     * would use) is configured to REDIRECT or serve CUSTOM_HTML instead of the normal two-way
+     * reply form. Callers use this at compose time — the moment a %reply_url% is baked into a
+     * message body — to decide whether that message should be excluded from メッセージボックス,
+     * since a REDIRECT/CUSTOM_HTML landing never renders the reply form the box's per-item
+     * reply buttons rely on.
+     */
+    public boolean isActiveLinkDomainExternalLanding() {
+        return externalLinkDomainRepository.findFirstByIsActiveTrue()
+                .map(d -> com.crm.entity.ExternalLinkDomain.MODE_REDIRECT.equals(d.getLandingMode())
+                        || com.crm.entity.ExternalLinkDomain.MODE_CUSTOM_HTML.equals(d.getLandingMode()))
+                .orElse(false);
+    }
+
     /** Build a reply URL for a given token using current settings. */
     public String buildReplyUrl(String token) {
+        // 外部リンクドメイン生成: a pool domain is already a complete, opaque short domain
+        // (e.g. https://ii5gh9ge.jp) registered as-is with the operator's own DNS/forwarder —
+        // skip random-subdomain injection, which only applies to the legacy single-URL setting.
+        Optional<String> active = externalLinkDomainRepository.findFirstByIsActiveTrue()
+                .map(com.crm.entity.ExternalLinkDomain::getDomainUrl);
+        if (active.isPresent() && !active.get().trim().isEmpty()) {
+            return active.get().replaceAll("/+$", "") + "/reply/" + token;
+        }
+
         String base = getReplyBaseUrl();
         if (base.isEmpty()) return "/reply/" + token;
         // Inject subdomain between scheme and host if enabled

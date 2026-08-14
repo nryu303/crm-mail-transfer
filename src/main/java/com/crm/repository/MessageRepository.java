@@ -135,8 +135,10 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
             "    OR m.replyToMessageId IN (SELECT m2.id FROM Message m2 WHERE m2.broadcastId IS NOT NULL)" +
             ") AND (:addrLike IS NULL " +
             "       OR LOWER(m.toAddress) LIKE :addrLike " +
-            "       OR LOWER(m.fromAddress) LIKE :addrLike)")
+            "       OR LOWER(m.fromAddress) LIKE :addrLike)" +
+            "   AND (:channel IS NULL OR m.channel = :channel)")
     Page<Message> findBroadcastRelated(@org.springframework.data.repository.query.Param("addrLike") String addrLike,
+                                       @org.springframework.data.repository.query.Param("channel") String channel,
                                        Pageable pageable);
 
     /** Count messages matching direction (and non-draft status) within a time window. */
@@ -154,6 +156,15 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
                                           @org.springframework.data.repository.query.Param("status") String status,
                                           @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
                                           @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
+
+    /** Count messages matching direction + channel within a time window (SMS dashboard stats). */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.channel = :channel " +
+            "AND m.createdAt >= :from AND m.createdAt < :to")
+    long countByDirectionAndChannelBetween(@org.springframework.data.repository.query.Param("dir") String direction,
+                                           @org.springframework.data.repository.query.Param("channel") String channel,
+                                           @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                           @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
 
     /**
      * Last successful outbound timestamp per user. Returns rows {userId, MAX(sentAt)} for
@@ -214,4 +225,37 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
             "WHERE m.userId = :userId AND m.direction = 'IN' AND m.inboxDismissedAt IS NULL")
     int dismissInboxByUserId(@org.springframework.data.repository.query.Param("userId") Long userId,
                               @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
+    /**
+     * メッセージボックス: paginated OUT/SENT history for one user, newest sentAt first,
+     * excluding messages whose reply-URL was built against a REDIRECT/CUSTOM_HTML
+     * 外部リンクドメイン at compose time (EXCLUDED_FROM_BOX) and excluding any the admin
+     * has soft-deleted (BOX_DISMISSED_AT). Shared by the public /reply/{token} footer
+     * section and the admin /manager/users/{id}/message-box preview.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT m FROM Message m WHERE m.userId = :userId " +
+            "AND m.direction = 'OUT' AND m.status = 'SENT' " +
+            "AND m.channel IN ('EMAIL','SMS','BROADCAST') " +
+            "AND m.excludedFromBox = false " +
+            "AND m.boxDismissedAt IS NULL " +
+            "ORDER BY m.sentAt DESC")
+    Page<Message> findMessageBoxPage(@org.springframework.data.repository.query.Param("userId") Long userId,
+                                      Pageable pageable);
+
+    /**
+     * Admin-only per-user メッセージボックス soft-delete (選択削除 button). Distinct from
+     * dismissInboxByUserId — that dismisses IN rows globally for /manager/inbox; this
+     * dismisses specific OUT rows for one user's message-box view only, and Message rows
+     * are never deleted so thread history is unaffected. Scoped to {@code userId} so a
+     * tampered form post can't dismiss another user's messages.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+            "UPDATE Message m SET m.boxDismissedAt = :now " +
+            "WHERE m.userId = :userId AND m.id IN :ids AND m.boxDismissedAt IS NULL")
+    int dismissBoxByUserIdAndIds(@org.springframework.data.repository.query.Param("userId") Long userId,
+                                  @org.springframework.data.repository.query.Param("ids") java.util.List<Long> ids,
+                                  @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 }

@@ -42,6 +42,7 @@ public class AuditLogService {
     public static final String ACTION_PAYMENT_DELETE = "PAYMENT_DELETE";
     public static final String ACTION_PAYMENT_MARK_PAID = "PAYMENT_MARK_PAID";
     public static final String ACTION_SETTINGS_UPDATE = "SETTINGS_UPDATE";
+    public static final String ACTION_MESSAGE_BOX_DELETE = "MESSAGE_BOX_DELETE";
 
     private final AuditLogRepository repository;
 

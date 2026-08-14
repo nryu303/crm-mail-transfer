@@ -67,6 +67,16 @@
         </form>
     </div>
 
+    <!-- ログイン数（累計）列の表示切替。既定は非表示 — 有効にすると一覧に列が追加される。 -->
+    <form method="post" th:action="@{/manager/ad-codes/show-login-count}" class="mb-3 flex items-center gap-2">
+        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+        <input type="hidden" name="show" th:value="${showLoginCount} ? 'false' : 'true'"/>
+        <input type="checkbox" id="showLoginCountToggle" th:checked="${showLoginCount}"
+               onchange="this.form.submit()"
+               class="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"/>
+        <label for="showLoginCountToggle" class="text-sm text-slate-700 cursor-pointer">「ログイン数（累計）」列を表示する</label>
+    </form>
+
     <!-- Group view (default) — one row per unique AD_CODE.name. Bulk-delete pattern matches
          the user-list / relay-servers / templates pages: checkbox column on the left, 選択削除
          button bottom-right. Group deletion requires the admin password (carried through as a
@@ -88,6 +98,7 @@
                     <th class="px-3 py-2 text-left">登録</th>
                     <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性</th>
                     <th class="px-3 py-2 text-left" style="color:#dc2626;">女性</th>
+                    <th th:if="${showLoginCount}" class="px-3 py-2 text-left">ログイン数 (累計)</th>
                     <th class="px-3 py-2 text-left">入金 (累計)</th>
                     <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性課金</th>
                     <th class="px-3 py-2 text-left" style="color:#dc2626;">女性課金</th>
@@ -97,7 +108,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                 <tr th:if="${groups == null or groups.empty}">
-                    <td colspan="12" class="px-3 py-6 text-center text-slate-400">グループはまだ登録されていません</td>
+                    <td th:colspan="${showLoginCount} ? 13 : 12" class="px-3 py-6 text-center text-slate-400">グループはまだ登録されていません</td>
                 </tr>
                 <tr th:each="g,it : ${groups}" class="hover:bg-slate-50">
                     <td class="px-3 py-2 text-center">
@@ -111,6 +122,7 @@
                     <td class="px-3 py-2 text-slate-700" th:text="${g.signupTotal} + ' 人'"></td>
                     <td class="px-3 py-2" style="color:#1d4ed8;" th:text="${g.signupMale} + ' 人'"></td>
                     <td class="px-3 py-2" style="color:#dc2626;" th:text="${g.signupFemale} + ' 人'"></td>
+                    <td th:if="${showLoginCount}" class="px-3 py-2 text-slate-700" th:text="${g.loginCount} + ' 人'"></td>
                     <td class="px-3 py-2 text-slate-700" th:text="'¥ ' + ${#numbers.formatInteger(g.paidTotal, 1, 'COMMA')}"></td>
                     <td class="px-3 py-2" style="color:#1d4ed8;" th:text="'¥ ' + ${#numbers.formatInteger(g.paidMale, 1, 'COMMA')}"></td>
                     <td class="px-3 py-2" style="color:#dc2626;" th:text="'¥ ' + ${#numbers.formatInteger(g.paidFemale, 1, 'COMMA')}"></td>

@@ -34,6 +34,7 @@ public class BroadcastController {
     private final com.crm.repository.MessageRepository messageRepository;
     private final com.crm.service.AdminAuthService adminAuthService;
     private final com.crm.service.DomainSettingService settingService;
+    private final com.crm.service.SmsSettingService smsSettingService;
     private final com.crm.service.MessageService messageService;
     private final com.crm.service.AuditLogService auditLog;
 
@@ -43,6 +44,7 @@ public class BroadcastController {
                                com.crm.repository.MessageRepository messageRepository,
                                com.crm.service.AdminAuthService adminAuthService,
                                com.crm.service.DomainSettingService settingService,
+                               com.crm.service.SmsSettingService smsSettingService,
                                com.crm.service.MessageService messageService,
                                com.crm.service.AuditLogService auditLog) {
         this.broadcastService = broadcastService;
@@ -51,6 +53,7 @@ public class BroadcastController {
         this.messageRepository = messageRepository;
         this.adminAuthService = adminAuthService;
         this.settingService = settingService;
+        this.smsSettingService = smsSettingService;
         this.messageService = messageService;
         this.auditLog = auditLog;
     }
@@ -73,14 +76,16 @@ public class BroadcastController {
     @GetMapping
     public String list(@RequestParam(name = "page", defaultValue = "0") int page,
                        @RequestParam(name = "addr", required = false) String addr,
+                       @RequestParam(name = "channel", required = false) String channel,
                        Model model) {
         String addrTrim = (addr == null) ? null : addr.trim();
         String addrLike = (addrTrim == null || addrTrim.isEmpty())
                 ? null : "%" + addrTrim.toLowerCase() + "%";
+        String channelFilter = "SMS".equals(channel) ? "SMS" : null;
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
                 page, 100,
                 org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt"));
-        Page<com.crm.entity.Message> messages = messageRepository.findBroadcastRelated(addrLike, pageable);
+        Page<com.crm.entity.Message> messages = messageRepository.findBroadcastRelated(addrLike, channelFilter, pageable);
 
         // Resolve userIds → user attributes for the table columns
         java.util.Set<Long> uids = new java.util.HashSet<>();
@@ -127,13 +132,14 @@ public class BroadcastController {
         model.addAttribute("userFolders", userFolders);
         model.addAttribute("displayFrom", displayFrom);
         model.addAttribute("addr", addrTrim == null ? "" : addrTrim);
+        model.addAttribute("channel", channelFilter == null ? "" : channelFilter);
         return "message/broadcast-list";
     }
 
     /** Broadcast-level summary (totals, status, bulk-delete). Kept as a sub-page. */
     @GetMapping("/summary")
     public String summary(@RequestParam(name = "page", defaultValue = "0") int page, Model model) {
-        Page<Broadcast> broadcasts = broadcastService.list(page, 20);
+        Page<Broadcast> broadcasts = broadcastService.list(page, 100);
         model.addAttribute("broadcasts", broadcasts);
         return "message/broadcast-summary";
     }
@@ -159,8 +165,17 @@ public class BroadcastController {
                                             @RequestParam(name = "scopeLimit", required = false) Integer scopeLimit,
                                             @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
                                             @RequestParam(name = "sourceFolders", required = false) java.util.List<String> sourceFolders,
+                                            @RequestParam(name = "channel", required = false) String channel,
                                             HttpSession session,
                                             RedirectAttributes ra) {
+        // Condition/filter-based SMS broadcast (2026-08-08 — previously only row-selection
+        // worked for SMS; folder+filter targeting was email-only, forcing the operator to
+        // hand-check hundreds of rows to send SMS to a filtered segment).
+        if ("SMS".equals(channel)) {
+            session.setAttribute("broadcastSelectedChannel", "SMS");
+        } else {
+            session.removeAttribute("broadcastSelectedChannel");
+        }
         // Legacy alias path: the URL filter set (folders=A&folders=B) auto-binds to
         // form.folders via @ModelAttribute, so this is only a fallback for callers that
         // post sourceFolder(s) only.
@@ -196,11 +211,17 @@ public class BroadcastController {
      */
     @PostMapping("/new")
     public String selectUsersForBroadcast(@RequestParam(name = "userIds", required = false) List<Long> userIds,
+                                           @RequestParam(name = "channel", required = false) String channel,
                                            HttpSession session) {
         if (userIds != null && !userIds.isEmpty()) {
             session.setAttribute("broadcastSelectedUserIds", new java.util.ArrayList<>(userIds));
         } else {
             session.removeAttribute("broadcastSelectedUserIds");
+        }
+        if ("SMS".equals(channel)) {
+            session.setAttribute("broadcastSelectedChannel", "SMS");
+        } else {
+            session.removeAttribute("broadcastSelectedChannel");
         }
         return "redirect:/manager/messages/broadcast/new";
     }
@@ -221,12 +242,21 @@ public class BroadcastController {
                 session.removeAttribute("broadcastSelectedUserIds");
             }
         }
+        String channel = (String) session.getAttribute("broadcastSelectedChannel");
+        session.removeAttribute("broadcastSelectedChannel");
         if (!model.containsAttribute("form")) {
             BroadcastForm f = new BroadcastForm();
             if (userIds != null && !userIds.isEmpty()) f.setTargetUserIds(userIds);
+            if ("SMS".equals(channel)) f.setChannel("SMS");
             // Rate-per-minute is configured globally on the settings page; the broadcast form
             // no longer exposes it (operator request) but the field is still wired through.
-            f.setRatePerMinute(settingService.getBroadcastRatePerMinute());
+            // SMS and EMAIL have SEPARATE rate settings (SMS配信設定 vs リレーサーバー設定) —
+            // this used to always read the email/relay-server rate regardless of channel, so
+            // an SMS broadcast silently ran at the relay-server's rate (e.g. 600/min) instead
+            // of the configured SMS interval. Fixed 2026-08-08.
+            f.setRatePerMinute("SMS".equals(channel)
+                    ? smsSettingService.getRatePerMinute()
+                    : settingService.getBroadcastRatePerMinute());
             model.addAttribute("form", f);
         }
         // Pre-resolve selected users for the UI badge
@@ -254,6 +284,10 @@ public class BroadcastController {
     @PostMapping
     public String create(@Valid @ModelAttribute("form") BroadcastForm form,
                          BindingResult br, HttpSession session, RedirectAttributes ra, Model model) {
+        if (!"SMS".equals(form.getChannel())
+                && (form.getSubject() == null || form.getSubject().trim().isEmpty())) {
+            br.rejectValue("subject", "required", "件名を入力してください");
+        }
         if (br.hasErrors()) {
             model.addAttribute("templates", templateService.listAll());
         model.addAttribute("templatePageTitles", templateService.listPageTitles());

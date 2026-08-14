@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch /tmp/external-link-domain-cert-request.new and issue a cert for it on every write
+
+[Path]
+# PathChanged fires when the file is closed after being opened for writing —
+# i.e. once per JVM request, not per fsync.
+PathChanged=/tmp/external-link-domain-cert-request.new
+Unit=external-link-domain-cert-issue.service
+
+[Install]
+WantedBy=multi-user.target

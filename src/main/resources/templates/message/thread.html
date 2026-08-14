@@ -56,6 +56,10 @@
          * as the "Web N" badge in the right-upper header (.bg-emerald-100 / .text-emerald-700),
          * so the count badge and the message body are visibly the same channel at a glance. */
         .hist-item.in.web { background:#d1fae5; color:#065f46; }
+        /* SMS reply — yellow, distinct from email (.in, slate) and web-form reply (.in.web, emerald),
+         * per operator request so the three reply channels are visually distinguishable at a glance. */
+        .hist-item.in.sms { background:#fef9c3; color:#854d0e; }
+        .hist-item.out.sms { background:#fef3c7; color:#78350f; }
         .hist-item .meta { font-size:.66rem; color:#475569; margin-top:3px; }
 
         /* cmp-form: natural-flow column. Previously had height:100% + textarea flex:1 which
@@ -225,13 +229,15 @@
                   th:text="'Web ' + ${threadWebReply}" title="Web返信数"></span>
             <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-slate-200 text-slate-600"
                   th:text="'Mail ' + ${threadMailReply}" title="メール返信数"></span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800"
+                  th:text="'SMS ' + ${threadSmsReply}" title="SMS返信数"></span>
             <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700"
                   th:text="'送 ' + ${threadOut}" title="送信数"></span>
         </header>
         <div class="body" id="historyBody">
             <div th:if="${thread.empty}" class="text-center text-xs text-slate-400 py-6">まだメッセージはありません</div>
             <div th:each="m : ${thread}" class="hist-item"
-                 th:classappend="${m.direction == 'OUT'} ? 'out' : (${m.channel == 'WEB_REPLY'} ? 'in web' : 'in')">
+                 th:classappend="${m.channel == 'SMS'} ? (${m.direction == 'OUT'} ? 'out sms' : 'in sms') : (${m.direction == 'OUT'} ? 'out' : (${m.channel == 'WEB_REPLY'} ? 'in web' : 'in'))">
                 <div class="font-medium">
                     <span th:text="${m.subject} ?: '(件名なし)'"></span>
                     <!-- 📎 badge next to subject when this inbound carries images -->
@@ -329,6 +335,13 @@
                 </div>
 
                 <div class="row">
+                    <span th:if="${user.phoneNumber != null and !#strings.isEmpty(user.phoneNumber)}"
+                          class="text-xs text-slate-500" th:text="${user.phoneNumber}"></span>
+                    <span th:if="${user.phoneNumber != null and !#strings.isEmpty(user.phoneNumber)}"
+                          id="smsCharCount" class="text-xs text-slate-400">60文字以内で送信 (0文字)</span>
+                    <button type="submit" th:if="${user.phoneNumber != null and !#strings.isEmpty(user.phoneNumber)}"
+                            th:formaction="@{'/manager/users/' + ${user.id} + '/messages/sms'}"
+                            class="btn" style="background:#0891b2;">SMS返信</button>
                     <button type="submit" class="btn ml-auto">返信</button>
                 </div>
 
@@ -484,6 +497,20 @@ function applyTemplateFromElement(el) {
     document.getElementById('subject').value = s;
     document.getElementById('body').value = b;
 }
+
+// SMS is billed per 65-character segment — nudge staying within 60 for a single message.
+(function () {
+    var ta = document.getElementById('body');
+    var counter = document.getElementById('smsCharCount');
+    if (!ta || !counter) return;
+    function update() {
+        var n = ta.value.length;
+        counter.textContent = '60文字以内で送信 (' + n + '文字' + (n > 60 ? ' / 2通以上になります' : '') + ')';
+        counter.style.color = n > 60 ? '#dc2626' : '';
+    }
+    ta.addEventListener('input', update);
+    update();
+})();
 
 // --- Reservation (予約送信) helpers shared with broadcast-form ---
 function pad2(n) { return String(n).padStart(2, '0'); }

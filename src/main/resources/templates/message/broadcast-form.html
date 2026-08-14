@@ -3,7 +3,7 @@
       xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout/default}">
 <head>
-    <title>一斉送信 新規作成</title>
+    <title th:text="${form.channel == 'SMS'} ? 'SMS一斉送信 新規作成' : '一斉送信 新規作成'">一斉送信 新規作成</title>
     <style>
         /* Override the default layout's main padding so this page fits one screen. */
         main.flex-1.p-6 { padding: 0 !important; }
@@ -55,8 +55,10 @@
         .hist-row .type { flex-shrink:0; font-size:.68rem; font-weight:700; padding:2px 6px; border-radius:4px; }
         .type-out { background:#dbeafe; color:#1d4ed8; }
         .type-in  { background:#e2e8f0; color:#475569; }
+        .type-sms { background:#fef9c3; color:#854d0e; }
         .hist-row .sub { flex:1; min-width:0; }
         .hist-row .sub .title { font-weight:600; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .hist-row .sub .preview { color:#475569; font-size:.72rem; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .hist-row .sub .meta  { color:#64748b; font-size:.68rem; margin-top:2px; }
         .hist-row .sub .sched { color:#d97706; font-size:.7rem; font-weight:600; margin-top:2px; }
         .compose-body { display:flex; flex-direction:column; gap:8px; }
@@ -103,7 +105,8 @@
 <div class="bcast-wrap">
 
     <div class="bcast-top">
-        <h1 style="font-size:1.1rem;font-weight:700;color:#1e293b;flex:1;">一斉送信 新規作成</h1>
+        <h1 style="font-size:1.1rem;font-weight:700;color:#1e293b;flex:1;"
+            th:text="${form.channel == 'SMS'} ? 'SMS一斉送信 新規作成' : '一斉送信 新規作成'">一斉送信 新規作成</h1>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/messages/broadcast}">一覧に戻る</a>
     </div>
 
@@ -163,10 +166,12 @@
         <div class="body">
             <div th:if="${history == null or history.empty}" class="text-xs text-slate-400">履歴はまだありません</div>
             <div th:each="m : ${history}" class="hist-row">
-                <span th:if="${m.direction == 'OUT'}" class="type type-out">SENT</span>
-                <span th:if="${m.direction == 'IN'}"  class="type type-in">IN</span>
+                <span th:if="${m.channel == 'SMS'}" class="type type-sms">SMS</span>
+                <span th:if="${m.channel != 'SMS' and m.direction == 'OUT'}" class="type type-out">SENT</span>
+                <span th:if="${m.channel != 'SMS' and m.direction == 'IN'}"  class="type type-in">IN</span>
                 <div class="sub">
-                    <div class="title" th:text="${m.subject} ?: '(件名なし)'"></div>
+                    <div class="title" th:if="${m.channel != 'SMS'}" th:text="${m.subject} ?: '(件名なし)'"></div>
+                    <div class="preview" th:text="${m.bodyText != null and m.bodyText.length() > 60} ? ${m.bodyText.substring(0, 60) + '…'} : ${m.bodyText}"></div>
                     <div class="meta"
                          th:text="${m.sentAt != null} ? ${#temporals.format(m.sentAt, 'MM-dd HH:mm')} : (${m.createdAt != null} ? ${#temporals.format(m.createdAt, 'MM-dd HH:mm')} : '-')"></div>
                     <div class="sched"
@@ -186,6 +191,7 @@
                   onsubmit="return confirm('対象ユーザーへ一斉送信を登録します。よろしいですか?')">
 
                 <input type="hidden" th:field="*{title}"/>
+                <input type="hidden" th:field="*{channel}"/>
 
                 <!-- Targeting lock-in: when admin came in via "選択一斉送信", show the picked
                      users explicitly and pin the targetUserIds[] so filters won't widen the list. -->
@@ -197,18 +203,26 @@
                      style="background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;padding:10px 12px;font-size:.85rem;">
                     <div style="font-weight:700;color:#92400e;">
                         選択ユーザー <span th:text="'(' + ${#lists.size(selectedUsers)} + '名)'"></span> のみに送信
+                        <span th:if="${form.channel == 'SMS'}" style="color:#b45309;">(SMS配信)</span>
                     </div>
                     <input type="hidden" th:each="u : ${selectedUsers}" name="targetUserIds" th:value="${u.id}"/>
                 </div>
 
-                <div>
+                <div th:if="${form.channel != 'SMS'}">
                     <label>件名</label>
                     <input type="text" id="subject" th:field="*{subject}" placeholder="例: %name% 様 ご案内"/>
                 </div>
+                <!-- SMS has no subject line. subject isn't required for this channel (see
+                     BroadcastForm/BroadcastController); BroadcastService.createAndQueueSms
+                     derives the broadcast label from title/body instead. -->
+                <input type="hidden" th:if="${form.channel == 'SMS'}" th:field="*{subject}"/>
                 <div style="flex:1; display:flex; flex-direction:column;">
-                    <label>本文</label>
+                    <label th:text="${form.channel == 'SMS'} ? 'SMS本文' : '本文'">本文</label>
                     <textarea id="body" th:field="*{body}"
-                              placeholder="例: %name% 様 いつもありがとうございます。&#10;%amount% のお支払いをお願いいたします。&#10;返信はこちら: %reply_url%"></textarea>
+                              th:placeholder="${form.channel == 'SMS'}
+                                  ? '例: %name% 様 いつもありがとうございます。%amount% のお支払いをお願いいたします。'
+                                  : '例: %name% 様 いつもありがとうございます。&#10;%amount% のお支払いをお願いいたします。&#10;返信はこちら: %reply_url%'"></textarea>
+                    <span th:if="${form.channel == 'SMS'}" id="smsCharCount" class="text-xs text-slate-400" style="margin-top:2px;">60文字以内で送信 (0文字)</span>
                 </div>
 
                 <!-- メールドメイン / ステータス / rate / min は operator 要請により削除。
@@ -275,6 +289,20 @@ function applyTemplateFromElement(el) {
     document.getElementById('subject').value = s;
     document.getElementById('body').value = b;
 }
+
+// SMS is billed per 65-character segment — nudge staying within 60 for a single message.
+(function () {
+    var ta = document.getElementById('body');
+    var counter = document.getElementById('smsCharCount');
+    if (!ta || !counter) return;
+    function update() {
+        var n = ta.value.length;
+        counter.textContent = '60文字以内で送信 (' + n + '文字' + (n > 60 ? ' / 2通以上になります' : '') + ')';
+        counter.style.color = n > 60 ? '#dc2626' : '';
+    }
+    ta.addEventListener('input', update);
+    update();
+})();
 
 function insertTagToBody(token) {
     var ta = document.getElementById('body');

@@ -57,6 +57,29 @@ public class ReplyPageService {
         return domainSettings.buildReplyUrl(token);
     }
 
+    /**
+     * Same as {@link #createReplyPageFor} but with a short token (10 chars by default, or the
+     * active 外部リンクドメイン's configured length) instead of 64 — SMS is billed per ~65-char
+     * segment, so the long token alone would consume the whole budget. Use this from any SMS
+     * send path (composeSms, createAndQueueSms) that embeds %reply_url%.
+     */
+    @Transactional
+    public String createShortReplyPageFor(Message outboundMessage) {
+        String token = generateUniqueShortToken(domainSettings.getActiveShortTokenLength());
+        ReplyPage rp = new ReplyPage();
+        rp.setToken(token);
+        rp.setMessageId(outboundMessage.getId());
+        rp.setUserId(outboundMessage.getUserId());
+        rp.setIsActive(true);
+        rp.setExpiresAt(LocalDateTime.now().plusDays(expiryDays));
+        replyPageRepository.save(rp);
+
+        outboundMessage.setReplyPageToken(token);
+        messageRepository.save(outboundMessage);
+
+        return domainSettings.buildReplyUrl(token);
+    }
+
     public Optional<ReplyPage> findByToken(String token) {
         return replyPageRepository.findByToken(token);
     }
@@ -82,5 +105,13 @@ public class ReplyPageService {
             if (!replyPageRepository.existsByToken(candidate)) return candidate;
         }
         throw new IllegalStateException("could not generate unique reply token");
+    }
+
+    private String generateUniqueShortToken(int length) {
+        for (int i = 0; i < TOKEN_MAX_ATTEMPTS; i++) {
+            String candidate = TokenGenerator.generateShortReplyToken(length);
+            if (!replyPageRepository.existsByToken(candidate)) return candidate;
+        }
+        throw new IllegalStateException("could not generate unique short reply token");
     }
 }

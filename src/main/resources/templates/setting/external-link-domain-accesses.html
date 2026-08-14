@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>アクセスユーザー — 外部リンクドメイン</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">
+            アクセスユーザー
+            <code class="text-base font-normal bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 ml-2" th:text="${domain.domainUrl}"></code>
+        </h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2" th:href="@{/manager/settings/external-link-domains}">一覧に戻る</a>
+        <button type="button" id="copyAllTable" class="inline-flex items-center px-3 py-1.5 text-sm border border-blue-300 text-blue-700 hover:bg-blue-50 rounded-md mr-2">📋 表全体をコピー</button>
+        <form method="post" th:action="@{'/manager/settings/external-link-domains/' + ${domain.id} + '/accesses/delete'}"
+              onsubmit="return confirm('このドメインのアクセス履歴をすべて削除します。よろしいですか?（アクセス数は0件に戻ります）');">
+            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+            <button type="submit" class="inline-flex items-center px-3 py-1.5 text-sm border border-red-300 text-red-600 hover:bg-red-50 rounded-md">アクセス履歴を削除</button>
+        </form>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left" style="width: 60px;">No</th>
+                <th class="px-3 py-2 text-left">表示名</th>
+                <th class="px-3 py-2 text-left">
+                    <span class="inline-flex items-center gap-1">
+                        メールアドレス
+                        <button type="button" id="copyAllEmails" class="copy-all-btn text-slate-400 hover:text-blue-600" title="メールアドレスを一括コピー">📋</button>
+                    </span>
+                </th>
+                <th class="px-3 py-2 text-left">
+                    <span class="inline-flex items-center gap-1">
+                        電話番号
+                        <button type="button" id="copyAllPhones" class="copy-all-btn text-slate-400 hover:text-blue-600" title="電話番号を一括コピー">📋</button>
+                    </span>
+                </th>
+                <th class="px-3 py-2 text-left">広告コード</th>
+                <th class="px-3 py-2 text-left">フォルダ</th>
+                <th class="px-3 py-2 text-left" style="width: 130px;">登録日時</th>
+                <th class="px-3 py-2 text-left" style="width: 130px;">最終ログイン</th>
+                <th class="px-3 py-2 text-right" style="width: 100px;">操作</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${accessedUsers.empty}">
+                <td colspan="9" class="px-3 py-6 text-center text-slate-400">
+                    このドメインへのアクセス履歴はまだありません
+                </td>
+            </tr>
+            <tr th:each="u,it : ${accessedUsers}" class="hover:bg-slate-50 copy-row"
+                th:attr="data-no=${it.count},data-name=${u.displayName} ?: '',data-detail-url=@{'/manager/users/' + ${u.userId}},
+                         data-adcode=${u.adCode} ?: '',data-folder=${u.folder} ?: '',
+                         data-created=${u.createdAt != null} ? ${#temporals.format(u.createdAt, 'yyyy-MM-dd HH:mm')} : '',
+                         data-lastlogin=${u.lastLoginAt != null} ? ${#temporals.format(u.lastLoginAt, 'yyyy-MM-dd HH:mm')} : ''">
+                <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${it.count}"></code></td>
+                <td class="px-3 py-2 text-slate-700" th:text="${u.displayName}"></td>
+                <td class="px-3 py-2" th:attr="data-email=${u.email} ?: ''">
+                    <span th:if="${u.email}" class="text-xs text-slate-700" th:text="${u.email}"></span>
+                    <span th:unless="${u.email}" class="text-slate-400">-</span>
+                </td>
+                <td class="px-3 py-2" th:attr="data-phone=${u.phoneNumber} ?: ''">
+                    <span th:if="${u.phoneNumber}" class="text-xs text-slate-700" th:text="${u.phoneNumber}"></span>
+                    <span th:unless="${u.phoneNumber}" class="text-slate-400">-</span>
+                </td>
+                <td class="px-3 py-2 text-xs text-slate-500" th:text="${u.adCode} ?: '-'"></td>
+                <td class="px-3 py-2 text-xs text-slate-500" th:text="${u.folder} ?: '-'"></td>
+                <td class="px-3 py-2 text-xs text-slate-500 whitespace-nowrap"
+                    th:text="${u.createdAt != null} ? ${#temporals.format(u.createdAt, 'yyyy-MM-dd HH:mm')} : '-'"></td>
+                <td class="px-3 py-2 text-xs text-slate-500 whitespace-nowrap"
+                    th:text="${u.lastLoginAt != null} ? ${#temporals.format(u.lastLoginAt, 'yyyy-MM-dd HH:mm')} : '-'"></td>
+                <td class="px-3 py-2 text-right">
+                    <a class="inline-flex items-center px-3 py-1 text-xs border border-slate-300 text-slate-700 hover:bg-slate-50 rounded"
+                       th:href="@{'/manager/users/' + ${u.userId}}">詳細</a>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+    (function () {
+        function flash(btn) {
+            var original = btn.textContent;
+            btn.textContent = '✓';
+            setTimeout(function () { btn.textContent = original; }, 1200);
+        }
+        function copyColumn(attr, btnId) {
+            var btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.addEventListener('click', function () {
+                var values = [];
+                document.querySelectorAll('td[' + attr + ']').forEach(function (td) {
+                    var v = td.getAttribute(attr);
+                    if (v) values.push(v);
+                });
+                if (values.length === 0) return;
+                navigator.clipboard.writeText(values.join('\n')).then(function () {
+                    flash(btn);
+                }).catch(function () {});
+            });
+        }
+        copyColumn('data-phone', 'copyAllPhones');
+        copyColumn('data-email', 'copyAllEmails');
+
+        // 表全体をコピー — tab-separated so it pastes as real columns into Excel/Sheets.
+        // Includes every column shown on screen: No / 表示名 / メールアドレス / 電話番号 /
+        // 広告コード / フォルダ / 登録日時 / 最終ログイン / 操作 (matches ユーザー管理's columns).
+        // 操作 becomes the user-detail page URL, since a button has no copyable text of its own.
+        var copyAllBtn = document.getElementById('copyAllTable');
+        if (copyAllBtn) {
+            copyAllBtn.addEventListener('click', function () {
+                var lines = ['No\t表示名\tメールアドレス\t電話番号\t広告コード\tフォルダ\t登録日時\t最終ログイン\t操作'];
+                document.querySelectorAll('tr.copy-row').forEach(function (tr) {
+                    var no = tr.getAttribute('data-no') || '';
+                    var name = tr.getAttribute('data-name') || '';
+                    var email = tr.querySelector('td[data-email]').getAttribute('data-email') || '';
+                    var phone = tr.querySelector('td[data-phone]').getAttribute('data-phone') || '';
+                    var adCode = tr.getAttribute('data-adcode') || '';
+                    var folder = tr.getAttribute('data-folder') || '';
+                    var created = tr.getAttribute('data-created') || '';
+                    var lastLogin = tr.getAttribute('data-lastlogin') || '';
+                    var detailUrl = tr.getAttribute('data-detail-url') || '';
+                    lines.push([no, name, email, phone, adCode, folder, created, lastLogin, location.origin + detailUrl].join('\t'));
+                });
+                if (lines.length === 1) return; // no data rows
+                navigator.clipboard.writeText(lines.join('\n')).then(function () {
+                    var original = copyAllBtn.textContent;
+                    copyAllBtn.textContent = '✓ コピーしました';
+                    setTimeout(function () { copyAllBtn.textContent = original; }, 1500);
+                }).catch(function () {});
+            });
+        }
+    })();
+    </script>
+</section>
+</body>
+</html>

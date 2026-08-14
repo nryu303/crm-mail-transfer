@@ -20,14 +20,17 @@
 
     <div class="max-w-3xl rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 mb-4">
         <strong>CSV形式 (UTF-8)</strong><br/>
-        1行目: ヘッダー行 <code class="bg-white px-1 py-0.5 rounded border border-sky-200">email,display_name,carrier_domain,memo,ad_code,gender</code><br/>
+        1行目: ヘッダー行 <code class="bg-white px-1 py-0.5 rounded border border-sky-200">email,display_name,carrier_domain,memo,ad_code,gender,phone</code><br/>
         <span class="text-xs text-sky-700">
-            ※ 5列目 <code>ad_code</code> と 6列目 <code>gender</code> は任意。省略しても4列のままインポート可能です。<br/>
+            ※ 5列目 <code>ad_code</code>、6列目 <code>gender</code>、7列目 <code>phone</code> は任意。省略しても4列のままインポート可能です。<br/>
             ※ <code>gender</code> は <code>M</code>/<code>F</code>/<code>男</code>/<code>女</code>/<code>男性</code>/<code>女性</code>/<code>male</code>/<code>female</code> いずれも受理。空欄=未設定。<br/>
+            ※ <code>phone</code> はSMS配信用の電話番号 (例: 09012345678)。空欄=未設定。<br/>
+            ※ <code>email</code> と <code>phone</code> は<strong>いずれか一方があればインポート可能</strong>です
+               (SMS配信のみ利用する場合は <code>email</code> を空欄にして <code>phone</code> のみ入力できます)。両方とも空欄の行はエラーになります。<br/>
             ※ タブ区切りも対応。
         </span><br/>
         2行目以降: データ行<br/>
-        既存のメールアドレスと重複する行はスキップされます。
+        既存のメールアドレスと重複する行、既存の電話番号と重複する行（emailが空欄の場合）はスキップされます。
     </div>
 
     <form id="importForm" method="post" th:action="@{/manager/users/import}" enctype="multipart/form-data"
@@ -189,7 +192,7 @@
             </div>
             <table class="w-full text-sm border border-slate-200">
                 <thead class="bg-slate-50 text-xs text-slate-500 uppercase">
-                <tr><th class="px-3 py-1 text-left">メールアドレス</th><th class="px-3 py-1 text-left">ログインID</th><th class="px-3 py-1 text-left">パスワード</th></tr>
+                <tr><th class="px-3 py-1 text-left">メールアドレス / 電話番号</th><th class="px-3 py-1 text-left">ログインID</th><th class="px-3 py-1 text-left">パスワード</th></tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                 <tr th:each="c : ${result.issuedCredentials}">

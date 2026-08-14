@@ -21,8 +21,16 @@ public class CrmUser {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "EMAIL", nullable = false, unique = true)
+    /** Optional — an SMS-only user (see {@link #phoneNumber}) may have no email at all.
+     *  At least one of email/phoneNumber is enforced at the service layer (CrmUserService),
+     *  not here; multiple NULLs are fine under the DB's UNIQUE index. */
+    @Column(name = "EMAIL", unique = true)
     private String email;
+
+    /** SMS delivery target (BytePlus SMS channel). Required when email is blank
+     *  (SMS-only user); otherwise optional. */
+    @Column(name = "PHONE_NUMBER", length = 20)
+    private String phoneNumber;
 
     /**
      * Set when this user's email has an RFC-invalid local-part that the relay's SMTP client
@@ -130,6 +138,8 @@ public class CrmUser {
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
     public String getAddressInvalidReason() { return addressInvalidReason; }
     public void setAddressInvalidReason(String addressInvalidReason) { this.addressInvalidReason = addressInvalidReason; }
 

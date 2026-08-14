@@ -109,24 +109,29 @@ public class DashboardService {
 
         // ---- 時間別送信数 (hourly send / NG for selected day) ----
         List<HourlySend> hourly = new ArrayList<>(24);
-        long totalSend = 0, totalNg = 0;
+        long totalSend = 0, totalNg = 0, totalSmsSent = 0;
         for (int h = 0; h < 24; h++) {
             LocalDateTime from = day.atTime(h, 0);
             LocalDateTime to = from.plusHours(1);
             long sent = messageRepository.countByDirectionBetween(Message.DIR_OUT, from, to);
             long ng = messageRepository.countByDirectionAndStatusBetween(
                     Message.DIR_OUT, Message.STATUS_FAILED, from, to);
+            long smsSent = messageRepository.countByDirectionAndChannelBetween(
+                    Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
             HourlySend hb = new HourlySend();
             hb.label = String.format("%02d:00", h);
             hb.sent = sent;
             hb.ng = ng;
+            hb.smsSent = smsSent;
             hourly.add(hb);
             totalSend += sent;
             totalNg += ng;
+            totalSmsSent += smsSent;
         }
         s.hourlySends = hourly;
         s.totalSend = totalSend;
         s.totalNg = totalNg;
+        s.totalSmsSent = totalSmsSent;
 
         // ---- Recent messages (latest 10) ----
         s.recentMessages = messageRepository.findAll(
@@ -139,11 +144,17 @@ public class DashboardService {
 
     public static class HourlySend {
         public String label;
+        /** All outbound (email + SMS + broadcast) — kept for backward-compat callers; the
+         *  dashboard UI itself shows getEmailSent()/getSmsSent() as separate, non-summed series. */
         public long sent;
         public long ng;
+        public long smsSent;
         public String getLabel() { return label; }
         public long getSent() { return sent; }
         public long getNg() { return ng; }
+        public long getSmsSent() { return smsSent; }
+        /** Non-SMS outbound (email replies + email broadcasts) — sent minus smsSent. */
+        public long getEmailSent() { return sent - smsSent; }
     }
 
     /**
@@ -163,6 +174,8 @@ public class DashboardService {
             hb.sent = messageRepository.countByDirectionBetween(Message.DIR_OUT, from, to);
             hb.ng   = messageRepository.countByDirectionAndStatusBetween(
                     Message.DIR_OUT, Message.STATUS_FAILED, from, to);
+            hb.smsSent = messageRepository.countByDirectionAndChannelBetween(
+                    Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
             out.add(hb);
         }
         return out;
@@ -185,6 +198,8 @@ public class DashboardService {
             hb.sent = messageRepository.countByDirectionBetween(Message.DIR_OUT, from, to);
             hb.ng   = messageRepository.countByDirectionAndStatusBetween(
                     Message.DIR_OUT, Message.STATUS_FAILED, from, to);
+            hb.smsSent = messageRepository.countByDirectionAndChannelBetween(
+                    Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
             out.add(hb);
         }
         return out;
@@ -235,6 +250,7 @@ public class DashboardService {
         public List<HourlySend> hourlySends;
         public long totalSend;
         public long totalNg;
+        public long totalSmsSent;
 
         public List<Message> recentMessages;
 
@@ -250,6 +266,7 @@ public class DashboardService {
         public List<HourlySend> getHourlySends() { return hourlySends; }
         public long getTotalSend() { return totalSend; }
         public long getTotalNg() { return totalNg; }
+        public long getTotalSmsSent() { return totalSmsSent; }
         public List<Message> getRecentMessages() { return recentMessages; }
 
         /** For the <input type="month"> default. Empty when day scope is active. */

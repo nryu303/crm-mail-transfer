@@ -138,4 +138,39 @@ class CarrierPoolServiceTest {
         verify(poolRepo).save(cap.capture());
         assertThat(cap.getValue().getIsActive()).isFalse();
     }
+
+    /**
+     * delete() must NOT hard-delete: a message already sent from this address needs the row
+     * (and its CARRIER_USER_BINDING) to still exist so InboundMailService can match a later
+     * reply. Regression test for the 2026-07 incident where deleteById() cascaded and broke
+     * reply-routing for every past message sent from a removed pool address.
+     */
+    @Test
+    void delete_deactivatesInsteadOfRemovingRow() {
+        CarrierAddressPool stored = existing(7L, "a@x.test", "ENC[x]");
+        stored.setIsActive(true);
+        when(poolRepo.findById(7L)).thenReturn(Optional.of(stored));
+
+        svc.delete(7L);
+
+        ArgumentCaptor<CarrierAddressPool> cap = ArgumentCaptor.forClass(CarrierAddressPool.class);
+        verify(poolRepo).save(cap.capture());
+        assertThat(cap.getValue().getIsActive()).isFalse();
+        verify(poolRepo, never()).deleteById(any());
+    }
+
+    @Test
+    void deleteByIds_deactivatesEachRowInsteadOfRemoving() {
+        CarrierAddressPool a = existing(7L, "a@x.test", "ENC[x]");
+        CarrierAddressPool b = existing(8L, "b@x.test", "ENC[y]");
+        when(poolRepo.findById(7L)).thenReturn(Optional.of(a));
+        when(poolRepo.findById(8L)).thenReturn(Optional.of(b));
+
+        int n = svc.deleteByIds(java.util.Arrays.asList(7L, 8L));
+
+        assertThat(n).isEqualTo(2);
+        assertThat(a.getIsActive()).isFalse();
+        assertThat(b.getIsActive()).isFalse();
+        verify(poolRepo, never()).deleteById(any());
+    }
 }

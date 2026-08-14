@@ -70,6 +70,7 @@
                     <th class="px-3 py-2 text-left">登録人数</th>
                     <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性</th>
                     <th class="px-3 py-2 text-left" style="color:#dc2626;">女性</th>
+                    <th th:if="${showLoginCount}" class="px-3 py-2 text-left">ログイン数 (累計)</th>
                     <th class="px-3 py-2 text-left">入金額 (累計)</th>
                     <th class="px-3 py-2 text-left" style="color:#1d4ed8;">男性課金</th>
                     <th class="px-3 py-2 text-left" style="color:#dc2626;">女性課金</th>
@@ -81,7 +82,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                 <tr th:if="${summaries.empty}">
-                    <td colspan="13" class="px-3 py-6 text-center text-slate-400">このグループに属する広告コードはまだありません</td>
+                    <td th:colspan="${showLoginCount} ? 14 : 13" class="px-3 py-6 text-center text-slate-400">このグループに属する広告コードはまだありません</td>
                 </tr>
                 <tr th:each="s,it : ${summaries}" class="hover:bg-slate-50">
                     <td class="px-3 py-2 text-center">
@@ -93,6 +94,7 @@
                     <td class="px-3 py-2 text-slate-700" th:text="${s.signupCount} + ' 人'"></td>
                     <td class="px-3 py-2" style="color:#1d4ed8;" th:text="${s.signupMale} + ' 人'"></td>
                     <td class="px-3 py-2" style="color:#dc2626;" th:text="${s.signupFemale} + ' 人'"></td>
+                    <td th:if="${showLoginCount}" class="px-3 py-2 text-slate-700" th:text="${s.loginCount} + ' 人'"></td>
                     <td class="px-3 py-2 text-slate-700" th:text="'¥ ' + ${#numbers.formatInteger(s.paidTotal, 1, 'COMMA')}"></td>
                     <td class="px-3 py-2" style="color:#1d4ed8;" th:text="'¥ ' + ${#numbers.formatInteger(s.paidMale, 1, 'COMMA')}"></td>
                     <td class="px-3 py-2" style="color:#dc2626;" th:text="'¥ ' + ${#numbers.formatInteger(s.paidFemale, 1, 'COMMA')}"></td>

@@ -56,7 +56,10 @@
                 ⚠ エラー詳細 (送信不可 <span th:text="${broadcast.unsendableCount}">0</span> 件)
             </summary>
             <div class="px-3 py-2 text-xs text-amber-900 border-t border-amber-200">
-                <p class="mb-2">
+                <p class="mb-2" th:if="${broadcast.channel == 'SMS'}">
+                    以下のユーザーは電話番号が未登録のため、今回のSMS一斉送信の対象から除外されました。
+                </p>
+                <p class="mb-2" th:unless="${broadcast.channel == 'SMS'}">
                     以下のアドレスは形式エラー（先頭/末尾ドット、連続ドット等）のため、転送機の SMTP 送信時に拒否されることが事前に判明しているため、今回の一斉送信では除外されました。
                 </p>
                 <table class="w-full text-xs">
@@ -74,7 +77,9 @@
                                 <a class="text-blue-700 hover:underline"
                                    th:href="@{'/manager/users/' + ${u.id}}" th:text="${u.email}"></a>
                             </td>
-                            <td class="px-2 py-1" th:text="${u.addressInvalidReason == 'trailing_dot'} ? '末尾にドット' :
+                            <td class="px-2 py-1" th:if="${broadcast.channel == 'SMS'}">電話番号未登録</td>
+                            <td class="px-2 py-1" th:unless="${broadcast.channel == 'SMS'}"
+                                th:text="${u.addressInvalidReason == 'trailing_dot'} ? '末尾にドット' :
                                                           (${u.addressInvalidReason == 'leading_dot'} ? '先頭にドット' :
                                                           (${u.addressInvalidReason == 'double_dot'} ? '連続ドット' : ${u.addressInvalidReason}))"></td>
                         </tr>

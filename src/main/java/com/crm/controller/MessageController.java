@@ -119,11 +119,12 @@ public class MessageController {
         messageService.markThreadAsRead(userId);
         List<Message> thread = messageService.threadFor(userId);
         // Compute per-user thread stats for pane-tr header
-        long threadWebReply = 0, threadMailReply = 0, threadOut = 0;
+        long threadWebReply = 0, threadMailReply = 0, threadSmsReply = 0, threadOut = 0;
         for (com.crm.entity.Message m : thread) {
             if (com.crm.entity.Message.DIR_IN.equals(m.getDirection())) {
                 if ("WEB_REPLY".equals(m.getChannel())) threadWebReply++;
                 else if ("EMAIL".equals(m.getChannel())) threadMailReply++;
+                else if (com.crm.entity.Message.CHANNEL_SMS.equals(m.getChannel())) threadSmsReply++;
             } else if (com.crm.entity.Message.DIR_OUT.equals(m.getDirection())) {
                 threadOut++;
             }
@@ -134,6 +135,7 @@ public class MessageController {
         model.addAttribute("thread", thread);
         model.addAttribute("threadWebReply", threadWebReply);
         model.addAttribute("threadMailReply", threadMailReply);
+        model.addAttribute("threadSmsReply", threadSmsReply);
         model.addAttribute("threadOut", threadOut);
         model.addAttribute("totalPaid", totalPaid != null ? totalPaid : java.math.BigDecimal.ZERO);
         model.addAttribute("bindings", placeholderService.buildBindings(user.get()));
@@ -181,6 +183,7 @@ public class MessageController {
     /** Submit a new outbound message for a specific user. */
     @PostMapping("/manager/users/{userId}/messages")
     public String sendMessage(@PathVariable Long userId,
+                              @RequestParam(name = "returnTo", required = false) String returnTo,
                               @Valid @ModelAttribute("form") MessageComposeForm form,
                               BindingResult br,
                               HttpSession session,
@@ -207,7 +210,37 @@ public class MessageController {
         } catch (MessageService.MessageException e) {
             ra.addFlashAttribute("flashError", e.getMessage());
         }
-        return "redirect:/manager/users/" + userId + "/thread";
+        return "redirect:/manager/users/" + userId + redirectSuffixFor(returnTo);
+    }
+
+    /** SMS reply from the thread page — only available for users with a registered phone number. */
+    @PostMapping("/manager/users/{userId}/messages/sms")
+    public String sendSms(@PathVariable Long userId,
+                          @RequestParam(name = "returnTo", required = false) String returnTo,
+                          @Valid @ModelAttribute("smsForm") com.crm.dto.SmsComposeForm form,
+                          BindingResult br,
+                          HttpSession session,
+                          RedirectAttributes ra,
+                          Model model) {
+        if (br.hasErrors()) {
+            ra.addFlashAttribute("flashError", "SMS本文を入力してください");
+            return "redirect:/manager/users/" + userId + redirectSuffixFor(returnTo);
+        }
+        Long adminId = (Long) session.getAttribute(AuthInterceptor.SESSION_ADMIN_ID);
+        try {
+            Message sent = messageService.composeSms(userId, adminId, form);
+            String kind = Message.STATUS_QUEUED.equals(sent.getStatus()) ? "予約送信" : "送信";
+            ra.addFlashAttribute("flashSuccess", "SMSを" + kind + "しました");
+        } catch (MessageService.MessageException e) {
+            ra.addFlashAttribute("flashError", e.getMessage());
+        }
+        return "redirect:/manager/users/" + userId + redirectSuffixFor(returnTo);
+    }
+
+    /** メッセージボックス per-item reply forms post with returnTo=message-box so the admin
+     *  lands back on the message-box preview instead of the default thread view. */
+    private static String redirectSuffixFor(String returnTo) {
+        return "message-box".equals(returnTo) ? "/message-box" : "/thread";
     }
 
     /**

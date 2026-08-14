@@ -100,7 +100,7 @@
             white-space:nowrap; min-width:82px; }
         .dash table.d th.lbl, .dash table.d td.lbl {
             position:sticky; left:0; z-index:3; border-right:1px solid var(--border);
-            text-align:left; padding:6px 12px; min-width:76px; max-width:76px; width:76px; white-space:nowrap; }
+            text-align:left; padding:6px 12px; min-width:100px; max-width:100px; width:100px; white-space:nowrap; }
         .dash table.d th.lbl { background: var(--header-bg); font-size:.7rem; }
         .dash table.d td.lbl { background:#fff; font-weight:700; color:var(--muted); font-size:.75rem; }
         .dash table.d td { text-align:center; padding:6px 8px;
@@ -416,9 +416,13 @@
                 <input type="hidden" name="nyukinMonth" th:if="${stats.nyukinMonth != null}" th:value="${stats.nyukinMonthValue}"/>
                 <button type="submit" class="btn-show">表示</button>
                 <div class="chips">
+                    <div class="chip send" style="background:#ecfeff;">
+                        <span class="cl">SMS送信合計</span>
+                        <span class="cv" th:text="${#numbers.formatInteger(smsTotalForScope, 1, 'COMMA')}">0</span>
+                    </div>
                     <div class="chip send">
-                        <span class="cl">送信合計</span>
-                        <span class="cv" th:text="${#numbers.formatInteger(sendTotalForScope, 1, 'COMMA')}">0</span>
+                        <span class="cl">メール送信合計</span>
+                        <span class="cv" th:text="${#numbers.formatInteger(emailTotalForScope, 1, 'COMMA')}">0</span>
                     </div>
                     <div class="chip ng">
                         <span class="cl">NG合計</span>
@@ -428,7 +432,7 @@
             </form>
             <script th:inline="javascript">
                 /*<![CDATA[*/
-                window.__hourlyChartData = /*[[${hourlyChartJson}]]*/ "{\"labels\":[],\"sent\":[],\"ng\":[]}";
+                window.__hourlyChartData = /*[[${hourlyChartJson}]]*/ "{\"labels\":[],\"sent\":[],\"ng\":[],\"sms\":[],\"email\":[]}";
                 /*]]>*/
             </script>
 
@@ -436,11 +440,12 @@
                  The inner block sizes to {@code max-content} so when many bucket columns push
                  the table past the card width, the chart scrolls along with it — keeping
                  bar X-positions vertically aligned with the data columns below them.
-                 The canvas wrapper has 76px left padding to match the table's 「指標」 column
-                 width; Chart.js Y-axis is hidden so the plot area uses the full canvas width. -->
+                 The canvas wrapper has 100px left padding to match the table's 「指標」 column
+                 width (.lbl); Chart.js Y-axis is hidden so the plot area uses the full canvas
+                 width. Keep these two values in lockstep — see .dash table.d th.lbl / td.lbl. -->
             <div class="tbl-scroll">
                 <div style="min-width:100%; width:max-content;">
-                    <div style="padding:10px 0 4px 76px;">
+                    <div style="padding:10px 0 4px 100px;">
                         <canvas id="hourlyChart" style="display:block;width:100%;height:200px;"></canvas>
                     </div>
                     <table class="d">
@@ -452,10 +457,16 @@
                         </thead>
                         <tbody>
                         <tr>
-                            <td class="lbl">送信数</td>
+                            <td class="lbl">SMS送信数</td>
                             <td th:each="h : ${sendBuckets}"
-                                th:classappend="${h.sent > 0} ? 'send-v' : 'zero'"
-                                th:text="${#numbers.formatInteger(h.sent, 1, 'COMMA')}">0</td>
+                                th:classappend="${h.smsSent > 0} ? 'send-v' : 'zero'"
+                                th:text="${#numbers.formatInteger(h.smsSent, 1, 'COMMA')}">0</td>
+                        </tr>
+                        <tr>
+                            <td class="lbl">メール送信数</td>
+                            <td th:each="h : ${sendBuckets}"
+                                th:classappend="${h.emailSent > 0} ? 'send-v' : 'zero'"
+                                th:text="${#numbers.formatInteger(h.emailSent, 1, 'COMMA')}">0</td>
                         </tr>
                         <tr>
                             <td class="lbl">NG数</td>
@@ -690,7 +701,8 @@
             data: {
                 labels: data.labels,
                 datasets: [
-                    { label: '送信数', data: data.sent, backgroundColor: 'rgba(22,163,74,0.7)', borderRadius: 3 },
+                    { label: 'SMS送信数', data: data.sms,   backgroundColor: 'rgba(8,145,178,0.7)', borderRadius: 3 },
+                    { label: 'メール送信数', data: data.email, backgroundColor: 'rgba(22,163,74,0.7)', borderRadius: 3 },
                     { label: 'NG',     data: data.ng,   backgroundColor: 'rgba(220,38,38,0.7)', borderRadius: 3 }
                 ]
             },

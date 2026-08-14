@@ -5,6 +5,8 @@ public class UserSearchForm {
     private String email;
     /** Same semantics as email. */
     private String displayName;
+    /** Same semantics as email. */
+    private String phoneNumber;
     private String status;
     /** Legacy URL param tolerated for backwards-compat with old bookmarks; ignored. */
     private String carrierCode;
@@ -48,6 +50,7 @@ public class UserSearchForm {
     /** Parse email into tokens (split on \n, \r, comma). Empty list if blank. */
     public java.util.List<String> emailTokens() { return splitTokens(email); }
     public java.util.List<String> displayNameTokens() { return splitTokens(displayName); }
+    public java.util.List<String> phoneNumberTokens() { return splitTokens(phoneNumber); }
 
     private static java.util.List<String> splitTokens(String raw) {
         if (raw == null || raw.trim().isEmpty()) return java.util.Collections.emptyList();
@@ -64,6 +67,9 @@ public class UserSearchForm {
 
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
+
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

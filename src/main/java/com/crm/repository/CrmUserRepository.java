@@ -10,7 +10,9 @@ import java.util.Optional;
 
 public interface CrmUserRepository extends JpaRepository<CrmUser, Long>, JpaSpecificationExecutor<CrmUser> {
     Optional<CrmUser> findByEmail(String email);
+    Optional<CrmUser> findByPhoneNumber(String phoneNumber);
     boolean existsByEmail(String email);
+    boolean existsByPhoneNumber(String phoneNumber);
     boolean existsByLoginId(String loginId);
     long countByStatus(String status);
 
@@ -97,6 +99,16 @@ public interface CrmUserRepository extends JpaRepository<CrmUser, Long>, JpaSpec
                    "GROUP BY AD_CODE, GENDER", nativeQuery = true)
     List<Object[]> countByAdCodeAndGenderBetween(@org.springframework.data.repository.query.Param("start") java.time.LocalDateTime start,
                                                   @org.springframework.data.repository.query.Param("end") java.time.LocalDateTime end);
+
+    /**
+     * Per-ad_code count of users who have logged in at least once (LAST_LOGIN_AT IS NOT NULL).
+     * Cumulative/all-time, no date window — matches the 累計 (running-total) style of the
+     * existing 登録/入金 columns on 広告設定. Returned as [ad_code, count].
+     */
+    @Query(value = "SELECT AD_CODE, COUNT(*) FROM CRM_USER " +
+                   "WHERE AD_CODE IS NOT NULL AND LAST_LOGIN_AT IS NOT NULL " +
+                   "GROUP BY AD_CODE", nativeQuery = true)
+    List<Object[]> countLoggedInByAdCode();
 
     /** Per-(day, gender) signup count for one ad_code within a window — drill-down view. */
     @Query(value = "SELECT DATE_FORMAT(CREATED_AT, '%Y-%m-%d'), GENDER, COUNT(*) FROM CRM_USER " +

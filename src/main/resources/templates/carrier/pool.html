@@ -61,6 +61,13 @@
                 <button type="button" class="inline-flex items-center px-4 py-2 border border-slate-300 bg-white text-slate-600 text-sm rounded-md hover:bg-slate-50" onclick="window.location='/manager/carrier-pool'">クリア</button>
             </div>
         </div>
+        <div class="mt-3 flex items-center">
+            <input type="checkbox" class="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                   id="showInactive" th:field="*{showInactive}"/>
+            <label class="ml-2 text-xs text-slate-500" for="showInactive">
+                削除済み(無効化)のアドレスも表示する — ユーザーとの紐付けは維持されているため一覧からは通常非表示です
+            </label>
+        </div>
     </form>
 
     <form id="poolBulkForm" method="post">
@@ -118,17 +125,17 @@
             <li>
                 <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                    th:classappend="${pools.first} ? 'opacity-50 pointer-events-none'"
-                   th:href="@{/manager/carrier-pool(page=${pools.number - 1},address=${searchForm.address},carrierCode=${searchForm.carrierCode},boundFilter=${searchForm.boundFilter})}">前へ</a>
+                   th:href="@{/manager/carrier-pool(page=${pools.number - 1},address=${searchForm.address},carrierCode=${searchForm.carrierCode},boundFilter=${searchForm.boundFilter},showInactive=${searchForm.showInactive})}">前へ</a>
             </li>
             <li th:each="i : ${#numbers.sequence(0, pools.totalPages - 1)}">
                 <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                    th:classappend="${i == pools.number} ? 'bg-blue-600 text-white border-blue-600'"
-                   th:href="@{/manager/carrier-pool(page=${i},address=${searchForm.address},carrierCode=${searchForm.carrierCode},boundFilter=${searchForm.boundFilter})}" th:text="${i + 1}"></a>
+                   th:href="@{/manager/carrier-pool(page=${i},address=${searchForm.address},carrierCode=${searchForm.carrierCode},boundFilter=${searchForm.boundFilter},showInactive=${searchForm.showInactive})}" th:text="${i + 1}"></a>
             </li>
             <li>
                 <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
                    th:classappend="${pools.last} ? 'opacity-50 pointer-events-none'"
-                   th:href="@{/manager/carrier-pool(page=${pools.number + 1},address=${searchForm.address},carrierCode=${searchForm.carrierCode},boundFilter=${searchForm.boundFilter})}">次へ</a>
+                   th:href="@{/manager/carrier-pool(page=${pools.number + 1},address=${searchForm.address},carrierCode=${searchForm.carrierCode},boundFilter=${searchForm.boundFilter},showInactive=${searchForm.showInactive})}">次へ</a>
             </li>
         </ul>
     </nav>
@@ -169,8 +176,8 @@
     window.confirmBulkDeletePool = function () {
         var n = [].filter.call(rows(), function (c) { return c.checked; }).length;
         if (n === 0) return false;
-        if (!confirm('選択した ' + n + ' 件のキャリアアドレスを削除します。割当中の場合はユーザーとの紐付けも切れます。よろしいですか?')) return false;
-        if (!confirm('本当に削除してよろしいですか? この操作は取り消せません。')) return false;
+        if (!confirm('選択した ' + n + ' 件のキャリアアドレスを削除します。ユーザーとの紐付けは維持され、過去に送信済みのメッセージへの返信は引き続き届きます。よろしいですか?')) return false;
+        if (!confirm('本当に削除してよろしいですか? 編集画面からいつでも再度有効化できます。')) return false;
         var pw = prompt('管理者パスワードを入力してください');
         if (!pw) return false;
         var f = document.getElementById('poolBulkForm');

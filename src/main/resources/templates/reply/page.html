@@ -108,6 +108,9 @@
     </div>
 
     <div th:if="${footerHtml}" class="reply-footer" th:utext="${footerHtml}"></div>
+
+    <div th:if="${messageBox != null}"
+         th:replace="~{fragment/message-box :: messageBox(${messageBox}, ${token}, false, null)}"></div>
 </div>
 
 </body>

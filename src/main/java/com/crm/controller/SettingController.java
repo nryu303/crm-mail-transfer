@@ -4,6 +4,7 @@ import com.crm.dto.DomainSettingForm;
 import com.crm.dto.MessageTemplateForm;
 import com.crm.dto.RelayServerForm;
 import com.crm.dto.ReplyPageSettingForm;
+import com.crm.dto.SmsSettingForm;
 import com.crm.entity.MessageTemplate;
 import com.crm.entity.RelayServer;
 import com.crm.interceptor.AuthInterceptor;
@@ -33,6 +34,7 @@ import java.util.Optional;
 public class SettingController {
 
     private final RelayServerService relayServerService;
+    private final com.crm.service.ExternalLinkDomainService externalLinkDomainService;
     private final MessageTemplateService templateService;
     private final ReplyPageSettingService replyPageSettingService;
     private final AdminAuthService adminAuthService;
@@ -45,8 +47,10 @@ public class SettingController {
     private final com.crm.service.ReplyHtmlSlotService replyHtmlSlotService;
     private final com.crm.service.FolderRetentionService folderRetentionService;
     private final com.crm.service.ImapEnvSyncService imapEnvSyncService;
+    private final com.crm.service.SmsSettingService smsSettingService;
 
     public SettingController(RelayServerService relayServerService,
+                             com.crm.service.ExternalLinkDomainService externalLinkDomainService,
                              MessageTemplateService templateService,
                              ReplyPageSettingService replyPageSettingService,
                              AdminAuthService adminAuthService,
@@ -58,8 +62,10 @@ public class SettingController {
                              com.crm.service.CrmUserService crmUserService,
                              com.crm.service.ReplyHtmlSlotService replyHtmlSlotService,
                              com.crm.service.FolderRetentionService folderRetentionService,
-                             com.crm.service.ImapEnvSyncService imapEnvSyncService) {
+                             com.crm.service.ImapEnvSyncService imapEnvSyncService,
+                             com.crm.service.SmsSettingService smsSettingService) {
         this.relayServerService = relayServerService;
+        this.externalLinkDomainService = externalLinkDomainService;
         this.templateService = templateService;
         this.replyPageSettingService = replyPageSettingService;
         this.adminAuthService = adminAuthService;
@@ -72,6 +78,7 @@ public class SettingController {
         this.replyHtmlSlotService = replyHtmlSlotService;
         this.folderRetentionService = folderRetentionService;
         this.imapEnvSyncService = imapEnvSyncService;
+        this.smsSettingService = smsSettingService;
     }
 
     /** Page: current IMAP-monitor sync state + manual re-sync button. Auto-sync also fires
@@ -312,7 +319,153 @@ public class SettingController {
         model.addAttribute("relayCount", relayServerService.listAll().size());
         model.addAttribute("templateCount", templateService.count());
         model.addAttribute("maxTemplates", MessageTemplateService.MAX_TEMPLATES);
+        model.addAttribute("externalLinkDomainCount", externalLinkDomainService.listAll().size());
         return "setting/index";
+    }
+
+    // ====== External link domains (外部リンクドメイン生成) ======
+    @GetMapping("/external-link-domains")
+    public String externalLinkDomainList(Model model) {
+        java.util.List<com.crm.entity.ExternalLinkDomain> domains = externalLinkDomainService.listAll();
+        model.addAttribute("domains", domains);
+        // アクセス数: per-domain USER_ACCESS_LOG hit count (deduplicated by user), keyed by
+        // domain id for the template.
+        java.util.Map<Long, Long> accessCounts = new java.util.LinkedHashMap<>();
+        java.util.Map<Long, String> certStatuses = new java.util.LinkedHashMap<>();
+        for (com.crm.entity.ExternalLinkDomain d : domains) {
+            accessCounts.put(d.getId(), externalLinkDomainService.countAccesses(d));
+            certStatuses.put(d.getId(), externalLinkDomainService.certStatus(d));
+        }
+        model.addAttribute("accessCounts", accessCounts);
+        model.addAttribute("certStatuses", certStatuses);
+        return "setting/external-link-domain-list";
+    }
+
+    /** Manually (re-)request the TLS cert for a domain — e.g. after a certbot failure. */
+    @PostMapping("/external-link-domains/{id}/request-cert")
+    public String externalLinkDomainRequestCert(@PathVariable Long id, RedirectAttributes ra) {
+        externalLinkDomainService.requestCert(id);
+        ra.addFlashAttribute("flashSuccess",
+                "証明書の発行をリクエストしました。反映まで1分ほどお待ちください。");
+        return "redirect:/manager/settings/external-link-domains";
+    }
+
+    /** Drill-down: which users (phone/email) accessed a link served under this domain. */
+    @GetMapping("/external-link-domains/{id}/accesses")
+    public String externalLinkDomainAccesses(@PathVariable Long id, Model model, RedirectAttributes ra) {
+        Optional<com.crm.entity.ExternalLinkDomain> d = externalLinkDomainService.findById(id);
+        if (!d.isPresent()) {
+            ra.addFlashAttribute("flashError", "外部リンクドメインが見つかりません");
+            return "redirect:/manager/settings/external-link-domains";
+        }
+        model.addAttribute("domain", d.get());
+        model.addAttribute("accessedUsers", externalLinkDomainService.listAccessedUsers(d.get()));
+        return "setting/external-link-domain-accesses";
+    }
+
+    /** Permanently deletes every recorded access for this domain — アクセス数 drops to 0. */
+    @PostMapping("/external-link-domains/{id}/accesses/delete")
+    public String externalLinkDomainDeleteAccesses(@PathVariable Long id, RedirectAttributes ra) {
+        Optional<com.crm.entity.ExternalLinkDomain> d = externalLinkDomainService.findById(id);
+        if (!d.isPresent()) {
+            ra.addFlashAttribute("flashError", "外部リンクドメインが見つかりません");
+            return "redirect:/manager/settings/external-link-domains";
+        }
+        int deleted = externalLinkDomainService.deleteAccessHistory(d.get());
+        ra.addFlashAttribute("flashSuccess", "アクセス履歴を削除しました (" + deleted + " 件)");
+        return "redirect:/manager/settings/external-link-domains/" + id + "/accesses";
+    }
+
+    @GetMapping("/external-link-domains/new")
+    public String externalLinkDomainCreateForm(Model model) {
+        model.addAttribute("form", new com.crm.dto.ExternalLinkDomainForm());
+        model.addAttribute("editing", false);
+        return "setting/external-link-domain-form";
+    }
+
+    @PostMapping("/external-link-domains")
+    public String externalLinkDomainCreate(@Valid @ModelAttribute("form") com.crm.dto.ExternalLinkDomainForm form,
+                                            BindingResult br, RedirectAttributes ra, Model model) {
+        if (br.hasErrors()) {
+            model.addAttribute("editing", false);
+            return "setting/external-link-domain-form";
+        }
+        try {
+            externalLinkDomainService.create(form);
+            ra.addFlashAttribute("flashSuccess", "外部リンクドメインを追加しました");
+            return "redirect:/manager/settings/external-link-domains";
+        } catch (com.crm.service.ExternalLinkDomainService.DuplicateDomainException e) {
+            br.rejectValue("domainUrl", "duplicate", "このドメインは既に登録されています");
+            model.addAttribute("editing", false);
+            return "setting/external-link-domain-form";
+        }
+    }
+
+    @GetMapping("/external-link-domains/{id}/edit")
+    public String externalLinkDomainEditForm(@PathVariable Long id, Model model, RedirectAttributes ra) {
+        Optional<com.crm.entity.ExternalLinkDomain> d = externalLinkDomainService.findById(id);
+        if (!d.isPresent()) {
+            ra.addFlashAttribute("flashError", "外部リンクドメインが見つかりません");
+            return "redirect:/manager/settings/external-link-domains";
+        }
+        model.addAttribute("form", com.crm.dto.ExternalLinkDomainForm.from(d.get()));
+        model.addAttribute("domainId", id);
+        model.addAttribute("editing", true);
+        model.addAttribute("certStatus", externalLinkDomainService.certStatus(d.get()));
+        return "setting/external-link-domain-form";
+    }
+
+    @PostMapping("/external-link-domains/{id}")
+    public String externalLinkDomainUpdate(@PathVariable Long id,
+                                            @Valid @ModelAttribute("form") com.crm.dto.ExternalLinkDomainForm form,
+                                            BindingResult br, RedirectAttributes ra, Model model) {
+        if (br.hasErrors()) {
+            model.addAttribute("domainId", id);
+            model.addAttribute("editing", true);
+            return "setting/external-link-domain-form";
+        }
+        try {
+            externalLinkDomainService.update(id, form);
+            ra.addFlashAttribute("flashSuccess", "外部リンクドメインを更新しました");
+            return "redirect:/manager/settings/external-link-domains";
+        } catch (com.crm.service.ExternalLinkDomainService.DuplicateDomainException e) {
+            br.rejectValue("domainUrl", "duplicate", "このドメインは既に登録されています");
+            model.addAttribute("domainId", id);
+            model.addAttribute("editing", true);
+            return "setting/external-link-domain-form";
+        } catch (com.crm.service.ExternalLinkDomainService.NotFoundException e) {
+            ra.addFlashAttribute("flashError", "外部リンクドメインが見つかりません");
+            return "redirect:/manager/settings/external-link-domains";
+        }
+    }
+
+    /** Toggle 使用中/未使用 directly from the list page (radio-style — activating one
+     *  deactivates any other active row; see ExternalLinkDomainService). */
+    @PostMapping("/external-link-domains/{id}/toggle")
+    public String externalLinkDomainToggle(@PathVariable Long id,
+                                            @RequestParam(name = "active", required = false) String active,
+                                            RedirectAttributes ra) {
+        boolean enable = "true".equalsIgnoreCase(active) || "on".equalsIgnoreCase(active) || "1".equals(active);
+        try {
+            if (enable) {
+                com.crm.entity.ExternalLinkDomain d = externalLinkDomainService.activate(id);
+                ra.addFlashAttribute("flashSuccess",
+                        "「" + d.getDomainUrl() + "」を使用中に切り替えました (他のドメインは自動的に未使用になります)");
+            } else {
+                externalLinkDomainService.deactivate(id);
+                ra.addFlashAttribute("flashSuccess", "未使用に切り替えました");
+            }
+        } catch (com.crm.service.ExternalLinkDomainService.NotFoundException e) {
+            ra.addFlashAttribute("flashError", "外部リンクドメインが見つかりません");
+        }
+        return "redirect:/manager/settings/external-link-domains";
+    }
+
+    @PostMapping("/external-link-domains/{id}/delete")
+    public String externalLinkDomainDelete(@PathVariable Long id, RedirectAttributes ra) {
+        externalLinkDomainService.delete(id);
+        ra.addFlashAttribute("flashSuccess", "外部リンクドメインを削除しました");
+        return "redirect:/manager/settings/external-link-domains";
     }
 
     // ====== Relay servers ======
@@ -633,6 +786,59 @@ public class SettingController {
 
     private static String s(String v) { return v == null ? "" : v.trim(); }
 
+    // ====== SMS配信設定 (BytePlus SMS OpenAPI — Basic Auth only) ======
+
+    @GetMapping("/sms")
+    public String smsForm(Model model) {
+        SmsSettingForm form = new SmsSettingForm();
+        form.setEnabled(smsSettingService.isEnabled());
+        form.setUsername(smsSettingService.getUsername());
+        // Intentionally left blank — operator types a new password only when changing it
+        // (see SmsSettingService.save). Pre-filling a type="password" field is unreliable
+        // across browsers and previously caused a working password to get silently wiped.
+        model.addAttribute("hasStoredPassword",
+                smsSettingService.getPassword() != null && !smsSettingService.getPassword().isEmpty());
+        form.setSenderName(smsSettingService.getSenderName());
+        form.setLocalDelivery(smsSettingService.isLocalDelivery());
+        form.setRelayIp(smsSettingService.getRelayIp());
+        form.setSenderNameMode(smsSettingService.getSenderNameMode());
+        form.setSenderNameFixedList(smsSettingService.getSenderNameFixedList());
+        form.setSenderNameRandomLength(smsSettingService.getSenderNameRandomLength());
+        form.setRatePerMinute(smsSettingService.getRatePerMinute());
+        // relayToken intentionally left blank on GET — same "blank = keep existing" pattern as password.
+        model.addAttribute("hasStoredRelayToken",
+                smsSettingService.getRelayToken() != null && !smsSettingService.getRelayToken().isEmpty());
+        model.addAttribute("form", form);
+        String base = domainSettingService.getReplyBaseUrl();
+        String token = smsSettingService.getOrCreateInboundToken();
+        model.addAttribute("inboundWebhookUrl",
+                (base == null || base.trim().isEmpty() ? "" : base.trim()) + "/api/inbound/sms/" + token);
+        return "setting/sms";
+    }
+
+    @PostMapping("/sms")
+    public String smsSave(@ModelAttribute("form") SmsSettingForm form, RedirectAttributes ra) {
+        String fixedListError = com.crm.service.SmsSettingService.validateFixedList(form.getSenderNameFixedList());
+        if (fixedListError != null) {
+            ra.addFlashAttribute("flashError", fixedListError);
+            return "redirect:/manager/settings/sms";
+        }
+        smsSettingService.save(
+                Boolean.TRUE.equals(form.getEnabled()),
+                form.getUsername(),
+                form.getPassword(),
+                form.getSenderName(),
+                Boolean.TRUE.equals(form.getLocalDelivery()),
+                form.getRelayIp(),
+                form.getSenderNameMode(),
+                form.getSenderNameFixedList(),
+                form.getSenderNameRandomLength(),
+                form.getRelayToken(),
+                form.getRatePerMinute());
+        ra.addFlashAttribute("flashSuccess", "SMS配信設定を保存しました");
+        return "redirect:/manager/settings/sms";
+    }
+
     // ====== Reply page settings (singleton) ======
     @GetMapping("/reply-page")
     public String replyPageForm(Model model) {
@@ -742,6 +948,7 @@ public class SettingController {
     @GetMapping("/home-html")
     public String homeHtmlForm(Model model) {
         model.addAttribute("slots", homeHtmlService.listSlots());
+        model.addAttribute("rootDomainUrl", domainSettingService.getReplyBaseUrl() + "/");
         return "setting/home-html";
     }
 

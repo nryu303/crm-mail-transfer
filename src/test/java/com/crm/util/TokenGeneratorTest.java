@@ -38,4 +38,41 @@ class TokenGeneratorTest {
         for (int i = 0; i < 10_000; i++) seen.add(TokenGenerator.generateReplyToken());
         assertThat(seen).hasSize(10_000);
     }
+
+    @Test
+    void shortReplyToken_isExactly10Chars() {
+        for (int i = 0; i < 30; i++) {
+            assertThat(TokenGenerator.generateShortReplyToken()).hasSize(10);
+        }
+    }
+
+    @Test
+    void shortReplyToken_isAlphaNumericOnly() {
+        for (int i = 0; i < 30; i++) {
+            String t = TokenGenerator.generateShortReplyToken();
+            assertThat(ALLOWED.matcher(t).matches())
+                    .as("token %s is purely alphanumeric", t)
+                    .isTrue();
+        }
+    }
+
+    @Test
+    void shortReplyTokens_areUniqueAcrossManyCalls() {
+        // 10-char alphanumeric = 62^10 ≈ 8.4e17 — collision in 10k samples is negligible.
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < 10_000; i++) seen.add(TokenGenerator.generateShortReplyToken());
+        assertThat(seen).hasSize(10_000);
+    }
+
+    @Test
+    void shortReplyTokenWithLength_honoursRequestedLength() {
+        assertThat(TokenGenerator.generateShortReplyToken(6)).hasSize(6);
+        assertThat(TokenGenerator.generateShortReplyToken(15)).hasSize(15);
+    }
+
+    @Test
+    void shortReplyTokenWithLength_clampsOutOfRangeValues() {
+        assertThat(TokenGenerator.generateShortReplyToken(1)).hasSize(TokenGenerator.MIN_SHORT_LENGTH);
+        assertThat(TokenGenerator.generateShortReplyToken(999)).hasSize(TokenGenerator.MAX_SHORT_LENGTH);
+    }
 }

@@ -1,0 +1,10 @@
+[Unit]
+Description=Issue/renew Let's Encrypt cert + nginx HTTPS block for a staged 外部リンクドメイン (root-side hand-off from CRM JVM)
+# Triggered by external-link-domain-cert-issue.path when
+# /tmp/external-link-domain-cert-request.new is closed after write by the JVM
+# (running as centos, NoNewPrivileges so it can't sudo). See
+# deploy/systemd/certbot-issue-domain-cert.sh for the full flow.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/certbot-issue-domain-cert.sh

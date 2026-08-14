@@ -24,12 +24,19 @@ public class MessageService {
 
     public static final String REPLY_URL_PLACEHOLDER = "%reply_url%";
 
+    /** 15-char clip rule: when a %reply_url% is present, only this many characters of the
+     *  substituted body precede the expanded URL in what's actually transmitted. The full
+     *  substituted body is always kept in BODY_TEXT for メッセージボックス display. */
+    public static final int REPLY_URL_CLIP_LENGTH = 15;
+
     private final MessageRepository messageRepository;
     private final CrmUserRepository userRepository;
     private final CarrierAddressPoolRepository poolRepository;
     private final CarrierBindingService bindingService;
     private final PlaceholderService placeholderService;
     private final OutboundMailService outboundMailService;
+    private final OutboundSmsService outboundSmsService;
+    private final SmsSettingService smsSettingService;
     private final AesEncryptionUtil aes;
     private final ReplyPageService replyPageService;
     private final DomainSettingService domainSettingService;
@@ -42,6 +49,8 @@ public class MessageService {
                           CarrierBindingService bindingService,
                           PlaceholderService placeholderService,
                           OutboundMailService outboundMailService,
+                          OutboundSmsService outboundSmsService,
+                          SmsSettingService smsSettingService,
                           AesEncryptionUtil aes,
                           ReplyPageService replyPageService,
                           DomainSettingService domainSettingService,
@@ -52,6 +61,8 @@ public class MessageService {
         this.bindingService = bindingService;
         this.placeholderService = placeholderService;
         this.outboundMailService = outboundMailService;
+        this.outboundSmsService = outboundSmsService;
+        this.smsSettingService = smsSettingService;
         this.aes = aes;
         this.replyPageService = replyPageService;
         this.domainSettingService = domainSettingService;
@@ -314,6 +325,7 @@ public class MessageService {
             java.util.Optional<CrmUser> uOpt = userRepository.findById(uid);
             if (!uOpt.isPresent()) continue;
             CrmUser user = uOpt.get();
+            if (user.getEmail() == null || user.getEmail().isEmpty()) continue; // SMS-only user
 
             // 2026-05-24: fall back to base-domain FROM when no active pool binding so
             // operators can still bulk-reply to users they haven't carrier-bound yet.
@@ -408,6 +420,9 @@ public class MessageService {
     public Message compose(Long userId, Long adminUserId, MessageComposeForm form) {
         CrmUser user = userRepository.findById(userId)
                 .orElseThrow(() -> new MessageException("ユーザーが見つかりません"));
+        if (user.getEmail() == null || user.getEmail().isEmpty()) {
+            throw new MessageException("このユーザーはメールアドレスが未登録です（電話番号のみ登録）。SMS送信をご利用ください");
+        }
         // 2026-05-24: unbound users used to be rejected here, but the operator can still
         // send via the base-domain FROM (from.base_domain setting) — the reply-page URL in
         // the body handles round-tripping. Fall back when no active pool binding exists.
@@ -439,7 +454,13 @@ public class MessageService {
             msg.setStatus(Message.STATUS_DRAFT);
             msg = messageRepository.save(msg);
             String url = replyPageService.createReplyPageFor(msg);
+            // BODY_TEXT always keeps the FULL substituted body — メッセージボックス reads this.
+            // SENT_BODY_TEXT is the 15-char-clipped text actually transmitted (see clipForTransmission).
             msg.setBodyText(renderedBody.replace(REPLY_URL_PLACEHOLDER, url));
+            msg.setSentBodyText(clipForTransmission(renderedBody, url));
+            // 外部リンクドメイン landing mode is resolved at the exact moment the reply URL above
+            // was built, so this flag reflects the domain that URL will actually route through.
+            msg.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
             // fall through — subsequent save() / sendNow() path will update this row
         }
 
@@ -460,6 +481,62 @@ public class MessageService {
     }
 
     /**
+     * SMS reply from the thread page — deliberately separate from {@link #compose}, which
+     * resolves a carrier-pool FROM address and has no meaning for the SMS channel. Only
+     * available when the user has a registered phone number.
+     */
+    @Transactional
+    public Message composeSms(Long userId, Long adminUserId, com.crm.dto.SmsComposeForm form) {
+        CrmUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new MessageException("ユーザーが見つかりません"));
+        String phone = user.getPhoneNumber();
+        if (phone == null || phone.trim().isEmpty()) {
+            throw new MessageException("このユーザーには電話番号が登録されていません");
+        }
+
+        String renderedBody = placeholderService.substitute(form.getBody(), user);
+
+        Message msg = new Message();
+        msg.setUserId(userId);
+        msg.setAdminUserId(adminUserId);
+        msg.setDirection(Message.DIR_OUT);
+        msg.setChannel(Message.CHANNEL_SMS);
+        msg.setBodyText(renderedBody);
+        msg.setFromAddress(smsSettingService.resolveSenderName());
+        msg.setToAddress(phone);
+        msg.setReplyToMessageId(form.getReplyToMessageId());
+
+        // Same %reply_url% handling as compose() — the tag panel is shared between the
+        // email and SMS reply forms, but this substitution was missing here, so an SMS
+        // reply containing %reply_url% went out with the literal placeholder text intact.
+        // Uses the short (10-char) token, not the 64-char email one — SMS is billed per
+        // ~65-char segment, so the long form alone would consume the whole budget.
+        boolean needsReplyUrl = renderedBody != null && renderedBody.contains(REPLY_URL_PLACEHOLDER);
+        if (needsReplyUrl) {
+            msg.setStatus(Message.STATUS_DRAFT);
+            msg = messageRepository.save(msg);
+            String url = replyPageService.createShortReplyPageFor(msg);
+            // Same full-body-vs-clipped-transmit split as compose() — see clipForTransmission().
+            msg.setBodyText(renderedBody.replace(REPLY_URL_PLACEHOLDER, url));
+            msg.setSentBodyText(clipForTransmission(renderedBody, url));
+            msg.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
+        }
+
+        LocalDateTime scheduled = form.getScheduledAt();
+        LocalDateTime now = LocalDateTime.now();
+        if (scheduled != null && scheduled.isAfter(now)) {
+            msg.setStatus(Message.STATUS_QUEUED);
+            msg.setScheduledAt(scheduled);
+            return messageRepository.save(msg);
+        }
+
+        msg.setStatus(Message.STATUS_QUEUED); // transient; updated below
+        Message saved = messageRepository.save(msg);
+        sendNow(saved, null);
+        return saved;
+    }
+
+    /**
      * Dispatch a saved outbound message via the relay. Called on immediate send
      * and (future) by the scheduler for QUEUED entries whose scheduled time has arrived.
      *
@@ -471,41 +548,72 @@ public class MessageService {
      */
     @Transactional
     public void sendNow(Message msg, CarrierAddressPool pool) {
-        String smtpPwd = pool == null ? null : aes.decrypt(pool.getSmtpPassword());
-        String smtpHost = pool == null ? null : pool.getSmtpHost();
-        Integer smtpPort = pool == null ? null : pool.getSmtpPort();
-        String smtpUser = pool == null ? null : pool.getSmtpUsername();
-        OutboundMailService.OutboundRequest req = new OutboundMailService.OutboundRequest(
-                msg.getFromAddress(),
-                msg.getToAddress(),
-                msg.getSubject() == null ? "" : msg.getSubject(),
-                msg.getBodyText() == null ? "" : msg.getBodyText(),
-                smtpHost,
-                smtpPort == null ? 587 : smtpPort,
-                smtpUser,
-                smtpPwd);
-        OutboundMailService.SendResult result = outboundMailService.send(req);
+        boolean success;
+        boolean retriable;
+        String errorMessage;
+
+        // SENT_BODY_TEXT holds the 15-char-clipped text when %reply_url% was present at compose
+        // time (see clipForTransmission()); BODY_TEXT is always the full text for メッセージボックス.
+        // Falls back to BODY_TEXT when SENT_BODY_TEXT was never set — unchanged behaviour for the
+        // no-%reply_url% case. Works for both immediate send and scheduler-dispatched QUEUED rows,
+        // since both columns are persisted together at compose/queue time.
+        String transmitBody = msg.getSentBodyText() != null ? msg.getSentBodyText() : msg.getBodyText();
+
+        if (Message.CHANNEL_SMS.equals(msg.getChannel())) {
+            // Use the sender name already resolved and stored on the row at compose/queue time
+            // (msg.getFromAddress()) — NOT smsSettingService.resolveSenderName() again here.
+            // With a random sender-name mode, calling resolve() a second time would send BytePlus
+            // a different name than the one recorded in our own history.
+            OutboundSmsService.SmsSendRequest req = new OutboundSmsService.SmsSendRequest(
+                    smsSettingService.getUsername(),
+                    smsSettingService.getPassword(),
+                    msg.getFromAddress(),
+                    msg.getToAddress(),
+                    transmitBody == null ? "" : transmitBody);
+            OutboundSmsService.SendResult result = outboundSmsService.send(req);
+            success = result.success;
+            retriable = result.retriable;
+            errorMessage = result.errorMessage;
+        } else {
+            String smtpPwd = pool == null ? null : aes.decrypt(pool.getSmtpPassword());
+            String smtpHost = pool == null ? null : pool.getSmtpHost();
+            Integer smtpPort = pool == null ? null : pool.getSmtpPort();
+            String smtpUser = pool == null ? null : pool.getSmtpUsername();
+            OutboundMailService.OutboundRequest req = new OutboundMailService.OutboundRequest(
+                    msg.getFromAddress(),
+                    msg.getToAddress(),
+                    msg.getSubject() == null ? "" : msg.getSubject(),
+                    transmitBody == null ? "" : transmitBody,
+                    smtpHost,
+                    smtpPort == null ? 587 : smtpPort,
+                    smtpUser,
+                    smtpPwd);
+            OutboundMailService.SendResult result = outboundMailService.send(req);
+            success = result.success;
+            retriable = result.retriable;
+            errorMessage = result.errorMessage;
+        }
         int attempts = (msg.getSendAttempts() == null ? 0 : msg.getSendAttempts()) + 1;
         msg.setSendAttempts(attempts);
 
         boolean finalOutcome;
-        if (result.success) {
+        if (success) {
             msg.setStatus(Message.STATUS_SENT);
             msg.setSentAt(LocalDateTime.now());
             msg.setErrorMessage(null);
             msg.setNextRetryAt(null);
             finalOutcome = true;
-        } else if (result.retriable && attempts < MAX_SEND_ATTEMPTS) {
+        } else if (retriable && attempts < MAX_SEND_ATTEMPTS) {
             // Transient failure — put back on the queue with exponential backoff.
             msg.setStatus(Message.STATUS_QUEUED);
-            msg.setErrorMessage(result.errorMessage);
+            msg.setErrorMessage(errorMessage);
             msg.setNextRetryAt(LocalDateTime.now().plus(backoffFor(attempts)));
             // Counter update is deferred: broadcast counter only moves on final outcome.
             messageRepository.save(msg);
             return;
         } else {
             msg.setStatus(Message.STATUS_FAILED);
-            msg.setErrorMessage(result.errorMessage);
+            msg.setErrorMessage(errorMessage);
             msg.setNextRetryAt(null);
             finalOutcome = false;
         }
@@ -517,6 +625,24 @@ public class MessageService {
                 // defensive — don't fail a send because counter update failed
             }
         }
+    }
+
+    /**
+     * 15-char clip rule (メッセージボックス feature): what's actually TRANSMITTED when the body
+     * contains %reply_url% is the first {@link #REPLY_URL_CLIP_LENGTH} characters of the
+     * substituted body (read literally as "before the URL replaces the tag" — otherwise an
+     * operator placing %reply_url% near the very start of the body would see the clip window
+     * mostly consumed by URL text, which can't be the intent) plus the expanded URL once.
+     * {@code renderedBodyBeforeUrlSwap} still contains the literal %reply_url% token; if it
+     * falls inside the 15-char window we strip it out before appending the real URL so the
+     * tag text itself never leaks into the transmitted message.
+     */
+    public static String clipForTransmission(String renderedBodyBeforeUrlSwap, String expandedUrl) {
+        String body = renderedBodyBeforeUrlSwap == null ? "" : renderedBodyBeforeUrlSwap;
+        String prefix = body.length() > REPLY_URL_CLIP_LENGTH
+                ? body.substring(0, REPLY_URL_CLIP_LENGTH) : body;
+        String prefixNoTag = prefix.replace(REPLY_URL_PLACEHOLDER, "");
+        return prefixNoTag + (expandedUrl == null ? "" : expandedUrl);
     }
 
     /** Max transient-retry attempts before giving up and marking FAILED. */

@@ -84,35 +84,50 @@ public class DashboardController {
         }
         model.addAttribute("sendScope", sendScope);
         model.addAttribute("sendBuckets", buckets);
-        long sendTotal = 0, ngTotal = 0;
+        long sendTotal = 0, ngTotal = 0, smsTotal = 0, emailTotal = 0;
         Map<String, Object> hourlyChart = new HashMap<>();
         List<String> labels = new java.util.ArrayList<>();
         List<Long> sentSeries = new java.util.ArrayList<>();
         List<Long> ngSeries = new java.util.ArrayList<>();
+        List<Long> smsSeries = new java.util.ArrayList<>();
+        List<Long> emailSeries = new java.util.ArrayList<>();
         if (buckets != null) {
             for (DashboardService.HourlySend h : buckets) {
                 labels.add(h.getLabel());
                 sentSeries.add(h.getSent());
                 ngSeries.add(h.getNg());
-                sendTotal += h.getSent();
-                ngTotal   += h.getNg();
+                smsSeries.add(h.getSmsSent());
+                emailSeries.add(h.getEmailSent());
+                sendTotal  += h.getSent();
+                ngTotal    += h.getNg();
+                smsTotal   += h.getSmsSent();
+                emailTotal += h.getEmailSent();
             }
         }
         hourlyChart.put("labels", labels);
         hourlyChart.put("sent", sentSeries);
         hourlyChart.put("ng", ngSeries);
+        hourlyChart.put("sms", smsSeries);
+        // "email" is non-SMS outbound (sent - sms) — the dashboard displays SMS/メール as two
+        // separate, non-summed series per operator request (2026-07-14); "sent" (combined) is
+        // kept in the payload for any other consumer but no longer rendered directly.
+        hourlyChart.put("email", emailSeries);
         String hourlyJson;
         try { hourlyJson = objectMapper.writeValueAsString(hourlyChart); }
-        catch (JsonProcessingException e) { hourlyJson = "{\"labels\":[],\"sent\":[],\"ng\":[]}"; }
+        catch (JsonProcessingException e) { hourlyJson = "{\"labels\":[],\"sent\":[],\"ng\":[],\"sms\":[],\"email\":[]}"; }
         model.addAttribute("hourlyChartJson", hourlyJson);
         // Totals adjust to the active scope so the cards above the chart stay in sync.
         if (!"hour".equals(sendScope)) {
             // Override the day-only totals from stats with the day/month aggregated ones.
             model.addAttribute("sendTotalForScope", sendTotal);
             model.addAttribute("ngTotalForScope", ngTotal);
+            model.addAttribute("smsTotalForScope", smsTotal);
+            model.addAttribute("emailTotalForScope", emailTotal);
         } else {
             model.addAttribute("sendTotalForScope", stats.getTotalSend());
             model.addAttribute("ngTotalForScope", stats.getTotalNg());
+            model.addAttribute("smsTotalForScope", stats.getTotalSmsSent());
+            model.addAttribute("emailTotalForScope", stats.getTotalSend() - stats.getTotalSmsSent());
         }
 
         // userId → display label for the bottom "直近のメッセージ" table

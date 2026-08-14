@@ -92,6 +92,8 @@ app:
     smtp:
       connect-timeout-ms: 10000
       read-timeout-ms: 30000
+  sms:
+    adapter: ${SMS_ADAPTER:stub}
   relay-server:
     url: ${RELAY_URL:http://160.251.199.135/api/send}
     connect-timeout-ms: 5000

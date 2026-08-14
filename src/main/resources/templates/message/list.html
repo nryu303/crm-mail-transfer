@@ -34,7 +34,7 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/messages/export.csv(tab=${tab})}">CSVエクスポート</a>
     </div>
     <p class="text-xs text-slate-500 mb-4">
-        個別送信・予約送信・個別の受信返信のみを表示しています。
+        SMS送信・予約送信・個別の受信返信のみを表示しています。
         一斉送信は <a class="text-blue-600 hover:underline" th:href="@{/manager/messages/broadcast}">一斉送信履歴</a> からご確認ください。
     </p>
 
@@ -101,13 +101,19 @@
                 <td class="px-3 py-2"><input type="checkbox" class="msg-row-item" name="ids" th:value="${m.id}"/></td>
                 <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${messages.number * messages.size + it.count}"></code></td>
                 <td class="px-3 py-2">
-                    <span th:if="${m.direction == 'OUT'}" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">送信</span>
+                    <span th:if="${m.direction == 'OUT' and m.channel == 'SMS'}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800"
+                          title="SMS送信">SMS送信</span>
+                    <span th:if="${m.direction == 'OUT' and m.channel != 'SMS'}" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">送信</span>
                     <span th:if="${m.direction == 'IN' and m.channel == 'EMAIL'}"
                           class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-200 text-slate-700"
                           title="ユーザーからの直接メール返信">メール返信</span>
                     <span th:if="${m.direction == 'IN' and m.channel == 'WEB_REPLY'}"
                           class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-sky-100 text-sky-700"
                           title="返信URLからのフォーム返信">Web返信</span>
+                    <span th:if="${m.direction == 'IN' and m.channel == 'SMS'}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800"
+                          title="ユーザーからのSMS返信">SMS返信</span>
                 </td>
                 <td class="px-3 py-2 text-xs">
                     <a class="text-blue-600 hover:underline whitespace-nowrap"

@@ -74,7 +74,19 @@ public class AdCodeController {
         model.addAttribute("externalBaseUrl", externalBaseUrl());
         model.addAttribute("mediaAuthUser", settings.getMediaAuthUser());
         model.addAttribute("mediaAuthPassword", settings.getMediaAuthPassword());
+        model.addAttribute("showLoginCount", settings.isAdCodeShowLoginCount());
         return "ad-code/list";
+    }
+
+    /** Show/hide the ログイン数（累計） column. Toggled from the checkbox on the list page. */
+    @PostMapping("/show-login-count")
+    public String toggleShowLoginCount(@RequestParam(name = "show", required = false) String show,
+                                        RedirectAttributes ra) {
+        boolean enabled = "true".equalsIgnoreCase(show) || "on".equalsIgnoreCase(show) || "1".equals(show);
+        settings.setAdCodeShowLoginCount(enabled);
+        ra.addFlashAttribute("flashSuccess",
+                enabled ? "ログイン数（累計）列を表示しました" : "ログイン数（累計）列を非表示にしました");
+        return "redirect:/manager/ad-codes";
     }
 
     /** Drill-down: every code that belongs to a single group name. */
@@ -90,6 +102,7 @@ public class AdCodeController {
         model.addAttribute("groupSlug", com.crm.service.AdCodeService.slugify(name));
         model.addAttribute("summaries", service.listWithSummaries(q, name));
         model.addAttribute("q", q == null ? "" : q);
+        model.addAttribute("showLoginCount", settings.isAdCodeShowLoginCount());
         model.addAttribute("externalBaseUrl", externalBaseUrl());
         model.addAttribute("externalGroupUrl",
                 externalBaseUrl() + "/media/index/?g=" + com.crm.service.AdCodeService.slugify(name));

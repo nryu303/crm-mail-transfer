@@ -50,6 +50,98 @@ sudo systemctl daemon-reload
 
 ---
 
+# external-link-domain-cert-issue (systemd path-watcher)
+
+Auto-issues a Let's Encrypt cert + nginx HTTPS server block for a new/reactivated
+外部リンクドメイン生成 row, so it's reachable over HTTPS without a manual `certbot`
+run every time an operator registers a domain.
+
+## What it does
+
+- Same privilege-boundary pattern as `softbank-env-install`: the CRM JVM (centos,
+  `NoNewPrivileges=true`) writes the bare domain name to
+  `/tmp/external-link-domain-cert-request.new` via `ExternalLinkDomainCertService`.
+- `external-link-domain-cert-issue.path` watches that file and triggers the
+  oneshot `external-link-domain-cert-issue.service`, which runs
+  `deploy/systemd/certbot-issue-domain-cert.sh` as root.
+- The script validates the domain strictly (hostname-shape regex — defense
+  against a malicious/malformed value reaching a root-run script), runs
+  `certbot certonly --webroot` against the shared `/.well-known/acme-challenge/`
+  location already present in `ops/nginx-crm.conf`'s catch-all block, writes a
+  templated HTTPS server block to `/etc/nginx/conf.d/external-link-domains/<domain>.conf`,
+  validates with `nginx -t`, and reloads nginx. On any failure it removes the
+  half-written conf file so a broken block never gets loaded.
+- Result is written to `/tmp/external-link-domain-cert-result.<domain>` (or
+  `.invalid` for a rejected domain) so the JVM can poll and show
+  pending/success/failure in the settings UI.
+
+## Prerequisite (one-off, before first use)
+
+`ops/nginx-crm.conf` must already have the shared ACME-challenge location (added
+alongside this feature) and the `include /etc/nginx/conf.d/external-link-domains/*.conf;`
+directive. Re-deploy that file if it predates this feature.
+
+```
+sudo cp ops/nginx-crm.conf /etc/nginx/conf.d/crm-dev.conf   # match your live filename
+sudo mkdir -p /var/www/letsencrypt /etc/nginx/conf.d/external-link-domains
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Also required (both discovered the hard way on 2026-08-05 — without them certbot fails
+every issuance with a 403/timeout even though everything above looks correct):
+
+- **Firewall**: port 80 must be open, not just 443. `firewall-cmd --list-services` should
+  include `http`. If it doesn't:
+  ```
+  sudo firewall-cmd --permanent --add-service=http
+  sudo firewall-cmd --reload
+  ```
+- **SELinux** (enforcing mode), two separate policies needed:
+  - `/var/www/letsencrypt` (ACME challenge files) needs `httpd_sys_content_t`:
+    ```
+    sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/letsencrypt(/.*)?"
+    sudo restorecon -Rv /var/www/letsencrypt
+    ```
+  - `/etc/nginx/conf.d/external-link-domains` (per-domain HTTPS blocks) needs
+    `httpd_config_t` — nginx's config-reading label, different from content-serving:
+    ```
+    sudo semanage fcontext -a -t httpd_config_t "/etc/nginx/conf.d/external-link-domains(/.*)?"
+    sudo restorecon -Rv /etc/nginx/conf.d/external-link-domains
+    ```
+    The script also `restorecon`s each conf file it writes (a plain `mv` from `/tmp`
+    keeps the source's `tmp_t` label, so this alone isn't enough without the policy above).
+
+## Install (one-off operator action)
+
+```
+sudo install -o root -g root -m 0755 deploy/systemd/certbot-issue-domain-cert.sh /usr/local/bin/
+sudo install -o root -g root -m 0644 deploy/systemd/external-link-domain-cert-issue.service /etc/systemd/system/
+sudo install -o root -g root -m 0644 deploy/systemd/external-link-domain-cert-issue.path    /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now external-link-domain-cert-issue.path
+```
+
+## Verify
+
+```
+sudo systemctl status external-link-domain-cert-issue.path   # should be active (waiting)
+# Trigger from the CRM (settings > 外部リンクドメイン生成 > 新規追加 or 使用中にする)
+sudo journalctl -u external-link-domain-cert-issue.service --since "2 minutes ago"
+sudo tail -30 /var/log/letsencrypt/external-link-domain-cert.log
+ls /etc/nginx/conf.d/external-link-domains/                  # should show <domain>.conf
+```
+
+## Uninstall
+
+```
+sudo systemctl disable --now external-link-domain-cert-issue.path
+sudo rm /etc/systemd/system/external-link-domain-cert-issue.{path,service}
+sudo rm /usr/local/bin/certbot-issue-domain-cert.sh
+sudo systemctl daemon-reload
+```
+
+---
+
 # crm.service drop-in: TimeoutStopSec=90
 
 Why: the base `crm.service` ships with `TimeoutStopSec=30`. Spring Boot

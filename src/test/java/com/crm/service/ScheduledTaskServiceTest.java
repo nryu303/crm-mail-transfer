@@ -39,6 +39,7 @@ class ScheduledTaskServiceTest {
     private CarrierUserBindingRepository bindingRepo;
     private DomainSettingService domainSettings;
     private BroadcastRepository broadcastRepo;
+    private SmsSettingService smsSettingService;
     private ScheduledTaskService svc;
 
     @BeforeEach
@@ -59,9 +60,14 @@ class ScheduledTaskServiceTest {
         com.crm.repository.InboundMailLogRepository inboundLogRepo =
                 mock(com.crm.repository.InboundMailLogRepository.class);
         InboundMailService inboundMail = mock(InboundMailService.class);
+        com.crm.repository.UserAccessLogRepository userAccessLogRepo =
+                mock(com.crm.repository.UserAccessLogRepository.class);
+        smsSettingService = mock(SmsSettingService.class);
+        when(smsSettingService.getRatePerMinute()).thenReturn(600); // fast in tests: 100ms/msg
         svc = new ScheduledTaskService(msgRepo, poolRepo, messageService,
                 settingRepo, bindingRepo, domainSettings, broadcastRepo,
-                folderSettings, folderRetention, inboundLogRepo, inboundMail);
+                folderSettings, folderRetention, inboundLogRepo, inboundMail, userAccessLogRepo,
+                smsSettingService);
     }
 
     private static Message scheduledBroadcastRow(Long id, Long userId, Long broadcastId,
@@ -140,6 +146,61 @@ class ScheduledTaskServiceTest {
 
         verify(messageService).sendNow(eq(m), any());
         verify(msgRepo, never()).countOutboundFinalisedSince(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    void dispatchQueued_smsMessage_sentViaSerialLane() throws Exception {
+        // 2026-08-06 fix: SMS must not go through the parallel workerPool (the relay's own
+        // rate-limiter isn't safe under concurrent requests — see class-level dispatchQueued
+        // comment). This just asserts the message still gets sent, since the serial lane runs
+        // async on a background thread — awaitSendNow polls until sendNow() has been invoked.
+        Message sms = scheduledBroadcastRow(10L, 7L, null,
+                LocalDateTime.now().minusHours(1), LocalDateTime.now().minusMinutes(1));
+        sms.setChannel(Message.CHANNEL_SMS);
+
+        when(msgRepo.findDueForDispatch(eq(Message.STATUS_QUEUED), any())).thenReturn(
+                Collections.singletonList(sms));
+
+        svc.dispatchQueued();
+
+        awaitSendNowCalled(sms);
+        verify(messageService).sendNow(eq(sms), any());
+    }
+
+    @Test
+    void dispatchQueued_mixedChannels_bothEventuallyDispatched() throws Exception {
+        Message sms = scheduledBroadcastRow(11L, 7L, null,
+                LocalDateTime.now().minusHours(1), LocalDateTime.now().minusMinutes(1));
+        sms.setChannel(Message.CHANNEL_SMS);
+        Message email = scheduledBroadcastRow(12L, 8L, null,
+                LocalDateTime.now().minusHours(1), LocalDateTime.now().minusMinutes(1));
+        email.setChannel(Message.CHANNEL_EMAIL);
+
+        when(msgRepo.findDueForDispatch(eq(Message.STATUS_QUEUED), any())).thenReturn(
+                java.util.Arrays.asList(sms, email));
+
+        svc.dispatchQueued();
+
+        // Email dispatches synchronously within dispatchQueued() (parallel workerPool, awaited
+        // before the method returns), so it's already sent by the time we get here.
+        verify(messageService).sendNow(eq(email), any());
+        // SMS runs async on the serial lane — poll for it.
+        awaitSendNowCalled(sms);
+        verify(messageService).sendNow(eq(sms), any());
+    }
+
+    /** Polls up to 2s for messageService.sendNow(msg, ...) to have been invoked — the SMS
+     *  serial lane dispatches on a background thread, not on the calling test thread. */
+    private void awaitSendNowCalled(Message msg) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                verify(messageService).sendNow(eq(msg), any());
+                return;
+            } catch (AssertionError notYet) {
+                Thread.sleep(20);
+            }
+        }
     }
 
     private static <T> T eq(T expected) { return org.mockito.ArgumentMatchers.eq(expected); }

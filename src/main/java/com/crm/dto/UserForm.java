@@ -20,6 +20,10 @@ public class UserForm {
     @Size(max = 255)
     private String email;
 
+    /** SMS delivery target. Optional — no format validation since carrier phone formats vary. */
+    @Size(max = 20)
+    private String phoneNumber;
+
     @Size(max = 255)
     private String displayName;
 
@@ -62,6 +66,9 @@ public class UserForm {
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+
+    public String getPhoneNumber() { return phoneNumber; }
+    public void setPhoneNumber(String phoneNumber) { this.phoneNumber = phoneNumber; }
 
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
@@ -114,6 +121,7 @@ public class UserForm {
     public static UserForm from(CrmUser u) {
         UserForm f = new UserForm();
         f.email = u.getEmail();
+        f.phoneNumber = u.getPhoneNumber();
         f.displayName = u.getDisplayName();
         f.carrierDomain = u.getCarrierDomain();
         f.status = u.getStatus();
@@ -137,6 +145,7 @@ public class UserForm {
 
     public void applyTo(CrmUser u) {
         u.setEmail(trim(email));
+        u.setPhoneNumber(trim(phoneNumber));
         u.setDisplayName(trim(displayName));
         u.setCarrierDomain(trim(carrierDomain));
         u.setStatus(trim(status));

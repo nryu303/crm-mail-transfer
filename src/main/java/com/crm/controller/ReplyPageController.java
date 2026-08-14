@@ -59,6 +59,8 @@ public class ReplyPageController {
     private final ReplyRateLimitService rateLimitService;
     private final com.crm.service.PlaceholderService placeholderService;
     private final com.crm.service.ReplyAttachmentService attachmentService;
+    private final com.crm.service.ExternalLinkDomainService externalLinkDomainService;
+    private final com.crm.service.MessageBoxService messageBoxService;
 
     public ReplyPageController(ReplyPageService replyPageService,
                                CrmUserRepository userRepository,
@@ -67,7 +69,9 @@ public class ReplyPageController {
                                UserActivityService userActivityService,
                                ReplyRateLimitService rateLimitService,
                                com.crm.service.PlaceholderService placeholderService,
-                               com.crm.service.ReplyAttachmentService attachmentService) {
+                               com.crm.service.ReplyAttachmentService attachmentService,
+                               com.crm.service.ExternalLinkDomainService externalLinkDomainService,
+                               com.crm.service.MessageBoxService messageBoxService) {
         this.replyPageService = replyPageService;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
@@ -76,6 +80,8 @@ public class ReplyPageController {
         this.rateLimitService = rateLimitService;
         this.placeholderService = placeholderService;
         this.attachmentService = attachmentService;
+        this.externalLinkDomainService = externalLinkDomainService;
+        this.messageBoxService = messageBoxService;
     }
 
     /**
@@ -100,7 +106,9 @@ public class ReplyPageController {
     }
 
     @GetMapping("/reply/{token}")
-    public String show(@PathVariable String token, HttpServletRequest request, Model model) {
+    public String show(@PathVariable String token,
+                       @RequestParam(name = "box_page", defaultValue = "0") int boxPage,
+                       HttpServletRequest request, Model model) {
         Optional<ReplyPage> rpOpt = replyPageService.findByToken(token);
         if (!rpOpt.isPresent() || !replyPageService.isUsable(rpOpt.get())) {
             return "reply/expired";
@@ -121,9 +129,34 @@ public class ReplyPageController {
         // Treat empty/whitespace strings as "not set" so the next fallback layer kicks in
         // (admin reported that user.memo = "" was blocking the site-default from being used).
         Optional<CrmUser> user = userPre;
+        String viewHost = resolveRequestHost(request);
         if (!isPreviewBot(request)) {
-            user.ifPresent(userActivityService::touchLastLogin);
+            String viewIp = ClientIpResolver.resolve(request);
+            String viewUa = request.getHeader("User-Agent");
+            user.ifPresent(u -> userActivityService.touchLastLogin(
+                    u, com.crm.entity.UserAccessLog.SOURCE_REPLY_VIEW, viewIp, viewUa, viewHost));
         }
+
+        // 外部リンクドメイン生成: the domain this click actually arrived on may be configured
+        // to redirect to an external destination or serve custom landing-page HTML instead of
+        // the normal reply form, once the access above has been logged. Falls through to the
+        // reply form (existing behaviour) when the domain isn't registered or is in REPLY_FORM
+        // mode — including the legacy single-base-URL path, which has no ExternalLinkDomain row.
+        Optional<com.crm.entity.ExternalLinkDomain> clickDomain =
+                externalLinkDomainService.findByHost(viewHost);
+        if (clickDomain.isPresent()) {
+            com.crm.entity.ExternalLinkDomain d = clickDomain.get();
+            if (com.crm.entity.ExternalLinkDomain.MODE_REDIRECT.equals(d.getLandingMode())
+                    && d.getRedirectUrl() != null && !d.getRedirectUrl().trim().isEmpty()) {
+                return "redirect:" + d.getRedirectUrl().trim();
+            }
+            if (com.crm.entity.ExternalLinkDomain.MODE_CUSTOM_HTML.equals(d.getLandingMode())
+                    && d.getLandingHtml() != null && !d.getLandingHtml().trim().isEmpty()) {
+                model.addAttribute("landingHtml", d.getLandingHtml());
+                return "reply/landing";
+            }
+        }
+
         ReplyPageSetting settings = settingService.getOrCreate();
         String headerHtml = blankToNull(rp.getHeaderHtml());
         if (headerHtml == null && user.isPresent()) {
@@ -159,6 +192,11 @@ public class ReplyPageController {
         model.addAttribute("attachments", attachments);
         model.addAttribute("maxAttachmentSizeMB",
                 com.crm.service.ReplyAttachmentService.MAX_SIZE_BYTES / 1024 / 1024);
+
+        // メッセージボックス: this user's past OUT/SENT history (SMS/WEB/BROADCAST), newest first.
+        if (user.isPresent()) {
+            model.addAttribute("messageBox", messageBoxService.listFor(user.get().getId(), boxPage));
+        }
         return "reply/page";
     }
 
@@ -217,6 +255,7 @@ public class ReplyPageController {
     public String submit(@PathVariable String token,
                          @RequestParam(required = false) String subject,
                          @RequestParam(required = false) String body,
+                         @RequestParam(required = false) Long replyToMessageId,
                          @RequestParam(name = "files", required = false)
                                  org.springframework.web.multipart.MultipartFile[] files,
                          HttpServletRequest request,
@@ -275,7 +314,19 @@ public class ReplyPageController {
         msg.setStatus(Message.STATUS_SENT);
         msg.setSentAt(LocalDateTime.now());
         msg.setReplyPageToken(token);
-        msg.setReplyToMessageId(rp.getMessageId());
+
+        // メッセージボックス per-item reply: replyToMessageId (when supplied) targets that
+        // specific historical OUT message instead of the top-level rp.getMessageId(). Verify
+        // ownership first — a tampered POST could otherwise mis-attribute a reply to another
+        // user's message id and cross-contaminate their thread view.
+        Long effectiveReplyTo = rp.getMessageId();
+        if (replyToMessageId != null) {
+            Optional<Message> refMsg = messageRepository.findById(replyToMessageId);
+            if (refMsg.isPresent() && refMsg.get().getUserId().equals(rp.getUserId())) {
+                effectiveReplyTo = replyToMessageId;
+            }
+        }
+        msg.setReplyToMessageId(effectiveReplyTo);
         Message savedMsg = messageRepository.save(msg);
 
         // Save each uploaded image with message_id = saved.id so the thread view can show
@@ -297,7 +348,10 @@ public class ReplyPageController {
             }
         }
 
-        user.ifPresent(userActivityService::touchLastLogin);
+        String submitUa = request.getHeader("User-Agent");
+        String submitHost = resolveRequestHost(request);
+        user.ifPresent(u -> userActivityService.touchLastLogin(
+                u, com.crm.entity.UserAccessLog.SOURCE_REPLY_SUBMIT, clientIp, submitUa, submitHost));
 
         if (!attachErrors.isEmpty()) {
             // Reply was saved, but at least one attachment failed — surface the issue on
@@ -305,6 +359,14 @@ public class ReplyPageController {
             model.addAttribute("attachmentWarnings", attachErrors);
         }
         return "reply/sent";
+    }
+
+    /** Host the request actually arrived on (e.g. "ii5gh9ge.jp") — nginx forwards the original
+     *  Host header as-is (see ops/nginx-crm.conf), so this reflects whichever 外部リンクドメイン
+     *  or base domain the click came in through. */
+    private static String resolveRequestHost(HttpServletRequest request) {
+        String host = request.getServerName();
+        return (host == null || host.trim().isEmpty()) ? null : host.trim();
     }
 
     private static boolean isPreviewBot(HttpServletRequest request) {
@@ -320,9 +382,12 @@ public class ReplyPageController {
     public static class ReplyForm {
         private String subject;
         private String body;
+        private Long replyToMessageId;
         public String getSubject() { return subject; }
         public void setSubject(String subject) { this.subject = subject; }
         public String getBody() { return body; }
         public void setBody(String body) { this.body = body; }
+        public Long getReplyToMessageId() { return replyToMessageId; }
+        public void setReplyToMessageId(Long replyToMessageId) { this.replyToMessageId = replyToMessageId; }
     }
 }

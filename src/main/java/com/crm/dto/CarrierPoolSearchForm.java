@@ -5,6 +5,9 @@ public class CarrierPoolSearchForm {
     private String carrierCode;
     /** BOUND | UNBOUND | (empty = all) */
     private String boundFilter;
+    /** Deleted (= deactivated, see CarrierPoolService.delete) addresses are hidden by default —
+     *  the row/binding is kept for inbound reply-matching but shouldn't clutter the active list. */
+    private boolean showInactive;
     private int page = 0;
     private int size = 20;
 
@@ -26,6 +29,9 @@ public class CarrierPoolSearchForm {
 
     public String getBoundFilter() { return boundFilter; }
     public void setBoundFilter(String boundFilter) { this.boundFilter = boundFilter; }
+
+    public boolean isShowInactive() { return showInactive; }
+    public void setShowInactive(boolean showInactive) { this.showInactive = showInactive; }
 
     public int getPage() { return page; }
     public void setPage(int page) { this.page = Math.max(page, 0); }
