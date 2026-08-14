@@ -105,9 +105,9 @@
                 <div class="preview-label" style="display:flex; align-items:center; justify-content:space-between;">
                     <span>▶ CSS プレビュー (ミニ返信フォームに適用)</span>
                     <span class="css-preview-mode-toggle" style="font-weight:normal; letter-spacing:normal;">
-                        <label style="margin-right:8px;"><input type="radio" name="cssPreviewMode" th:field="*{cssPreviewMode}" value="ON"/> オン</label>
-                        <label style="margin-right:8px;"><input type="radio" name="cssPreviewMode" th:field="*{cssPreviewMode}" value="OFF"/> オフ</label>
-                        <label><input type="radio" name="cssPreviewMode" th:field="*{cssPreviewMode}" value="HIDDEN"/> 表示しない</label>
+                        <label style="margin-right:8px;"><input type="radio" th:field="*{cssPreviewMode}" th:value="'ON'"/> オン</label>
+                        <label style="margin-right:8px;"><input type="radio" th:field="*{cssPreviewMode}" th:value="'OFF'"/> オフ</label>
+                        <label><input type="radio" th:field="*{cssPreviewMode}" th:value="'HIDDEN'"/> 表示しない</label>
                     </span>
                 </div>
                 <div id="cssPreviewCollapseWrap" th:if="${form.cssPreviewMode != 'HIDDEN'}">
@@ -116,7 +116,7 @@
                         プレビューを表示 ▼
                     </button>
                     <iframe id="cssPreview"
-                            th:style="${form.cssPreviewMode == 'OFF'} ? 'display:none;' : ''"
+                            th:style="${form.cssPreviewMode == 'OFF' ? 'display:none;' : ''}"
                             sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe>
                 </div>
                 <div th:if="${form.cssPreviewMode == 'HIDDEN'}" class="text-xs text-slate-400" style="padding:10px;">

@@ -75,7 +75,7 @@
             <input type="hidden" name="returnTo" value="message-box"/>
             <input type="hidden" name="replyToMessageId" th:value="${item.id}"/>
             <input type="hidden" name="subject"
-                   th:value="${item.subject != null and !item.subject.isEmpty()} ? ('Re: ' + item.subject) : 'Re:'"/>
+                   th:value="${item.subject != null and !item.subject.isEmpty() ? ('Re: ' + item.subject) : 'Re:'}"/>
             <div class="field">
                 <textarea name="body" rows="4" placeholder="返信を入力..."></textarea>
             </div>
