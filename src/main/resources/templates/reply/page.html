@@ -54,58 +54,60 @@
 <body>
 <div class="reply-shell">
 
-    <iframe th:if="${headerHtml}" class="reply-header-frame"
+    <iframe th:if="${headerHtml != null and headerVisible}" class="reply-header-frame"
             sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"
             th:attr="srcdoc=${headerHtml}"></iframe>
 
-    <div class="reply-banner">
-        <h1>入力欄</h1>
-    </div>
-
-    <!-- Reply form: text body + optional image attachments in ONE multipart POST. The
-         previous 2-form layout confused operators (送信する only sent text, 添付する only
-         uploaded files) — combined here per operator request 2026-05-26. -->
-    <form class="reply-form" th:action="@{'/reply/' + ${token} + '/send'}" method="post"
-          th:object="${form}" enctype="multipart/form-data">
-
-        <div class="field">
-            <textarea id="body" name="body" rows="9" maxlength="10000" th:text="*{body}"></textarea>
+    <th:block th:if="${replyFormVisible}">
+        <div class="reply-banner">
+            <h1>入力欄</h1>
         </div>
 
-        <!-- Inline attachment picker — accepts multiple images, sent together with the body -->
-        <div class="reply-attach-block">
-            <div class="reply-attach-label">画像添付 (任意)</div>
-            <input type="file" name="files" multiple
-                   accept="image/jpeg,image/png,image/gif,image/webp"
-                   class="reply-attach-file"/>
-            <div class="reply-attach-hint"
-                 th:text="'JPEG / PNG / GIF / WebP, 1 ファイル最大 ' + ${maxAttachmentSizeMB} + ' MB / 複数選択可'"></div>
-            <div th:if="${errorMessage != null}" class="reply-attach-err" th:text="${errorMessage}"></div>
-        </div>
+        <!-- Reply form: text body + optional image attachments in ONE multipart POST. The
+             previous 2-form layout confused operators (送信する only sent text, 添付する only
+             uploaded files) — combined here per operator request 2026-05-26. -->
+        <form class="reply-form" th:action="@{'/reply/' + ${token} + '/send'}" method="post"
+              th:object="${form}" enctype="multipart/form-data">
 
-        <div th:if="${#fields.hasErrors('*')}" class="field-errors">
-            <p th:each="err : ${#fields.errors('*')}" th:text="${err}"></p>
-        </div>
+            <div class="field">
+                <textarea id="body" name="body" rows="9" maxlength="10000" th:text="*{body}"></textarea>
+            </div>
 
-        <div class="actions">
-            <button type="submit">送信する</button>
-        </div>
-    </form>
+            <!-- Inline attachment picker — accepts multiple images, sent together with the body -->
+            <div class="reply-attach-block">
+                <div class="reply-attach-label">画像添付 (任意)</div>
+                <input type="file" name="files" multiple
+                       accept="image/jpeg,image/png,image/gif,image/webp"
+                       class="reply-attach-file"/>
+                <div class="reply-attach-hint"
+                     th:text="'JPEG / PNG / GIF / WebP, 1 ファイル最大 ' + ${maxAttachmentSizeMB} + ' MB / 複数選択可'"></div>
+                <div th:if="${errorMessage != null}" class="reply-attach-err" th:text="${errorMessage}"></div>
+            </div>
 
-    <!-- User-visible confirmation grid of previously-attached images on the active slot.
-         When the admin switches active slot, this list will switch too on next visit. -->
-    <div class="reply-attach-list" th:if="${attachments != null and !attachments.empty}">
-        <div th:text="'添付済み画像 (' + ${attachments.size()} + ' 件)'" class="reply-attach-list-title"></div>
-        <div class="reply-attach-grid">
-            <a th:each="a : ${attachments}"
-               th:href="@{'/reply/' + ${token} + '/attachment/' + ${a.id}}"
-               target="_blank"
-               class="reply-attach-thumb">
-                <img th:src="@{'/reply/' + ${token} + '/attachment/' + ${a.id}}"
-                     th:alt="${a.fileName}"/>
-            </a>
+            <div th:if="${#fields.hasErrors('*')}" class="field-errors">
+                <p th:each="err : ${#fields.errors('*')}" th:text="${err}"></p>
+            </div>
+
+            <div class="actions">
+                <button type="submit">送信する</button>
+            </div>
+        </form>
+
+        <!-- User-visible confirmation grid of previously-attached images on the active slot.
+             When the admin switches active slot, this list will switch too on next visit. -->
+        <div class="reply-attach-list" th:if="${attachments != null and !attachments.empty}">
+            <div th:text="'添付済み画像 (' + ${attachments.size()} + ' 件)'" class="reply-attach-list-title"></div>
+            <div class="reply-attach-grid">
+                <a th:each="a : ${attachments}"
+                   th:href="@{'/reply/' + ${token} + '/attachment/' + ${a.id}}"
+                   target="_blank"
+                   class="reply-attach-thumb">
+                    <img th:src="@{'/reply/' + ${token} + '/attachment/' + ${a.id}}"
+                         th:alt="${a.fileName}"/>
+                </a>
+            </div>
         </div>
-    </div>
+    </th:block>
 
     <div th:if="${footerHtml}" class="reply-footer" th:utext="${footerHtml}"></div>
 

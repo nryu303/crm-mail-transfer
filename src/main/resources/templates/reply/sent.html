@@ -13,6 +13,9 @@
     </div>
     <div class="reply-form">
         <p class="sent-message">メールを送信しました。</p>
+        <div th:if="${cameFromMessageBox}" class="actions">
+            <a th:href="@{'/reply/' + ${token}}" class="message-box-back-link">メッセージボックスに戻る</a>
+        </div>
     </div>
 </div>
 </body>

@@ -590,6 +590,15 @@ public class UserController {
         return "redirect:/manager/users/" + id + "/message-box";
     }
 
+    @PostMapping("/{id}/message-box/delete-all")
+    public String messageBoxDeleteAll(@PathVariable Long id, RedirectAttributes ra) {
+        int n = messageBoxService.dismissAll(id);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_MESSAGE_BOX_DELETE, "Message",
+                "ALL", n + " 件全件削除 (user=" + id + ")");
+        ra.addFlashAttribute("flashSuccess", n + " 件全件削除しました");
+        return "redirect:/manager/users/" + id + "/message-box";
+    }
+
     private static final List<String> PAYMENT_METHODS = Arrays.asList(
             Payment.METHOD_BANK_TRANSFER, Payment.METHOD_CREDIT_CARD, Payment.METHOD_CASH);
     /** PAID listed first so the most-common selection is the default in dropdowns. */

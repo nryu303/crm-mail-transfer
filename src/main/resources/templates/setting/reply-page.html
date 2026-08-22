@@ -70,7 +70,15 @@
                           placeholder="例) &lt;!DOCTYPE html&gt;&#10;&lt;html lang=&quot;ja&quot;&gt;&#10;..."></textarea>
             </div>
             <div class="preview-pane header-preview">
-                <div class="preview-label">▶ ヘッダー プレビュー (sandboxed iframe — 上下スクロール可)</div>
+                <div class="preview-label" style="display:flex; align-items:center; justify-content:space-between;">
+                    <span>▶ ヘッダー プレビュー (sandboxed iframe — 上下スクロール可)</span>
+                    <span style="font-weight:normal; letter-spacing:normal;">
+                        <label style="margin-right:8px;"><input type="checkbox" th:field="*{headerVisible}"/> ユーザー側に表示する</label>
+                    </span>
+                </div>
+                <p class="text-xs text-slate-500" style="padding:4px 8px 0;">
+                    オフにすると、返信ページ (/reply/{token}) 上でヘッダー部分自体が表示されなくなります（このプレビュー欄は編集用に常時表示されます）。
+                </p>
                 <!-- sandbox flags match the real reply page (/reply/{token} and
                      /manager/users/{id}/reply-preview) so external fonts, JS animations,
                      and embedded scripts behave the same here as in production. -->
@@ -122,7 +130,21 @@
                 <div th:if="${form.cssPreviewMode == 'HIDDEN'}" class="text-xs text-slate-400" style="padding:10px;">
                     CSSプレビューは非表示に設定されています
                 </div>
+                <p class="text-xs text-slate-500" style="padding:4px 8px;">
+                    ※このオン/オフ/表示しないは、あくまで<strong>この設定画面内のプレビュー欄</strong>の見え方です。ユーザー側の返信ページに表示される本文入力フォーム自体を消したい場合は、下の「本文入力フォームをユーザー側に表示する」を使用してください。
+                </p>
             </div>
+        </div>
+
+        <div class="mb-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+            <div class="flex items-center">
+                <input type="checkbox" class="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" id="replyFormVisible" th:field="*{replyFormVisible}"/>
+                <label class="ml-2 text-sm font-medium text-slate-800" for="replyFormVisible">本文入力フォームをユーザー側に表示する</label>
+            </div>
+            <p class="text-xs text-slate-500 mt-1 ml-6">
+                オフにすると、返信ページ (/reply/{token}) から件名・本文の入力欄と送信ボタンが消えます。
+                上のヘッダー表示と両方オフにした場合、返信ページには<strong>メッセージボックスのみ</strong>が表示されます。
+            </p>
         </div>
 
         <div class="mb-4 flex items-center">

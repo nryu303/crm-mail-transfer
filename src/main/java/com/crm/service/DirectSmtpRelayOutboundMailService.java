@@ -157,9 +157,12 @@ public class DirectSmtpRelayOutboundMailService {
     }
 
     /**
-     * HTML-escape the given plaintext, preserve newlines (the surrounding
-     * {@code <body>} uses {@code white-space: pre-wrap}), and turn bare
-     * {@code http(s)://...} runs into anchor tags.
+     * HTML-escape the given plaintext, turn bare {@code http(s)://...} runs into anchor
+     * tags, and convert newlines to explicit {@code <br>} tags. Relying only on the
+     * surrounding {@code <body style="white-space:pre-wrap">} isn't enough — several mail
+     * clients (notably Gmail's HTML sanitiser) strip or ignore inline {@code white-space}
+     * styling on ingest, collapsing every broadcast/reply body to one line for recipients.
+     * Explicit {@code <br>} survives that sanitisation because it's structural markup.
      */
     private static String htmlEscapeAndLinkify(String s) {
         if (s == null || s.isEmpty()) return "";
@@ -180,7 +183,7 @@ public class DirectSmtpRelayOutboundMailService {
                     "<a href=\"" + url + "\">" + url + "</a>"));
         }
         m.appendTail(sb);
-        return sb.toString();
+        return sb.toString().replaceAll("\r\n|\r|\n", "<br>\n");
     }
 
     private static boolean isAscii(String s) {

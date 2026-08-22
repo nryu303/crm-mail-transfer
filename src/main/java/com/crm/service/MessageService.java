@@ -458,8 +458,10 @@ public class MessageService {
             // SENT_BODY_TEXT is the 15-char-clipped text actually transmitted (see clipForTransmission).
             msg.setBodyText(renderedBody.replace(REPLY_URL_PLACEHOLDER, url));
             msg.setSentBodyText(clipForTransmission(renderedBody, url));
-            // 外部リンクドメイン landing mode is resolved at the exact moment the reply URL above
-            // was built, so this flag reflects the domain that URL will actually route through.
+            // Historical/audit record only — records what the domain's landing mode was AT
+            // SEND TIME. メッセージボックス no longer reads this column to decide visibility;
+            // that decision is now made at VIEW time (see MessageBoxService#listFor), since
+            // toggling 使用中 after send should retroactively change reachability too.
             msg.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
             // fall through — subsequent save() / sendNow() path will update this row
         }
@@ -519,6 +521,7 @@ public class MessageService {
             // Same full-body-vs-clipped-transmit split as compose() — see clipForTransmission().
             msg.setBodyText(renderedBody.replace(REPLY_URL_PLACEHOLDER, url));
             msg.setSentBodyText(clipForTransmission(renderedBody, url));
+            // Historical/audit record only — see the matching comment in compose() above.
             msg.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
         }
 

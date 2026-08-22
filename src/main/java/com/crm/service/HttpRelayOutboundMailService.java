@@ -394,8 +394,12 @@ public class HttpRelayOutboundMailService implements OutboundMailService {
 
     /**
      * HTML-escape the given plaintext and turn bare {@code http(s)://...} runs into
-     * anchor tags. The surrounding {@code <body>} keeps {@code white-space: pre-wrap}
-     * so newlines in the source text are preserved in the rendered HTML.
+     * anchor tags. Newlines are converted to explicit {@code <br>} tags rather than relying
+     * solely on the surrounding {@code <body style="white-space:pre-wrap">} — several mail
+     * clients (notably Gmail's HTML sanitiser) strip or ignore inline {@code white-space}
+     * styling on ingest, which was collapsing every broadcast/reply body to one line for
+     * recipients even though the CRM's own preview (which does honour the style) looked fine.
+     * Explicit {@code <br>} survives that sanitisation because it's structural markup, not CSS.
      */
     private static String htmlEscapeAndLinkify(String s) {
         if (s == null || s.isEmpty()) return "";
@@ -414,7 +418,7 @@ public class HttpRelayOutboundMailService implements OutboundMailService {
                     "<a href=\"" + url + "\">" + url + "</a>"));
         }
         m.appendTail(sb);
-        return sb.toString();
+        return sb.toString().replaceAll("\r\n|\r|\n", "<br>\n");
     }
 
     /**

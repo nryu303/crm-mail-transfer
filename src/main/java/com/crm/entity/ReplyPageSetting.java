@@ -38,6 +38,17 @@ public class ReplyPageSetting {
     @Column(name = "CSS_PREVIEW_MODE", nullable = false, length = 16)
     private String cssPreviewMode = CSS_PREVIEW_ON;
 
+    /** Whether the ヘッダー block actually renders on the public /reply/{token} page.
+     *  Independent of cssPreviewMode, which only affects the admin settings-page preview. */
+    @Column(name = "HEADER_VISIBLE", nullable = false)
+    private Boolean headerVisible = Boolean.TRUE;
+
+    /** Whether the 本文入力フォーム (subject/body + send button) actually renders on the
+     *  public /reply/{token} page. When this and headerVisible are both false, only the
+     *  メッセージボックス section remains on the page. */
+    @Column(name = "REPLY_FORM_VISIBLE", nullable = false)
+    private Boolean replyFormVisible = Boolean.TRUE;
+
     @Column(name = "UPDATED_AT", nullable = false)
     private LocalDateTime updatedAt;
 
@@ -57,6 +68,10 @@ public class ReplyPageSetting {
     public void setRequireLogin(Boolean v) { this.requireLogin = v; }
     public String getCssPreviewMode() { return cssPreviewMode; }
     public void setCssPreviewMode(String v) { this.cssPreviewMode = v; }
+    public Boolean getHeaderVisible() { return headerVisible; }
+    public void setHeaderVisible(Boolean v) { this.headerVisible = v; }
+    public Boolean getReplyFormVisible() { return replyFormVisible; }
+    public void setReplyFormVisible(Boolean v) { this.replyFormVisible = v; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
 }

@@ -197,6 +197,8 @@ public class BroadcastService {
                 // see MessageService.clipForTransmission().
                 persisted.setBodyText(body.replace(MessageService.REPLY_URL_PLACEHOLDER, url));
                 persisted.setSentBodyText(MessageService.clipForTransmission(body, url));
+                // Historical/audit record only — メッセージボックス visibility is decided at
+                // VIEW time now (see MessageBoxService#listFor), not from this send-time flag.
                 persisted.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
                 messageRepository.save(persisted);
             }
@@ -292,6 +294,8 @@ public class BroadcastService {
                 String url = replyPageService.createShortReplyPageFor(persisted);
                 persisted.setBodyText(body.replace(MessageService.REPLY_URL_PLACEHOLDER, url));
                 persisted.setSentBodyText(MessageService.clipForTransmission(body, url));
+                // Historical/audit record only — メッセージボックス visibility is decided at
+                // VIEW time now (see MessageBoxService#listFor), not from this send-time flag.
                 persisted.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
                 messageRepository.save(persisted);
             }

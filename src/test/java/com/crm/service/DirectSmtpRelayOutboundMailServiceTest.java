@@ -142,6 +142,33 @@ class DirectSmtpRelayOutboundMailServiceTest {
         assertThat(invokeHtmlEscape("")).isEmpty();
     }
 
+    /**
+     * Regression test: relying only on the surrounding <body style="white-space:pre-wrap">
+     * to preserve line breaks isn't enough — Gmail's HTML sanitiser (and others) strip inline
+     * white-space styling on ingest, collapsing multi-line broadcast/reply bodies into one
+     * line for the recipient even though the CRM's own preview looked correct. Newlines must
+     * be converted to explicit <br> tags, which survive that sanitisation.
+     */
+    @Test
+    void htmlEscapeAndLinkify_convertsNewlinesToBrTags() throws Exception {
+        String out = invokeHtmlEscape("1行目\n2行目\n3行目");
+        assertThat(out).isEqualTo("1行目<br>\n2行目<br>\n3行目");
+    }
+
+    @Test
+    void htmlEscapeAndLinkify_convertsCrLfNewlines() throws Exception {
+        String out = invokeHtmlEscape("1行目\r\n2行目");
+        assertThat(out).isEqualTo("1行目<br>\n2行目");
+    }
+
+    @Test
+    void buildRawMime_htmlPart_preservesMultiLineBodyAsBrTags() throws Exception {
+        byte[] raw = invokeBuildRawMime(
+                req("a@avu74g.jp", "user@example.com", "件名", "1行目\n2行目\n3行目"), "サポート窓口");
+        String mime = new String(raw, StandardCharsets.UTF_8);
+        assertThat(mime).contains("1行目<br>\n2行目<br>\n3行目");
+    }
+
     @Test
     void replyToHeader_addedWhenProvided() {
         byte[] raw = invokeBuildRawMime(

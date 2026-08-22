@@ -186,6 +186,8 @@ public class ReplyPageController {
 
         model.addAttribute("token", token);
         model.addAttribute("headerHtml", headerHtml);
+        model.addAttribute("headerVisible", !Boolean.FALSE.equals(settings.getHeaderVisible()));
+        model.addAttribute("replyFormVisible", !Boolean.FALSE.equals(settings.getReplyFormVisible()));
         model.addAttribute("footerHtml", footerHtml);
         model.addAttribute("customCss", settings.getDefaultCss());
         model.addAttribute("form", new ReplyForm());
@@ -352,6 +354,12 @@ public class ReplyPageController {
         String submitHost = resolveRequestHost(request);
         user.ifPresent(u -> userActivityService.touchLastLogin(
                 u, com.crm.entity.UserAccessLog.SOURCE_REPLY_SUBMIT, clientIp, submitUa, submitHost));
+
+        // メッセージボックス per-item reply: surface a "戻る" link back to the box on the
+        // 送信完了 page when this reply came from a specific box item (replyToMessageId was
+        // supplied and accepted above), so the user isn't stranded on a dead-end page.
+        model.addAttribute("token", token);
+        model.addAttribute("cameFromMessageBox", replyToMessageId != null && effectiveReplyTo.equals(replyToMessageId));
 
         if (!attachErrors.isEmpty()) {
             // Reply was saved, but at least one attachment failed — surface the issue on

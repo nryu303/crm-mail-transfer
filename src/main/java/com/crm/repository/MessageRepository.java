@@ -228,16 +228,25 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
 
     /**
      * メッセージボックス: paginated OUT/SENT history for one user, newest sentAt first,
-     * excluding messages whose reply-URL was built against a REDIRECT/CUSTOM_HTML
-     * 外部リンクドメイン at compose time (EXCLUDED_FROM_BOX) and excluding any the admin
-     * has soft-deleted (BOX_DISMISSED_AT). Shared by the public /reply/{token} footer
-     * section and the admin /manager/users/{id}/message-box preview.
+     * excluding anything the admin has soft-deleted (BOX_DISMISSED_AT). Shared by the
+     * public /reply/{token} footer section and the admin /manager/users/{id}/message-box
+     * preview.
+     *
+     * Does NOT filter on EXCLUDED_FROM_BOX (a legacy send-time-computed column, no longer
+     * read) — whether 外部リンクドメイン messages should be hidden is now decided at VIEW
+     * time in {@link com.crm.service.MessageBoxService#listFor}, based on whichever domain
+     * is 使用中 right now, not whichever was active when the message was originally sent.
+     * This matches operator-observed behaviour: toggling a domain's 使用中 state should
+     * immediately change what a given %reply_url% link does, including whether the box
+     * behind it is reachable — a message composed while REPLY_FORM was active but viewed
+     * after the operator switched to REDIRECT must NOT appear in the box (the visitor can't
+     * even reach this page in that case), and conversely a message composed under REDIRECT
+     * but viewed after switching back to REPLY_FORM must appear.
      */
     @org.springframework.data.jpa.repository.Query(
             "SELECT m FROM Message m WHERE m.userId = :userId " +
             "AND m.direction = 'OUT' AND m.status = 'SENT' " +
             "AND m.channel IN ('EMAIL','SMS','BROADCAST') " +
-            "AND m.excludedFromBox = false " +
             "AND m.boxDismissedAt IS NULL " +
             "ORDER BY m.sentAt DESC")
     Page<Message> findMessageBoxPage(@org.springframework.data.repository.query.Param("userId") Long userId,
@@ -258,4 +267,19 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
     int dismissBoxByUserIdAndIds(@org.springframework.data.repository.query.Param("userId") Long userId,
                                   @org.springframework.data.repository.query.Param("ids") java.util.List<Long> ids,
                                   @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
+    /**
+     * Admin-only メッセージボックス 全件削除 — same soft-delete semantics as
+     * {@link #dismissBoxByUserIdAndIds}, but dismisses every currently-visible box entry
+     * for the user in one statement instead of requiring individual checkboxes.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+            "UPDATE Message m SET m.boxDismissedAt = :now " +
+            "WHERE m.userId = :userId AND m.direction = 'OUT' AND m.status = 'SENT' " +
+            "AND m.channel IN ('EMAIL','SMS','BROADCAST') " +
+            "AND m.boxDismissedAt IS NULL")
+    int dismissAllBoxByUserId(@org.springframework.data.repository.query.Param("userId") Long userId,
+                               @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 }

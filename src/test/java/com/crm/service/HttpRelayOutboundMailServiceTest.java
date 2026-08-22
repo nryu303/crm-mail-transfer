@@ -206,6 +206,27 @@ class HttpRelayOutboundMailServiceTest {
                 .contains("<a href=\"http://x.test\">http://x.test</a>");
     }
 
+    /**
+     * Regression test: white-space:pre-wrap on the surrounding <body> isn't honoured by every
+     * mail client (Gmail's HTML sanitiser in particular strips inline style on ingest), which
+     * was collapsing multi-line broadcast/reply bodies into one line for recipients even though
+     * they looked fine in the CRM's own preview. Newlines must become explicit <br> tags.
+     */
+    @Test
+    void htmlEscapeAndLinkify_convertsNewlinesToBrTags() throws Exception {
+        Method m = HttpRelayOutboundMailService.class.getDeclaredMethod("htmlEscapeAndLinkify", String.class);
+        m.setAccessible(true);
+        assertThat((String) m.invoke(null, "1行目\n2行目\n3行目")).isEqualTo("1行目<br>\n2行目<br>\n3行目");
+    }
+
+    @Test
+    void buildRawMime_htmlPart_preservesMultiLineBodyAsBrTags() {
+        OutboundMailService.OutboundRequest multiLine = new OutboundMailService.OutboundRequest(
+                "a@avu74g.jp", "user@example.com", "件名", "1行目\n2行目\n3行目", null, 0, null, null);
+        String mime = HttpRelayOutboundMailService.buildRawMime(multiLine, "サポート窓口", null);
+        assertThat(mime).contains("1行目<br>\n2行目<br>\n3行目");
+    }
+
     @Test
     void replyToHeader_addedWhenProvided() {
         String mime = HttpRelayOutboundMailService.buildRawMime(

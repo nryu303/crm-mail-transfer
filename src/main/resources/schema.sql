@@ -246,6 +246,10 @@ CREATE TABLE IF NOT EXISTS REPLY_PAGE_SETTING (
   REQUIRE_LOGIN       TINYINT(1) DEFAULT 0,
   CSS_PREVIEW_MODE    VARCHAR(16) NOT NULL DEFAULT 'ON'
     COMMENT 'ON | OFF | HIDDEN — controls the "▶ CSS プレビュー" pane on /manager/settings/reply-page. ON = pane always shown. OFF = pane collapsed by default, admin can still expand it per-session. HIDDEN = pane never rendered, no way to expand',
+  HEADER_VISIBLE      TINYINT(1) NOT NULL DEFAULT 1
+    COMMENT 'Controls whether the ヘッダー (header HTML block) actually renders on the public /reply/{token} page. Independent of CSS_PREVIEW_MODE, which only affects the admin settings-page preview pane.',
+  REPLY_FORM_VISIBLE  TINYINT(1) NOT NULL DEFAULT 1
+    COMMENT 'Controls whether the 本文入力フォーム (subject/body textarea + send button) actually renders on the public /reply/{token} page. When both HEADER_VISIBLE and REPLY_FORM_VISIBLE are 0, only the メッセージボックス section is shown.',
   UPDATED_AT          DATETIME  NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

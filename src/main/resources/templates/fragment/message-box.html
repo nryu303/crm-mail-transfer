@@ -18,13 +18,20 @@
 <div th:fragment="messageBox(box, token, isAdmin, userId)" class="message-box-shell">
     <div class="message-box-head">
         <h2 class="message-box-title">メッセージボックス</h2>
-        <button th:if="${isAdmin}" type="submit" form="messageBoxDeleteForm"
-                class="message-box-delete-btn"
-                onclick="return confirm('選択したメッセージを削除しますか？');">選択削除</button>
+        <span th:if="${isAdmin}" class="message-box-head-actions">
+            <button type="submit" form="messageBoxDeleteForm"
+                    class="message-box-delete-btn"
+                    onclick="return confirm('選択したメッセージを削除しますか？');">選択削除</button>
+            <button type="submit" form="messageBoxDeleteAllForm"
+                    class="message-box-delete-btn message-box-delete-all-btn"
+                    onclick="return confirm('この受信履歴を全件削除します。よろしいですか？');">全件削除</button>
+        </span>
     </div>
 
     <form th:if="${isAdmin}" id="messageBoxDeleteForm" method="post"
           th:action="@{'/manager/users/' + ${userId} + '/message-box/delete'}"></form>
+    <form th:if="${isAdmin}" id="messageBoxDeleteAllForm" method="post"
+          th:action="@{'/manager/users/' + ${userId} + '/message-box/delete-all'}"></form>
 
     <div th:if="${box.content.empty}" class="message-box-empty">受信履歴はありません</div>
 
@@ -44,10 +51,13 @@
         <div class="message-box-reply-label" th:text="${item.replyLabel}"></div>
 
         <!-- Public reply form: posts to /reply/{token}/send with replyToMessageId targeting
-             this specific historical message. -->
+             this specific historical message. The subject hidden field mirrors item.replyLabel
+             (e.g. "Re: 井上聡") so the resulting IN message carries a real subject instead of
+             showing up blank ((件名なし)) in the admin CRM inbox. -->
         <form th:if="${!isAdmin}" class="reply-form message-box-reply-form"
               th:action="@{'/reply/' + ${token} + '/send'}" method="post">
             <input type="hidden" name="replyToMessageId" th:value="${item.id}"/>
+            <input type="hidden" name="subject" th:value="${item.replyLabel}"/>
             <div class="field">
                 <textarea name="body" rows="4" placeholder="返信を入力..."></textarea>
             </div>

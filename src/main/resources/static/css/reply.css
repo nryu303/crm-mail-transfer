@@ -156,6 +156,11 @@ body {
     margin: 0;
 }
 
+.message-box-head-actions {
+    display: flex;
+    gap: 8px;
+}
+
 .message-box-delete-btn {
     padding: 6px 14px;
     background: #b91c1c;
@@ -164,6 +169,10 @@ body {
     border-radius: 4px;
     font-size: 13px;
     cursor: pointer;
+}
+
+.message-box-delete-all-btn {
+    background: #7f1d1d;
 }
 
 .message-box-delete-btn:hover {
@@ -259,4 +268,21 @@ body {
 
 .message-box-pager strong {
     color: #1f1f1f;
+}
+
+/* 送信完了 (reply/sent.html) — link back to the message box after a per-item reply. */
+.message-box-back-link {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 10px 24px;
+    background: #8a8a8a;
+    color: #fff;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 15px;
+}
+
+.message-box-back-link:hover,
+.message-box-back-link:active {
+    background: #6e6e6e;
 }
