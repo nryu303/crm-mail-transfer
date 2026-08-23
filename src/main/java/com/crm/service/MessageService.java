@@ -24,6 +24,17 @@ public class MessageService {
 
     public static final String REPLY_URL_PLACEHOLDER = "%reply_url%";
 
+    /**
+     * Separate tag for the tracked/外部リンクドメイン URL (e.g. https://lvit4gp.jp/reply/{token}),
+     * added 2026-08-23 so operators can choose explicitly between the always-reaches-the-real-
+     * reply-form %reply_url% and the tracked-domain / REDIRECT / CUSTOM_HTML %external_url%,
+     * instead of %reply_url% silently switching behaviour based on whichever domain happens to
+     * be 使用中. Both tags point at the SAME underlying ReplyPage/token when both are present in
+     * one body — only the domain differs. Substituted with an empty string when no 外部リンク
+     * ドメイン is currently active.
+     */
+    public static final String EXTERNAL_URL_PLACEHOLDER = "%external_url%";
+
     /** 15-char clip rule: when a %reply_url% is present, only this many characters of the
      *  substituted body precede the expanded URL in what's actually transmitted. The full
      *  substituted body is always kept in BODY_TEXT for メッセージボックス display. */
@@ -448,20 +459,15 @@ public class MessageService {
         msg.setReplyToMessageId(form.getReplyToMessageId());
 
         // Persist first so we have an ID for the reply-page binding if needed.
-        boolean needsReplyUrl = renderedBody != null && renderedBody.contains(REPLY_URL_PLACEHOLDER);
-        if (needsReplyUrl) {
+        boolean needsAnyUrl = renderedBody != null
+                && (renderedBody.contains(REPLY_URL_PLACEHOLDER) || renderedBody.contains(EXTERNAL_URL_PLACEHOLDER));
+        if (needsAnyUrl) {
             // Temporary body/status so we can save; we'll rewrite after the page is created.
             msg.setStatus(Message.STATUS_DRAFT);
             msg = messageRepository.save(msg);
-            String url = replyPageService.createReplyPageFor(msg);
-            // BODY_TEXT always keeps the FULL substituted body — メッセージボックス reads this.
-            // SENT_BODY_TEXT is the 15-char-clipped text actually transmitted (see clipForTransmission).
-            msg.setBodyText(renderedBody.replace(REPLY_URL_PLACEHOLDER, url));
-            msg.setSentBodyText(clipForTransmission(renderedBody, url));
+            applyUrlPlaceholders(msg, renderedBody, replyPageService.createReplyPageFor(msg), domainSettingService);
             // Historical/audit record only — records what the domain's landing mode was AT
-            // SEND TIME. メッセージボックス no longer reads this column to decide visibility;
-            // that decision is now made at VIEW time (see MessageBoxService#listFor), since
-            // toggling 使用中 after send should retroactively change reachability too.
+            // SEND TIME. メッセージボックス no longer reads this column to decide visibility.
             msg.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
             // fall through — subsequent save() / sendNow() path will update this row
         }
@@ -508,19 +514,17 @@ public class MessageService {
         msg.setToAddress(phone);
         msg.setReplyToMessageId(form.getReplyToMessageId());
 
-        // Same %reply_url% handling as compose() — the tag panel is shared between the
-        // email and SMS reply forms, but this substitution was missing here, so an SMS
-        // reply containing %reply_url% went out with the literal placeholder text intact.
+        // Same %reply_url% / %external_url% handling as compose() — the tag panel is shared
+        // between the email and SMS reply forms, but this substitution was missing here, so an
+        // SMS reply containing %reply_url% went out with the literal placeholder text intact.
         // Uses the short (10-char) token, not the 64-char email one — SMS is billed per
         // ~65-char segment, so the long form alone would consume the whole budget.
-        boolean needsReplyUrl = renderedBody != null && renderedBody.contains(REPLY_URL_PLACEHOLDER);
-        if (needsReplyUrl) {
+        boolean needsAnyUrl = renderedBody != null
+                && (renderedBody.contains(REPLY_URL_PLACEHOLDER) || renderedBody.contains(EXTERNAL_URL_PLACEHOLDER));
+        if (needsAnyUrl) {
             msg.setStatus(Message.STATUS_DRAFT);
             msg = messageRepository.save(msg);
-            String url = replyPageService.createShortReplyPageFor(msg);
-            // Same full-body-vs-clipped-transmit split as compose() — see clipForTransmission().
-            msg.setBodyText(renderedBody.replace(REPLY_URL_PLACEHOLDER, url));
-            msg.setSentBodyText(clipForTransmission(renderedBody, url));
+            applyUrlPlaceholders(msg, renderedBody, replyPageService.createShortReplyPageFor(msg), domainSettingService);
             // Historical/audit record only — see the matching comment in compose() above.
             msg.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
         }
@@ -627,6 +631,48 @@ public class MessageService {
             } catch (Exception e) {
                 // defensive — don't fail a send because counter update failed
             }
+        }
+    }
+
+    /**
+     * Substitutes %reply_url% and/or %external_url% into {@code msg} and sets both BODY_TEXT
+     * (always the full text, for メッセージボックス) and SENT_BODY_TEXT (what's actually
+     * transmitted — 15-char-clipped only when %reply_url% is present; %external_url%-only
+     * bodies are sent in full, since the clip rule is specific to %reply_url%'s メッセージ
+     * ボックス round-trip).
+     *
+     * Static (not an instance method) so {@link BroadcastService} can reuse the exact same
+     * logic without taking a MessageService dependency — MessageService.sendNow() already
+     * reaches BroadcastService via a lazy ApplicationContext lookup specifically to avoid that
+     * circular wiring, so the reverse dependency shouldn't be introduced here either.
+     *
+     * @param msg          the message being composed; must already have replyPageToken set
+     *                     (i.e. createReplyPageFor/createShortReplyPageFor already ran)
+     * @param renderedBody the placeholder-substituted body, still containing the literal
+     *                     %reply_url% / %external_url% tokens
+     * @param replyUrl     the already-expanded %reply_url% URL (from ReplyPageService) — reused
+     *                     here rather than rebuilt, since token generation is a one-shot side
+     *                     effect that already happened when the caller obtained it
+     */
+    static void applyUrlPlaceholders(Message msg, String renderedBody, String replyUrl,
+                                      DomainSettingService domainSettingService) {
+        String externalUrl = domainSettingService.buildExternalUrl(msg.getReplyPageToken());
+        String externalUrlOrEmpty = externalUrl == null ? "" : externalUrl;
+
+        String fullBody = renderedBody
+                .replace(REPLY_URL_PLACEHOLDER, replyUrl)
+                .replace(EXTERNAL_URL_PLACEHOLDER, externalUrlOrEmpty);
+        msg.setBodyText(fullBody);
+
+        boolean hasReplyUrlTag = renderedBody.contains(REPLY_URL_PLACEHOLDER);
+        if (hasReplyUrlTag) {
+            // clipForTransmission locates %reply_url% itself; %external_url% (if also present)
+            // is substituted first so no raw tag text leaks into the transmitted message even
+            // when it falls before the clip boundary.
+            String bodyWithExternalResolved = renderedBody.replace(EXTERNAL_URL_PLACEHOLDER, externalUrlOrEmpty);
+            msg.setSentBodyText(clipForTransmission(bodyWithExternalResolved, replyUrl));
+        } else {
+            msg.setSentBodyText(null);
         }
     }
 

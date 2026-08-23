@@ -389,6 +389,128 @@ class MessageServiceTest {
         assertThat(saved.getExcludedFromBox()).isFalse();
     }
 
+    /**
+     * Regression test for the 2026-08-23 production bug: a body like "本日まで\n%reply_url%"
+     * (6 chars before the tag) used to leave a mangled "%reply_urhttps://..." fragment in the
+     * transmitted SMS/email because the old clipForTransmission clipped to 15 chars FIRST and
+     * only then tried to find-and-remove the literal "%reply_url%" string — which no longer
+     * existed once the clip cut through the middle of it. Verifies end-to-end through compose().
+     */
+    @Test
+    void compose_replyUrlTagStraddling15CharBoundary_doesNotLeakMangledTagIntoSentBody() {
+        CrmUser user = new CrmUser();
+        user.setId(53L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(53L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(53L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createReplyPageFor(any(Message.class)))
+                .thenReturn("https://nbbv7g.jp/reply/abc123");
+        when(domainSettings.isActiveLinkDomainExternalLanding()).thenReturn(false);
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("本日まで\n%reply_url%");
+
+        Message saved = svc.compose(53L, 1L, form);
+
+        assertThat(saved.getSentBodyText()).doesNotContain("%reply_ur");
+        assertThat(saved.getSentBodyText()).isEqualTo("本日まで\nhttps://nbbv7g.jp/reply/abc123");
+    }
+
+    @Test
+    void compose_withExternalUrlTag_substitutesActiveExternalLinkDomainUrl_fullBodyNoClip() {
+        CrmUser user = new CrmUser();
+        user.setId(54L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(54L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(54L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createReplyPageFor(any(Message.class))).thenAnswer(inv -> {
+            Message m = inv.getArgument(0);
+            m.setReplyPageToken("tok456");
+            return "https://nbbv7g.jp/reply/tok456";
+        });
+        when(domainSettings.buildExternalUrl("tok456")).thenReturn("https://lvit4gp.jp/reply/tok456");
+        when(domainSettings.isActiveLinkDomainExternalLanding()).thenReturn(true);
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("外部リンクはこちら %external_url% よろしくお願いします");
+
+        Message saved = svc.compose(54L, 1L, form);
+
+        assertThat(saved.getBodyText())
+                .isEqualTo("外部リンクはこちら https://lvit4gp.jp/reply/tok456 よろしくお願いします");
+        // No %reply_url% tag present, so no clip applies — sent in full.
+        assertThat(saved.getSentBodyText()).isNull();
+    }
+
+    @Test
+    void compose_withExternalUrlTag_noActiveDomain_substitutesEmptyString() {
+        CrmUser user = new CrmUser();
+        user.setId(55L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(55L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(55L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createReplyPageFor(any(Message.class))).thenAnswer(inv -> {
+            Message m = inv.getArgument(0);
+            m.setReplyPageToken("tok789");
+            return "https://nbbv7g.jp/reply/tok789";
+        });
+        when(domainSettings.buildExternalUrl("tok789")).thenReturn(null);
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("リンク:[%external_url%]");
+
+        Message saved = svc.compose(55L, 1L, form);
+
+        assertThat(saved.getBodyText()).isEqualTo("リンク:[]");
+    }
+
+    @Test
+    void compose_withBothReplyUrlAndExternalUrlTags_bothSubstitutedIntoFullBody() {
+        CrmUser user = new CrmUser();
+        user.setId(56L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(56L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(56L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createReplyPageFor(any(Message.class))).thenAnswer(inv -> {
+            Message m = inv.getArgument(0);
+            m.setReplyPageToken("tokAB");
+            return "https://nbbv7g.jp/reply/tokAB";
+        });
+        when(domainSettings.buildExternalUrl("tokAB")).thenReturn("https://lvit4gp.jp/reply/tokAB");
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("通常:%reply_url% 外部:%external_url%");
+
+        Message saved = svc.compose(56L, 1L, form);
+
+        assertThat(saved.getBodyText())
+                .isEqualTo("通常:https://nbbv7g.jp/reply/tokAB 外部:https://lvit4gp.jp/reply/tokAB");
+    }
+
     @Test
     void compose_withoutReplyUrl_leavesSentBodyTextNull() {
         CrmUser user = new CrmUser();

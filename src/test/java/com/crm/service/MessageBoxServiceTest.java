@@ -25,15 +25,12 @@ import static org.mockito.Mockito.when;
 class MessageBoxServiceTest {
 
     private MessageRepository messageRepository;
-    private DomainSettingService domainSettingService;
     private MessageBoxService svc;
 
     @BeforeEach
     void setUp() {
         messageRepository = mock(MessageRepository.class);
-        domainSettingService = mock(DomainSettingService.class);
-        when(domainSettingService.isActiveLinkDomainExternalLanding()).thenReturn(false);
-        svc = new MessageBoxService(messageRepository, domainSettingService);
+        svc = new MessageBoxService(messageRepository);
     }
 
     private static Message emailMessage(Long id, String subject, String body) {
@@ -132,33 +129,6 @@ class MessageBoxServiceTest {
 
         assertThat(n).isEqualTo(5);
         verify(messageRepository).dismissAllBoxByUserId(eq(7L), any());
-    }
-
-    /**
-     * 外部リンクドメイン exclusion is now decided at VIEW time (not baked into the query via
-     * EXCLUDED_FROM_BOX), so when the currently-active domain is in REDIRECT/CUSTOM_HTML mode
-     * the whole box must come back empty — regardless of what the repository would return —
-     * mirroring that a visitor can't even reach the reply form in that state.
-     */
-    @Test
-    void listFor_activeExternalLinkDomain_returnsEmptyPageWithoutQueryingRepository() {
-        when(domainSettingService.isActiveLinkDomainExternalLanding()).thenReturn(true);
-
-        Page<MessageBoxItem> result = svc.listFor(99L, 0);
-
-        assertThat(result.getContent()).isEmpty();
-        verify(messageRepository, never()).findMessageBoxPage(any(), any());
-    }
-
-    @Test
-    void listFor_noActiveExternalLinkDomain_queriesRepositoryNormally() {
-        when(domainSettingService.isActiveLinkDomainExternalLanding()).thenReturn(false);
-        when(messageRepository.findMessageBoxPage(eq(99L), any()))
-                .thenReturn(new PageImpl<>(Collections.singletonList(emailMessage(1L, "件名", "本文"))));
-
-        Page<MessageBoxItem> result = svc.listFor(99L, 0);
-
-        assertThat(result.getContent()).hasSize(1);
     }
 
     @Test

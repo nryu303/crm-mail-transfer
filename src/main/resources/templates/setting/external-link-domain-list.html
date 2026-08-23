@@ -18,12 +18,18 @@
         <ul class="list-disc list-inside space-y-1">
             <li>「<strong>使用中</strong>」にできるドメインは <strong>常に1件のみ</strong> です
                 (別の行を使用中にすると、それまで使用中だった行は自動で未使用になります)</li>
-            <li>メール送信・SMS送信・返信の本文にある <code>%reply_url%</code> は、使用中のドメイン + ユーザーごとのトークンで
-                短縮URLとして生成されます (例: <code>https://ii5gh9ge.jp/reply/xxxxxxxxxx</code>)</li>
+            <li><code>%reply_url%</code> と <code>%external_url%</code> は別々の置き換えタグです (2026-08-23〜)：
+                <ul class="list-disc list-inside ml-4 mt-1 space-y-1">
+                    <li><code>%reply_url%</code> は、外部リンクドメインの使用中・未使用の状態に関係なく、
+                        <strong>常にCRM本体の返信画面 (メッセージボックス含む)</strong> のURLになります
+                        (例: <code>https://nbbv7g.jp/reply/xxxxxxxxxx</code>)</li>
+                    <li><code>%external_url%</code> は、<strong>使用中の外部リンクドメインのURL</strong>になります
+                        (例: <code>https://ii5gh9ge.jp/reply/xxxxxxxxxx</code>)。使用中のドメインが無い場合は空文字になります</li>
+                </ul>
+            </li>
             <li><strong>DNS Aレコードが本CRMサーバーを指しているドメイン</strong>の場合のみ、クリック時にアクセスログ・最終ログインへ記録されます。
                 「編集」画面の「アクセス後の挙動」で、記録後に通常の返信画面を表示するか、外部URLへリダイレクトするか、カスタムHTMLを表示するかを選択できます</li>
             <li>外部の転送機（DNSが自社サーバーを指さないドメイン）を経由する場合、転送機がCRMを経由せず直接リダイレクトする設定であれば、クリックされてもCRM側には記録されません</li>
-            <li>使用中のドメインが1件も無い場合は、従来の「ドメイン設定」ページのベースURLが使われます</li>
         </ul>
     </div>
 

@@ -227,12 +227,12 @@ public class DomainSettingService {
     }
 
     /**
-     * True when the 外部リンクドメイン that is 使用中 right now (the one {@link #buildReplyUrl}
+     * True when the 外部リンクドメイン that is 使用中 right now (the one {@link #buildExternalUrl}
      * would use) is configured to REDIRECT or serve CUSTOM_HTML instead of the normal two-way
-     * reply form. Callers use this at compose time — the moment a %reply_url% is baked into a
-     * message body — to decide whether that message should be excluded from メッセージボックス,
-     * since a REDIRECT/CUSTOM_HTML landing never renders the reply form the box's per-item
-     * reply buttons rely on.
+     * reply form. Kept for the send-time audit record on Message.excludedFromBox — no longer
+     * used to decide メッセージボックス visibility (see MessageBoxService#listFor), since as of
+     * the %reply_url% / %external_url% split below, %reply_url% never routes through the
+     * external-link domain in the first place.
      */
     public boolean isActiveLinkDomainExternalLanding() {
         return externalLinkDomainRepository.findFirstByIsActiveTrue()
@@ -241,17 +241,15 @@ public class DomainSettingService {
                 .orElse(false);
     }
 
-    /** Build a reply URL for a given token using current settings. */
+    /**
+     * Build the %reply_url% URL for a given token — ALWAYS the CRM's own base URL (本ドメイン),
+     * never the 外部リンクドメイン, regardless of whether one is 使用中. This intentionally
+     * ignores the active ExternalLinkDomain row (unlike the pre-2026-08-23 behaviour) so that
+     * %reply_url% always reaches the real two-way reply form / メッセージボックス — operators use
+     * the separate %external_url% tag (see {@link #buildExternalUrl}) when they specifically
+     * want the tracked-domain / REDIRECT / CUSTOM_HTML behaviour instead.
+     */
     public String buildReplyUrl(String token) {
-        // 外部リンクドメイン生成: a pool domain is already a complete, opaque short domain
-        // (e.g. https://ii5gh9ge.jp) registered as-is with the operator's own DNS/forwarder —
-        // skip random-subdomain injection, which only applies to the legacy single-URL setting.
-        Optional<String> active = externalLinkDomainRepository.findFirstByIsActiveTrue()
-                .map(com.crm.entity.ExternalLinkDomain::getDomainUrl);
-        if (active.isPresent() && !active.get().trim().isEmpty()) {
-            return active.get().replaceAll("/+$", "") + "/reply/" + token;
-        }
-
         String base = getReplyBaseUrl();
         if (base.isEmpty()) return "/reply/" + token;
         // Inject subdomain between scheme and host if enabled
@@ -266,6 +264,19 @@ public class DomainSettingService {
             return subdomain + "." + base + "/reply/" + token;
         }
         return base + "/reply/" + token;
+    }
+
+    /**
+     * Build the %external_url% URL for a given token — the currently-使用中 外部リンクドメイン's
+     * URL, if any (e.g. https://lvit4gp.jp/reply/{token}), used for REDIRECT / CUSTOM_HTML /
+     * tracked-domain landing behaviour. Returns null when no domain is active, so callers can
+     * decide how to handle the tag (MessageService substitutes it with an empty string).
+     */
+    public String buildExternalUrl(String token) {
+        Optional<String> active = externalLinkDomainRepository.findFirstByIsActiveTrue()
+                .map(com.crm.entity.ExternalLinkDomain::getDomainUrl);
+        if (!active.isPresent() || active.get().trim().isEmpty()) return null;
+        return active.get().replaceAll("/+$", "") + "/reply/" + token;
     }
 
     /** Build a FROM address using current settings. Returns null if base domain unset. */

@@ -15,9 +15,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Covers the 外部リンクドメイン生成 priority added to {@link DomainSettingService#buildReplyUrl(String)}:
- * an active {@link ExternalLinkDomain} row wins over the legacy single reply.base_url CRM_SETTING,
- * and (unlike the legacy path) never gets a random subdomain injected in front of it.
+ * Covers {@link DomainSettingService#buildReplyUrl(String)} (always the CRM's own base URL,
+ * regardless of any active {@link ExternalLinkDomain}) and {@link DomainSettingService#buildExternalUrl(String)}
+ * (the active ExternalLinkDomain's URL, or null when none is active) — split 2026-08-23 so
+ * %reply_url% always reaches the real two-way reply form while %external_url% is the separate
+ * tag for REDIRECT/CUSTOM_HTML/tracked-domain behaviour.
  */
 class DomainSettingServiceTest {
 
@@ -42,21 +44,49 @@ class DomainSettingServiceTest {
     }
 
     @Test
-    void buildReplyUrl_usesActivePoolDomain_noSubdomainInjected() {
+    void buildReplyUrl_activeExternalLinkDomain_isIgnored_usesLegacyBaseUrl() {
+        // As of 2026-08-23, %reply_url% must ALWAYS reach the CRM's own reply form — it no
+        // longer prefers an active ExternalLinkDomain. That behaviour moved to buildExternalUrl().
         when(domainRepo.findFirstByIsActiveTrue()).thenReturn(Optional.of(active("https://ii5gh9ge.jp")));
+        CrmSetting base = new CrmSetting();
+        base.setSettingKey(DomainSettingService.KEY_REPLY_BASE_URL);
+        base.setSettingValue("https://legacy.example.com");
+        when(settingRepo.findBySettingKey(DomainSettingService.KEY_REPLY_BASE_URL))
+                .thenReturn(Optional.of(base));
+        CrmSetting randomOff = new CrmSetting();
+        randomOff.setSettingKey(DomainSettingService.KEY_REPLY_RANDOM_SUBDOMAIN);
+        randomOff.setSettingValue("false");
+        when(settingRepo.findBySettingKey(DomainSettingService.KEY_REPLY_RANDOM_SUBDOMAIN))
+                .thenReturn(Optional.of(randomOff));
 
         String url = svc.buildReplyUrl("tok123");
+
+        assertThat(url).isEqualTo("https://legacy.example.com/reply/tok123");
+    }
+
+    @Test
+    void buildExternalUrl_usesActivePoolDomain_noSubdomainInjected() {
+        when(domainRepo.findFirstByIsActiveTrue()).thenReturn(Optional.of(active("https://ii5gh9ge.jp")));
+
+        String url = svc.buildExternalUrl("tok123");
 
         assertThat(url).isEqualTo("https://ii5gh9ge.jp/reply/tok123");
     }
 
     @Test
-    void buildReplyUrl_stripsTrailingSlashFromPoolDomain() {
+    void buildExternalUrl_stripsTrailingSlashFromPoolDomain() {
         when(domainRepo.findFirstByIsActiveTrue()).thenReturn(Optional.of(active("https://ii5gh9ge.jp/")));
 
-        String url = svc.buildReplyUrl("tok123");
+        String url = svc.buildExternalUrl("tok123");
 
         assertThat(url).isEqualTo("https://ii5gh9ge.jp/reply/tok123");
+    }
+
+    @Test
+    void buildExternalUrl_noActiveDomain_returnsNull() {
+        when(domainRepo.findFirstByIsActiveTrue()).thenReturn(Optional.empty());
+
+        assertThat(svc.buildExternalUrl("tok123")).isNull();
     }
 
     @Test

@@ -26,27 +26,20 @@ public class MessageBoxService {
     public static final int PAGE_SIZE = 5;
 
     private final MessageRepository messageRepository;
-    private final DomainSettingService domainSettingService;
 
-    public MessageBoxService(MessageRepository messageRepository, DomainSettingService domainSettingService) {
+    public MessageBoxService(MessageRepository messageRepository) {
         this.messageRepository = messageRepository;
-        this.domainSettingService = domainSettingService;
     }
 
     /**
-     * Whichever 外部リンクドメイン is 使用中 RIGHT NOW decides whether メッセージボックス is
-     * reachable at all — checked on every view, not baked in at compose time. If the active
-     * domain is REDIRECT/CUSTOM_HTML mode, a visitor clicking %reply_url% never reaches the
-     * reply form (see ReplyPageController#show), so the box behind it is unreachable too;
-     * we mirror that here by returning an empty page rather than a stale, sometimes-visible
-     * history. Flipping the domain back to REPLY_FORM (or deactivating it) makes the SAME
-     * messages reappear immediately — no per-message state to reconcile.
+     * As of 2026-08-23, %reply_url% always points at the CRM's own reply form (see
+     * DomainSettingService#buildReplyUrl) — it no longer routes through whichever 外部リンク
+     * ドメイン happens to be 使用中. That domain-tracking behaviour moved to the separate
+     * %external_url% tag. メッセージボックス is therefore always reachable via %reply_url% and
+     * no longer needs to hide its own content based on external-domain state.
      */
     public Page<MessageBoxItem> listFor(Long userId, int page) {
         Pageable pageable = PageRequest.of(Math.max(page, 0), PAGE_SIZE, Sort.unsorted());
-        if (domainSettingService.isActiveLinkDomainExternalLanding()) {
-            return Page.empty(pageable);
-        }
         return messageRepository.findMessageBoxPage(userId, pageable).map(MessageBoxService::toItem);
     }
 
