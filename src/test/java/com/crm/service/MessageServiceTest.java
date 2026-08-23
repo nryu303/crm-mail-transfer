@@ -350,15 +350,14 @@ class MessageServiceTest {
     }
 
     @Test
-    void clipForTransmission_tagStraddlingWindowBoundary_leavesPartialTagText() {
-        // Edge case: the %reply_url% tag straddles the 15-char boundary, so only part of the
-        // literal tag text falls inside the clipped prefix and isn't recognised/stripped as a
-        // whole token. Documents the current (accepted) behaviour rather than asserting an
-        // idealised one — operators are expected to place %reply_url% at the end of short
-        // bodies, not mid-window, given the 15-char rule.
+    void clipForTransmission_tagStraddlingWindowBoundary_stripsTagCleanly() {
+        // Edge case: the %reply_url% tag straddles the 15-char boundary. The tag is located
+        // first and removed as a whole token before clipping, so no partial tag fragment
+        // ("%reply_ur...") leaks into the transmitted text regardless of where the boundary
+        // falls relative to the tag.
         String result = MessageService.clipForTransmission(
                 "short %reply_url%", "https://x.jp/reply/abc");
-        assertThat(result).isEqualTo("short %reply_urhttps://x.jp/reply/abc");
+        assertThat(result).isEqualTo("short https://x.jp/reply/abc");
     }
 
     @Test

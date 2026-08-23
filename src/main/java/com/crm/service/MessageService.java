@@ -632,20 +632,30 @@ public class MessageService {
 
     /**
      * 15-char clip rule (メッセージボックス feature): what's actually TRANSMITTED when the body
-     * contains %reply_url% is the first {@link #REPLY_URL_CLIP_LENGTH} characters of the
-     * substituted body (read literally as "before the URL replaces the tag" — otherwise an
-     * operator placing %reply_url% near the very start of the body would see the clip window
-     * mostly consumed by URL text, which can't be the intent) plus the expanded URL once.
-     * {@code renderedBodyBeforeUrlSwap} still contains the literal %reply_url% token; if it
-     * falls inside the 15-char window we strip it out before appending the real URL so the
-     * tag text itself never leaks into the transmitted message.
+     * contains %reply_url% is the first {@link #REPLY_URL_CLIP_LENGTH} characters of the text
+     * BEFORE the tag, plus the expanded URL once — the tag itself is located first and removed
+     * whole, then the remaining text is clipped, rather than clipping first and hoping the tag
+     * happens to still be intact inside the clipped window. The naive "clip first, then try to
+     * remove the literal %reply_url% string" approach broke whenever the 15-char boundary fell
+     * INSIDE the tag (e.g. body = "本日まで\n%reply_url%", where "本日まで\n" is only 6 chars,
+     * so the clip window ends mid-tag at "...%reply_ur") — the substring no longer contained the
+     * exact token, so replace() silently did nothing and the mangled tag fragment
+     * ("%reply_urhttps://...") was transmitted to the user. Locating the tag first and clipping
+     * only the text around it makes this correct regardless of where the tag falls.
      */
     public static String clipForTransmission(String renderedBodyBeforeUrlSwap, String expandedUrl) {
         String body = renderedBodyBeforeUrlSwap == null ? "" : renderedBodyBeforeUrlSwap;
-        String prefix = body.length() > REPLY_URL_CLIP_LENGTH
-                ? body.substring(0, REPLY_URL_CLIP_LENGTH) : body;
-        String prefixNoTag = prefix.replace(REPLY_URL_PLACEHOLDER, "");
-        return prefixNoTag + (expandedUrl == null ? "" : expandedUrl);
+        String url = expandedUrl == null ? "" : expandedUrl;
+        int tagIndex = body.indexOf(REPLY_URL_PLACEHOLDER);
+        if (tagIndex < 0) {
+            // No literal tag present (shouldn't normally happen — callers only invoke this
+            // when the tag was detected — but stay correct if it's absent): clip the whole body.
+            return body.length() > REPLY_URL_CLIP_LENGTH ? body.substring(0, REPLY_URL_CLIP_LENGTH) : body;
+        }
+        String beforeTag = body.substring(0, tagIndex);
+        String prefix = beforeTag.length() > REPLY_URL_CLIP_LENGTH
+                ? beforeTag.substring(0, REPLY_URL_CLIP_LENGTH) : beforeTag;
+        return prefix + url;
     }
 
     /** Max transient-retry attempts before giving up and marking FAILED. */
