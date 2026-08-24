@@ -70,6 +70,18 @@ public class ReplyPageSettingService {
         });
     }
 
+    /**
+     * Persists just {@code urlLeadText} — a plain text field (max 500 chars via the DB column,
+     * no HTML), so unlike {@link #save(ReplyPageSettingForm)} no sanitisation is needed here.
+     * Called from the lightweight inline-save UI on the message-thread 置き換えタグ panel
+     * ({@link com.crm.controller.ReplyUrlLeadTextApiController}) so the operator can update it
+     * without navigating to the full /manager/settings/reply-page form.
+     */
+    @Transactional
+    public ReplyPageSetting saveUrlLeadText(ReplyPageSetting s) {
+        return repository.save(s);
+    }
+
     @Transactional
     public ReplyPageSetting save(ReplyPageSettingForm form) {
         ReplyPageSetting s = getOrCreate();

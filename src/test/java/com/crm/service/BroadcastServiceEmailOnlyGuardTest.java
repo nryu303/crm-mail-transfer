@@ -33,6 +33,7 @@ class BroadcastServiceEmailOnlyGuardTest {
     private PlaceholderService placeholderService;
     private ReplyPageService replyPageService;
     private DomainSettingService domainSettingService;
+    private ReplyPageSettingService replyPageSettingService;
     private SmsSettingService smsSettingService;
     private BroadcastService svc;
 
@@ -46,11 +47,13 @@ class BroadcastServiceEmailOnlyGuardTest {
         placeholderService = mock(PlaceholderService.class);
         replyPageService = mock(ReplyPageService.class);
         domainSettingService = mock(DomainSettingService.class);
+        replyPageSettingService = mock(ReplyPageSettingService.class);
+        when(replyPageSettingService.getOrCreate()).thenReturn(new com.crm.entity.ReplyPageSetting());
         smsSettingService = mock(SmsSettingService.class);
 
         svc = new BroadcastService(broadcastRepo, userRepo, poolRepo, bindingService,
                 messageRepo, placeholderService, replyPageService, domainSettingService,
-                smsSettingService);
+                replyPageSettingService, smsSettingService);
 
         when(bindingService.firstBoundFor(org.mockito.ArgumentMatchers.anyLong()))
                 .thenReturn(java.util.Optional.empty());

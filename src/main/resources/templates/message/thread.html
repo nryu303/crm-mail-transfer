@@ -391,6 +391,15 @@
                     <code class="tag-name" data-token="%external_url%">%external_url%</code>
                     <span class="tag-desc">外部リンクドメインURL（使用中のドメイン経由、無ければ空欄）</span>
                 </div>
+                <div class="tag-row">
+                    <input type="text" class="tag-val" id="urlLeadTextInput" th:value="${urlLeadText}"
+                           placeholder="例: 返信はこちら／本文はこちら（空欄可）" maxlength="500"/>
+                    <button type="button" class="btn-tag-save" id="btnUrlLeadTextSave">保存</button>
+                </div>
+                <p class="text-xs text-slate-500" style="margin:0 0 8px;">
+                    上記の入力欄に文言を保存すると、以後 %reply_url% / %external_url% を含めて送信する全てのメッセージで、
+                    URLの直上に改行して自動的に挿入されます（空欄の場合は改行のみ）。
+                </p>
                 <div class="tag-row" style="justify-content:flex-end;">
                     <button type="button" class="btn-tag-save" id="btnTagSave"
                             th:attr="data-user-id=${user.id}">保存</button>
@@ -635,6 +644,30 @@ document.querySelectorAll('code.tag-name[data-token]').forEach(function (el) {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
+            });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            btn.textContent = '保存しました';
+            btn.classList.add('saved');
+            setTimeout(function () { btn.textContent = '保存'; btn.classList.remove('saved'); }, 1500);
+        } catch (e) {
+            alert('保存に失敗しました: ' + e.message);
+        }
+    });
+})();
+
+(function () {
+    // Global (not per-user) setting: text inserted on its own line directly above every
+    // %reply_url% / %external_url% expansion from now on. Saved separately from the per-user
+    // tag panel above since it applies to all users, not just this thread's user.
+    var btn = document.getElementById('btnUrlLeadTextSave');
+    var input = document.getElementById('urlLeadTextInput');
+    if (!btn || !input) return;
+    btn.addEventListener('click', async function () {
+        try {
+            var r = await fetch('/manager/api/settings/url-lead-text', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urlLeadText: input.value })
             });
             if (!r.ok) throw new Error('HTTP ' + r.status);
             btn.textContent = '保存しました';

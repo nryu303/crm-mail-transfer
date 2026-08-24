@@ -49,6 +49,12 @@ public class ReplyPageSetting {
     @Column(name = "REPLY_FORM_VISIBLE", nullable = false)
     private Boolean replyFormVisible = Boolean.TRUE;
 
+    /** Optional one-line text (e.g. "返信はこちら") inserted on its own line directly above the
+     *  expanded URL whenever %reply_url% or %external_url% is substituted. Default empty —
+     *  when blank, only the line break before the URL is added. */
+    @Column(name = "URL_LEAD_TEXT", length = 500)
+    private String urlLeadText;
+
     @Column(name = "UPDATED_AT", nullable = false)
     private LocalDateTime updatedAt;
 
@@ -72,6 +78,8 @@ public class ReplyPageSetting {
     public void setHeaderVisible(Boolean v) { this.headerVisible = v; }
     public Boolean getReplyFormVisible() { return replyFormVisible; }
     public void setReplyFormVisible(Boolean v) { this.replyFormVisible = v; }
+    public String getUrlLeadText() { return urlLeadText; }
+    public void setUrlLeadText(String v) { this.urlLeadText = v; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
 }

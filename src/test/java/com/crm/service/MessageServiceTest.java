@@ -50,6 +50,7 @@ class MessageServiceTest {
     private ApplicationContext ctx;
 
     private DomainSettingService domainSettings;
+    private ReplyPageSettingService replyPageSettingService;
 
     private MessageService svc;
 
@@ -67,10 +68,14 @@ class MessageServiceTest {
         replyPageService = mock(ReplyPageService.class);
         ctx = mock(ApplicationContext.class);
         domainSettings = mock(DomainSettingService.class);
+        replyPageSettingService = mock(ReplyPageSettingService.class);
+        // Default: no operator-configured lead text — matches production default (blank column).
+        com.crm.entity.ReplyPageSetting defaultSetting = new com.crm.entity.ReplyPageSetting();
+        when(replyPageSettingService.getOrCreate()).thenReturn(defaultSetting);
 
         svc = new MessageService(messageRepo, userRepo, poolRepo, bindingService,
                 placeholderService, outboundMail, outboundSms, smsSettingService,
-                aes, replyPageService, domainSettings, ctx);
+                aes, replyPageService, domainSettings, replyPageSettingService, ctx);
     }
 
     private static Message queued() {
@@ -228,7 +233,9 @@ class MessageServiceTest {
 
         Message saved = svc.composeSms(108L, 1L, form);
 
-        assertThat(saved.getBodyText()).isEqualTo("test https://nbbv7g.jp/reply/abc123");
+        // A line break always precedes the URL now (regardless of urlLeadText, which is blank
+        // by default in this test's setUp) — see MessageService.decorateUrl().
+        assertThat(saved.getBodyText()).isEqualTo("test \nhttps://nbbv7g.jp/reply/abc123");
         assertThat(saved.getBodyText()).doesNotContain("%reply_url%");
     }
 
@@ -382,11 +389,75 @@ class MessageServiceTest {
 
         Message saved = svc.compose(50L, 1L, form);
 
+        // A line break always precedes the URL (see MessageService.decorateUrl()); urlLeadText
+        // is blank by default in this test's setUp, so no extra text line is added.
         assertThat(saved.getBodyText())
-                .isEqualTo("0123456789012345678https://nbbv7g.jp/reply/abc123");
+                .isEqualTo("0123456789012345678\nhttps://nbbv7g.jp/reply/abc123");
         assertThat(saved.getSentBodyText())
-                .isEqualTo("012345678901234https://nbbv7g.jp/reply/abc123");
+                .isEqualTo("012345678901234\nhttps://nbbv7g.jp/reply/abc123");
         assertThat(saved.getExcludedFromBox()).isFalse();
+    }
+
+    /**
+     * Reproduces the client's exact example (2026-08-24): with ReplyPageSetting.urlLeadText
+     * set to "返信はこちら", %reply_url% must expand to a line break, the lead text on its own
+     * line, another line break, then the URL — "天音紫苑です。\n\n宇宙の感\n返信はこちら\nURL".
+     */
+    @Test
+    void compose_withUrlLeadTextConfigured_insertsLeadTextLineBeforeUrl() {
+        CrmUser user = new CrmUser();
+        user.setId(57L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(57L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(57L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createReplyPageFor(any(Message.class)))
+                .thenReturn("https://rpgrkejb.jp/qq/jgrt");
+        when(domainSettings.isActiveLinkDomainExternalLanding()).thenReturn(false);
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+        com.crm.entity.ReplyPageSetting setting = new com.crm.entity.ReplyPageSetting();
+        setting.setUrlLeadText("返信はこちら");
+        when(replyPageSettingService.getOrCreate()).thenReturn(setting);
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("天音紫苑です。\n\n宇宙の感%reply_url%");
+
+        Message saved = svc.compose(57L, 1L, form);
+
+        assertThat(saved.getBodyText())
+                .isEqualTo("天音紫苑です。\n\n宇宙の感\n返信はこちら\nhttps://rpgrkejb.jp/qq/jgrt");
+    }
+
+    @Test
+    void compose_withBlankUrlLeadText_insertsOnlyLineBreak_noExtraLine() {
+        CrmUser user = new CrmUser();
+        user.setId(58L);
+        user.setEmail("user@example.com");
+        when(userRepo.findById(58L)).thenReturn(Optional.of(user));
+        when(bindingService.firstBoundFor(58L)).thenReturn(Optional.empty());
+        when(domainSettings.buildFromAddress()).thenReturn("from@example.com");
+        when(placeholderService.substitute(anyString(), any(CrmUser.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        when(messageRepo.save(any(Message.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(replyPageService.createReplyPageFor(any(Message.class)))
+                .thenReturn("https://nbbv7g.jp/reply/xyz");
+        when(domainSettings.isActiveLinkDomainExternalLanding()).thenReturn(false);
+        when(outboundMail.send(any())).thenReturn(OutboundMailService.SendResult.ok());
+        com.crm.entity.ReplyPageSetting setting = new com.crm.entity.ReplyPageSetting();
+        setting.setUrlLeadText("   "); // whitespace-only — must be treated as blank
+        when(replyPageSettingService.getOrCreate()).thenReturn(setting);
+
+        com.crm.dto.MessageComposeForm form = new com.crm.dto.MessageComposeForm();
+        form.setSubject("s");
+        form.setBody("本文%reply_url%");
+
+        Message saved = svc.compose(58L, 1L, form);
+
+        assertThat(saved.getBodyText()).isEqualTo("本文\nhttps://nbbv7g.jp/reply/xyz");
     }
 
     /**
@@ -418,8 +489,11 @@ class MessageServiceTest {
 
         Message saved = svc.compose(53L, 1L, form);
 
+        // decorateUrl() always adds its own leading "\n" before the URL, on top of whatever
+        // newline the operator's body already had before the tag — so the body's own "\n"
+        // (before %reply_url%) plus the decoration's "\n" gives a blank line here.
         assertThat(saved.getSentBodyText()).doesNotContain("%reply_ur");
-        assertThat(saved.getSentBodyText()).isEqualTo("本日まで\nhttps://nbbv7g.jp/reply/abc123");
+        assertThat(saved.getSentBodyText()).isEqualTo("本日まで\n\nhttps://nbbv7g.jp/reply/abc123");
     }
 
     @Test
@@ -449,7 +523,7 @@ class MessageServiceTest {
         Message saved = svc.compose(54L, 1L, form);
 
         assertThat(saved.getBodyText())
-                .isEqualTo("外部リンクはこちら https://lvit4gp.jp/reply/tok456 よろしくお願いします");
+                .isEqualTo("外部リンクはこちら \nhttps://lvit4gp.jp/reply/tok456 よろしくお願いします");
         // No %reply_url% tag present, so no clip applies — sent in full.
         assertThat(saved.getSentBodyText()).isNull();
     }
@@ -508,7 +582,7 @@ class MessageServiceTest {
         Message saved = svc.compose(56L, 1L, form);
 
         assertThat(saved.getBodyText())
-                .isEqualTo("通常:https://nbbv7g.jp/reply/tokAB 外部:https://lvit4gp.jp/reply/tokAB");
+                .isEqualTo("通常:\nhttps://nbbv7g.jp/reply/tokAB 外部:\nhttps://lvit4gp.jp/reply/tokAB");
     }
 
     @Test
@@ -580,9 +654,9 @@ class MessageServiceTest {
         Message saved = svc.composeSms(53L, 1L, form);
 
         assertThat(saved.getBodyText())
-                .isEqualTo("0123456789012345678https://nbbv7g.jp/r/ab12");
+                .isEqualTo("0123456789012345678\nhttps://nbbv7g.jp/r/ab12");
         assertThat(saved.getSentBodyText())
-                .isEqualTo("012345678901234https://nbbv7g.jp/r/ab12");
+                .isEqualTo("012345678901234\nhttps://nbbv7g.jp/r/ab12");
         assertThat(saved.getExcludedFromBox()).isFalse();
     }
 }

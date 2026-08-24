@@ -37,6 +37,7 @@ public class MessageController {
     private final com.crm.service.AdminAuthService adminAuthService;
     private final com.crm.service.PaymentService paymentService;
     private final com.crm.repository.ReplyPageAttachmentRepository attachmentRepo;
+    private final com.crm.service.ReplyPageSettingService replyPageSettingService;
 
     public MessageController(MessageService messageService,
                              CrmUserService userService,
@@ -45,7 +46,8 @@ public class MessageController {
                              CarrierBindingService bindingService,
                              com.crm.service.AdminAuthService adminAuthService,
                              com.crm.service.PaymentService paymentService,
-                             com.crm.repository.ReplyPageAttachmentRepository attachmentRepo) {
+                             com.crm.repository.ReplyPageAttachmentRepository attachmentRepo,
+                             com.crm.service.ReplyPageSettingService replyPageSettingService) {
         this.messageService = messageService;
         this.userService = userService;
         this.placeholderService = placeholderService;
@@ -54,6 +56,7 @@ public class MessageController {
         this.adminAuthService = adminAuthService;
         this.paymentService = paymentService;
         this.attachmentRepo = attachmentRepo;
+        this.replyPageSettingService = replyPageSettingService;
     }
 
     /** Global recent-messages list with tab filtering. */
@@ -140,6 +143,7 @@ public class MessageController {
         model.addAttribute("totalPaid", totalPaid != null ? totalPaid : java.math.BigDecimal.ZERO);
         model.addAttribute("bindings", placeholderService.buildBindings(user.get()));
         model.addAttribute("builtinTags", PlaceholderService.BUILTIN_TAGS);
+        model.addAttribute("urlLeadText", replyPageSettingService.getOrCreate().getUrlLeadText());
         model.addAttribute("templates", templateService.listAll());
         // Page-tab strip data for the templates panel: titles + max-page.
         model.addAttribute("templatePageTitles", templateService.listPageTitles());

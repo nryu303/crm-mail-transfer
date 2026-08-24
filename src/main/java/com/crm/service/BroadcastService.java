@@ -37,6 +37,7 @@ public class BroadcastService {
     private final PlaceholderService placeholderService;
     private final ReplyPageService replyPageService;
     private final DomainSettingService domainSettingService;
+    private final ReplyPageSettingService replyPageSettingService;
     private final SmsSettingService smsSettingService;
 
     public BroadcastService(BroadcastRepository broadcastRepository,
@@ -47,6 +48,7 @@ public class BroadcastService {
                             PlaceholderService placeholderService,
                             ReplyPageService replyPageService,
                             DomainSettingService domainSettingService,
+                            ReplyPageSettingService replyPageSettingService,
                             SmsSettingService smsSettingService) {
         this.broadcastRepository = broadcastRepository;
         this.userRepository = userRepository;
@@ -56,6 +58,7 @@ public class BroadcastService {
         this.placeholderService = placeholderService;
         this.domainSettingService = domainSettingService;
         this.replyPageService = replyPageService;
+        this.replyPageSettingService = replyPageSettingService;
         this.smsSettingService = smsSettingService;
     }
 
@@ -197,7 +200,8 @@ public class BroadcastService {
                 String url = replyPageService.createReplyPageFor(persisted);
                 // Same full-body-vs-clipped-transmit split as MessageService.compose() —
                 // see MessageService.applyUrlPlaceholders() / clipForTransmission().
-                MessageService.applyUrlPlaceholders(persisted, body, url, domainSettingService);
+                MessageService.applyUrlPlaceholders(persisted, body, url, domainSettingService,
+                        replyPageSettingService.getOrCreate().getUrlLeadText());
                 // Historical/audit record only — メッセージボックス visibility is decided at
                 // VIEW time now (see MessageBoxService#listFor), not from this send-time flag.
                 persisted.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
@@ -295,7 +299,8 @@ public class BroadcastService {
             if (needsAnyUrl) {
                 // Short (10-char) token — SMS is billed per ~65-char segment.
                 String url = replyPageService.createShortReplyPageFor(persisted);
-                MessageService.applyUrlPlaceholders(persisted, body, url, domainSettingService);
+                MessageService.applyUrlPlaceholders(persisted, body, url, domainSettingService,
+                        replyPageSettingService.getOrCreate().getUrlLeadText());
                 // Historical/audit record only — メッセージボックス visibility is decided at
                 // VIEW time now (see MessageBoxService#listFor), not from this send-time flag.
                 persisted.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());

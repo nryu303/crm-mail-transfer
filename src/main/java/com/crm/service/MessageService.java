@@ -51,6 +51,7 @@ public class MessageService {
     private final AesEncryptionUtil aes;
     private final ReplyPageService replyPageService;
     private final DomainSettingService domainSettingService;
+    private final ReplyPageSettingService replyPageSettingService;
     /** Lazy reference — broadcast counter update is optional and avoids a circular dependency. */
     private final org.springframework.context.ApplicationContext ctx;
 
@@ -65,6 +66,7 @@ public class MessageService {
                           AesEncryptionUtil aes,
                           ReplyPageService replyPageService,
                           DomainSettingService domainSettingService,
+                          ReplyPageSettingService replyPageSettingService,
                           org.springframework.context.ApplicationContext ctx) {
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
@@ -77,6 +79,7 @@ public class MessageService {
         this.aes = aes;
         this.replyPageService = replyPageService;
         this.domainSettingService = domainSettingService;
+        this.replyPageSettingService = replyPageSettingService;
         this.ctx = ctx;
     }
 
@@ -465,7 +468,8 @@ public class MessageService {
             // Temporary body/status so we can save; we'll rewrite after the page is created.
             msg.setStatus(Message.STATUS_DRAFT);
             msg = messageRepository.save(msg);
-            applyUrlPlaceholders(msg, renderedBody, replyPageService.createReplyPageFor(msg), domainSettingService);
+            applyUrlPlaceholders(msg, renderedBody, replyPageService.createReplyPageFor(msg), domainSettingService,
+                    replyPageSettingService.getOrCreate().getUrlLeadText());
             // Historical/audit record only — records what the domain's landing mode was AT
             // SEND TIME. メッセージボックス no longer reads this column to decide visibility.
             msg.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
@@ -524,7 +528,8 @@ public class MessageService {
         if (needsAnyUrl) {
             msg.setStatus(Message.STATUS_DRAFT);
             msg = messageRepository.save(msg);
-            applyUrlPlaceholders(msg, renderedBody, replyPageService.createShortReplyPageFor(msg), domainSettingService);
+            applyUrlPlaceholders(msg, renderedBody, replyPageService.createShortReplyPageFor(msg), domainSettingService,
+                    replyPageSettingService.getOrCreate().getUrlLeadText());
             // Historical/audit record only — see the matching comment in compose() above.
             msg.setExcludedFromBox(domainSettingService.isActiveLinkDomainExternalLanding());
         }
@@ -653,27 +658,48 @@ public class MessageService {
      * @param replyUrl     the already-expanded %reply_url% URL (from ReplyPageService) — reused
      *                     here rather than rebuilt, since token generation is a one-shot side
      *                     effect that already happened when the caller obtained it
+     * @param urlLeadText  operator-configured one-line text (ReplyPageSetting.urlLeadText,
+     *                     e.g. "返信はこちら") inserted on its own line directly above BOTH
+     *                     %reply_url% and %external_url% — null/blank means no extra line,
+     *                     just the line break before the URL
      */
     static void applyUrlPlaceholders(Message msg, String renderedBody, String replyUrl,
-                                      DomainSettingService domainSettingService) {
+                                      DomainSettingService domainSettingService, String urlLeadText) {
+        String decoratedReplyUrl = decorateUrl(replyUrl, urlLeadText);
         String externalUrl = domainSettingService.buildExternalUrl(msg.getReplyPageToken());
-        String externalUrlOrEmpty = externalUrl == null ? "" : externalUrl;
+        String decoratedExternalUrl = decorateUrl(externalUrl, urlLeadText);
+        String decoratedExternalUrlOrEmpty = decoratedExternalUrl == null ? "" : decoratedExternalUrl;
 
         String fullBody = renderedBody
-                .replace(REPLY_URL_PLACEHOLDER, replyUrl)
-                .replace(EXTERNAL_URL_PLACEHOLDER, externalUrlOrEmpty);
+                .replace(REPLY_URL_PLACEHOLDER, decoratedReplyUrl)
+                .replace(EXTERNAL_URL_PLACEHOLDER, decoratedExternalUrlOrEmpty);
         msg.setBodyText(fullBody);
 
         boolean hasReplyUrlTag = renderedBody.contains(REPLY_URL_PLACEHOLDER);
         if (hasReplyUrlTag) {
             // clipForTransmission locates %reply_url% itself; %external_url% (if also present)
             // is substituted first so no raw tag text leaks into the transmitted message even
-            // when it falls before the clip boundary.
-            String bodyWithExternalResolved = renderedBody.replace(EXTERNAL_URL_PLACEHOLDER, externalUrlOrEmpty);
-            msg.setSentBodyText(clipForTransmission(bodyWithExternalResolved, replyUrl));
+            // when it falls before the clip boundary. The line-break + lead-text is baked into
+            // decoratedReplyUrl itself, so it always survives the clip untouched — only the
+            // BODY text before the tag is subject to the 15-char limit.
+            String bodyWithExternalResolved = renderedBody.replace(EXTERNAL_URL_PLACEHOLDER, decoratedExternalUrlOrEmpty);
+            msg.setSentBodyText(clipForTransmission(bodyWithExternalResolved, decoratedReplyUrl));
         } else {
             msg.setSentBodyText(null);
         }
+    }
+
+    /**
+     * Prepends a line break (always) and the operator-configured {@code urlLeadText} (only
+     * when non-blank, on its own line) directly in front of {@code url} — e.g.
+     * "\n返信はこちら\nhttps://nbbv7g.jp/reply/abc" when urlLeadText="返信はこちら", or just
+     * "\nhttps://nbbv7g.jp/reply/abc" when urlLeadText is blank/null. Returns null unchanged
+     * (callers use null to mean "no active domain" for %external_url%).
+     */
+    private static String decorateUrl(String url, String urlLeadText) {
+        if (url == null) return null;
+        String trimmedLead = urlLeadText == null ? "" : urlLeadText.trim();
+        return trimmedLead.isEmpty() ? "\n" + url : "\n" + trimmedLead + "\n" + url;
     }
 
     /**
@@ -691,6 +717,9 @@ public class MessageService {
      */
     public static String clipForTransmission(String renderedBodyBeforeUrlSwap, String expandedUrl) {
         String body = renderedBodyBeforeUrlSwap == null ? "" : renderedBodyBeforeUrlSwap;
+        // expandedUrl may already carry a leading "\n" (+ operator lead text, see decorateUrl())
+        // baked in by the caller — that decoration is simply concatenated after the clipped
+        // prefix below, so it always survives the 15-char limit untouched.
         String url = expandedUrl == null ? "" : expandedUrl;
         int tagIndex = body.indexOf(REPLY_URL_PLACEHOLDER);
         if (tagIndex < 0) {

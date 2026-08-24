@@ -250,6 +250,8 @@ CREATE TABLE IF NOT EXISTS REPLY_PAGE_SETTING (
     COMMENT 'Controls whether the ヘッダー (header HTML block) actually renders on the public /reply/{token} page. Independent of CSS_PREVIEW_MODE, which only affects the admin settings-page preview pane.',
   REPLY_FORM_VISIBLE  TINYINT(1) NOT NULL DEFAULT 1
     COMMENT 'Controls whether the 本文入力フォーム (subject/body textarea + send button) actually renders on the public /reply/{token} page. When both HEADER_VISIBLE and REPLY_FORM_VISIBLE are 0, only the メッセージボックス section is shown.',
+  URL_LEAD_TEXT       VARCHAR(500) DEFAULT NULL
+    COMMENT 'Optional one-line text (e.g. "返信はこちら") inserted on its own line directly above the expanded URL whenever %reply_url% or %external_url% is substituted into a message body. Default empty — when blank, only the line break before the URL is added (no extra line of text).',
   UPDATED_AT          DATETIME  NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
