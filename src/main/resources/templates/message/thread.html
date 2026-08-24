@@ -394,7 +394,7 @@
                 <div class="tag-row">
                     <input type="text" class="tag-val" id="urlLeadTextInput" th:value="${urlLeadText}"
                            placeholder="例: 返信はこちら／本文はこちら（空欄可）" maxlength="500"/>
-                    <button type="button" class="btn-tag-save" id="btnUrlLeadTextSave">保存</button>
+                    <span class="tag-desc">URL前文言（下の保存ボタンでまとめて保存されます）</span>
                 </div>
                 <p class="text-xs text-slate-500" style="margin:0 0 8px;">
                     上記の入力欄に文言を保存すると、以後 %reply_url% / %external_url% を含めて送信する全てのメッセージで、
@@ -634,42 +634,33 @@ document.querySelectorAll('code.tag-name[data-token]').forEach(function (el) {
     var btn = document.getElementById('btnTagSave');
     if (!btn) return;
     var uid = btn.getAttribute('data-user-id');
+    var urlLeadTextInput = document.getElementById('urlLeadTextInput');
     btn.addEventListener('click', async function () {
         var body = {};
         document.querySelectorAll('.tag-val[data-tag]').forEach(function (i) {
             body[i.getAttribute('data-tag')] = i.value;
         });
         try {
-            var r = await fetch('/manager/api/users/' + uid + '/tags', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+            var requests = [
+                fetch('/manager/api/users/' + uid + '/tags', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                })
+            ];
+            // URL前文言 is a global (not per-user) setting saved to a different endpoint —
+            // included in this one button so the operator only has to click "保存" once.
+            if (urlLeadTextInput) {
+                requests.push(fetch('/manager/api/settings/url-lead-text', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ urlLeadText: urlLeadTextInput.value })
+                }));
+            }
+            var results = await Promise.all(requests);
+            results.forEach(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
             });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            btn.textContent = '保存しました';
-            btn.classList.add('saved');
-            setTimeout(function () { btn.textContent = '保存'; btn.classList.remove('saved'); }, 1500);
-        } catch (e) {
-            alert('保存に失敗しました: ' + e.message);
-        }
-    });
-})();
-
-(function () {
-    // Global (not per-user) setting: text inserted on its own line directly above every
-    // %reply_url% / %external_url% expansion from now on. Saved separately from the per-user
-    // tag panel above since it applies to all users, not just this thread's user.
-    var btn = document.getElementById('btnUrlLeadTextSave');
-    var input = document.getElementById('urlLeadTextInput');
-    if (!btn || !input) return;
-    btn.addEventListener('click', async function () {
-        try {
-            var r = await fetch('/manager/api/settings/url-lead-text', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ urlLeadText: input.value })
-            });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
             btn.textContent = '保存しました';
             btn.classList.add('saved');
             setTimeout(function () { btn.textContent = '保存'; btn.classList.remove('saved'); }, 1500);

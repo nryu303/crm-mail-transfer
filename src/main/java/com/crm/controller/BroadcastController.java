@@ -37,6 +37,7 @@ public class BroadcastController {
     private final com.crm.service.SmsSettingService smsSettingService;
     private final com.crm.service.MessageService messageService;
     private final com.crm.service.AuditLogService auditLog;
+    private final com.crm.service.ReplyPageSettingService replyPageSettingService;
 
     public BroadcastController(BroadcastService broadcastService,
                                MessageTemplateService templateService,
@@ -46,7 +47,8 @@ public class BroadcastController {
                                com.crm.service.DomainSettingService settingService,
                                com.crm.service.SmsSettingService smsSettingService,
                                com.crm.service.MessageService messageService,
-                               com.crm.service.AuditLogService auditLog) {
+                               com.crm.service.AuditLogService auditLog,
+                               com.crm.service.ReplyPageSettingService replyPageSettingService) {
         this.broadcastService = broadcastService;
         this.templateService = templateService;
         this.userService = userService;
@@ -56,6 +58,7 @@ public class BroadcastController {
         this.smsSettingService = smsSettingService;
         this.messageService = messageService;
         this.auditLog = auditLog;
+        this.replyPageSettingService = replyPageSettingService;
     }
 
     /** Email-domain choices for the broadcast filter (replaces old carrierCode dropdown). */
@@ -266,6 +269,9 @@ public class BroadcastController {
         model.addAttribute("templates", templateService.listAll());
         model.addAttribute("templatePageTitles", templateService.listPageTitles());
         model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
+        // Shared with the reply-page settings / message-thread panel — same ReplyPageSetting
+        // row, so a change here is reflected everywhere %reply_url% / %external_url% expand.
+        model.addAttribute("urlLeadText", replyPageSettingService.getOrCreate().getUrlLeadText());
         // Recent history for the right panel: last 50 outbound messages (SENT + scheduled).
         org.springframework.data.domain.Page<com.crm.entity.Message> recent = messageRepository.findAll(
                 org.springframework.data.domain.PageRequest.of(0, 50,

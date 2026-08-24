@@ -147,6 +147,17 @@
             </p>
         </div>
 
+        <div class="mb-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+            <label class="block text-sm font-medium text-slate-800 mb-1" for="urlLeadTextField">URL前文言</label>
+            <input type="text" class="tw-input" id="urlLeadTextField" th:field="*{urlLeadText}"
+                   placeholder="例: 返信はこちら／本文はこちら（空欄可）" maxlength="500"/>
+            <p class="text-xs text-slate-500 mt-1">
+                %reply_url% / %external_url% を含めて送信するメッセージ（個別送信・一斉送信いずれも）で、
+                URLの直上に改行して自動的に挿入されます（空欄の場合は改行のみ）。
+                この項目はメッセージスレッド画面・一斉送信画面からも同じ内容を保存・編集できます。
+            </p>
+        </div>
+
         <div class="mb-4 flex items-center">
             <input type="checkbox" class="h-4 w-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" id="requireLogin" th:field="*{requireLogin}"/>
             <label class="ml-2 text-sm text-slate-700" for="requireLogin">ログインを必須にする (ユーザーのログインID/パスワードを要求)</label>

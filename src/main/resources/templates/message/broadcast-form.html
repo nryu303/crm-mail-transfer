@@ -98,6 +98,11 @@
         }
         .tag-panel code.tag-name:hover { background:#dbeafe; color:#1d4ed8; }
         .tag-panel .tag-desc { font-size:.7rem; color:#64748b; flex:1; }
+        .tag-panel .btn-tag-save {
+            font-size:.7rem; padding:3px 12px; border-radius:4px; border:none; background:#16a34a; color:#fff; cursor:pointer; font-weight:700;
+        }
+        .tag-panel .btn-tag-save:hover { background:#15803d; }
+        .tag-panel .btn-tag-save.saved { background:#94a3b8; }
     </style>
 </head>
 <body>
@@ -279,6 +284,15 @@
                         <code class="tag-name" data-token="%external_url%">%external_url%</code>
                         <span class="tag-desc">外部リンクドメインURL（使用中のドメイン経由、無ければ空欄）</span>
                     </div>
+                    <div class="tag-row">
+                        <input type="text" class="tag-val" id="urlLeadTextInput" th:value="${urlLeadText}"
+                               placeholder="例: 返信はこちら／本文はこちら（空欄可）" maxlength="500"
+                               style="flex:1; padding:3px 6px; font-size:.72rem; border:1px solid #cbd5e1; border-radius:4px;"/>
+                        <button type="button" class="btn-tag-save" id="btnUrlLeadTextSave">保存</button>
+                    </div>
+                    <p class="text-xs text-slate-400" style="margin:2px 0 0;">
+                        URL前文言（返信画面設定・メッセージスレッドと共有）。%reply_url% / %external_url% のURL直上に改行して自動挿入されます（空欄可）。
+                    </p>
                 </div>
             </form>
         </div>
@@ -319,6 +333,30 @@ function insertTagToBody(token) {
 document.querySelectorAll('code.tag-name[data-token]').forEach(function (el) {
     el.addEventListener('click', function () { insertTagToBody(el.getAttribute('data-token')); });
 });
+
+// URL前文言 — shared global setting (same ReplyPageSetting row as /manager/settings/reply-page
+// and the message-thread panel). Saving here immediately affects every future %reply_url% /
+// %external_url% expansion, for both single sends and broadcasts.
+(function () {
+    var btn = document.getElementById('btnUrlLeadTextSave');
+    var input = document.getElementById('urlLeadTextInput');
+    if (!btn || !input) return;
+    btn.addEventListener('click', async function () {
+        try {
+            var r = await fetch('/manager/api/settings/url-lead-text', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ urlLeadText: input.value })
+            });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            btn.textContent = '保存しました';
+            btn.classList.add('saved');
+            setTimeout(function () { btn.textContent = '保存'; btn.classList.remove('saved'); }, 1500);
+        } catch (e) {
+            alert('保存に失敗しました: ' + e.message);
+        }
+    });
+})();
 
 // --- Reservation (予約送信) UI ---
 function pad2(n) { return String(n).padStart(2, '0'); }
