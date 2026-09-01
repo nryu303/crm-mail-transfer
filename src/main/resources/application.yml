@@ -11,6 +11,11 @@ server:
     # Default 2MB is too small. Keep in sync with spring.servlet.multipart.max-*.
     max-http-form-post-size: 10MB
     max-swallow-size: 10MB
+    # /manager/users search is a GET form; large multi-value filters (150+
+    # newline-separated emails/phone numbers) can exceed the 8KB default request-line
+    # limit and get rejected with HTTP 400 before Spring MVC binding even runs.
+    # Raised alongside nginx's large_client_header_buffers in crm-dev.conf.
+    max-http-header-size: 65536
   servlet:
     session:
       timeout: 86400

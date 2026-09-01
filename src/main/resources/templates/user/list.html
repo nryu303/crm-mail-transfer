@@ -32,6 +32,13 @@
         .ulist tbody tr:hover td { background:#f8fafc; }
         .ulist tbody tr.selected-row td { background:#eff6ff; }
         .ulist tbody tr.selected-row td:nth-child(1), .ulist tbody tr.selected-row td:nth-child(2) { background:#eff6ff; }
+        /* SUSPENDED users get a red-tinted row + left border so they stand out at a glance
+           in a long list, distinct from the per-cell ACTIVE/SUSPENDED badge alone. */
+        .ulist tbody tr.row-suspended td { background:#fef2f2; border-bottom-color:#fecaca; }
+        .ulist tbody tr.row-suspended td:nth-child(1), .ulist tbody tr.row-suspended td:nth-child(2) { background:#fef2f2; }
+        .ulist tbody tr.row-suspended td:first-child { box-shadow: inset 3px 0 0 #dc2626; }
+        .ulist tbody tr.row-suspended:hover td { background:#fee2e2; }
+        .ulist tbody tr.row-suspended.selected-row td { background:#fecaca; }
         .ulist .row-check { width:14px; height:14px; accent-color:#2563eb; cursor:pointer; display:block; margin:0 auto; }
         .ulist .pager { flex-shrink:0; padding:8px 0 10px; font-size:.8rem; color:#64748b; }
 
@@ -162,16 +169,16 @@
                      inputs which were getting cramped. -->
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                     <div class="md:col-span-2">
-                        <label class="block text-xs text-slate-500 mb-1">メールアドレス <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
+                        <label class="block text-xs text-slate-500 mb-1">メールアドレス</label>
                         <textarea class="tw-input" rows="2" th:field="*{email}" style="resize:none;font-size:.78rem;"
                                   placeholder="user1@example.com&#10;user2@example.com"></textarea>
                     </div>
                     <div class="md:col-span-1">
-                        <label class="block text-xs text-slate-500 mb-1">表示名 <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
+                        <label class="block text-xs text-slate-500 mb-1">表示名</label>
                         <textarea class="tw-input" rows="2" th:field="*{displayName}" style="resize:none;font-size:.78rem;"></textarea>
                     </div>
                     <div class="md:col-span-1">
-                        <label class="block text-xs text-slate-500 mb-1">電話番号 <span class="text-slate-400 font-normal">(改行で複数指定可)</span></label>
+                        <label class="block text-xs text-slate-500 mb-1">電話番号</label>
                         <textarea class="tw-input" rows="2" th:field="*{phoneNumber}" style="resize:none;font-size:.78rem;"></textarea>
                     </div>
                     <!-- Compact selects (フォルダ・広告コード・性別・キャリア・累計送信・累計返信)
@@ -409,7 +416,8 @@
                     <tr th:if="${users.totalElements == 0}">
                         <td colspan="15" class="text-center py-6 text-slate-400">該当するユーザーがいません</td>
                     </tr>
-                    <tr th:each="u,it : ${users.content}">
+                    <tr th:each="u,it : ${users.content}"
+                        th:classappend="${u.status == 'SUSPENDED'} ? 'row-suspended'">
                         <td><input type="checkbox" class="row-check row-item" name="ids" th:value="${u.id}"/></td>
                         <!-- Sequential row number based on display order: page offset + 1-based row index.
                              Page 1 row 1 = "1", page 2 row 1 = (size + 1), etc. -->
@@ -423,7 +431,7 @@
                         <td class="text-xs text-slate-500" th:text="${u.carrierDomain} ? ('@' + ${u.carrierDomain}) : '-'"></td>
                         <td>
                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                                  th:classappend="${u.status == 'ACTIVE'} ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'"
+                                  th:classappend="${u.status == 'ACTIVE'} ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700 border border-red-300'"
                                   th:text="${u.status}"></span>
                         </td>
                         <td>
@@ -550,6 +558,19 @@
         </select>
         <button type="submit" class="btn-move" id="btnMove" disabled
                 formaction="/manager/users/bulk-move-folder">選択フォルダ移動</button>
+
+        <div class="footer-divider"></div>
+
+        <!-- Bulk ACTIVE/SUSPENDED status change. Row-selection only (no folder-scope mode) —
+             a mass status flip across an entire filtered folder without checking individual
+             rows is too easy to trigger by accident, so this always requires explicit checks. -->
+        <span class="text-xs font-semibold text-slate-500 whitespace-nowrap">変更先ステータス</span>
+        <select class="folder-select" name="status" id="statusSelect" disabled>
+            <option value="">ステータスを選択</option>
+            <option th:each="s : ${statuses}" th:value="${s}" th:text="${s}"></option>
+        </select>
+        <button type="submit" class="btn-move" id="btnSetStatus" disabled
+                formaction="/manager/users/bulk-set-status">選択ステータス変更</button>
 
         <div class="footer-divider"></div>
         <button type="button" class="btn-broadcast" id="btnBroadcast" disabled onclick="goBroadcast()">選択一斉送信</button>
@@ -689,6 +710,8 @@ function formatFolderLabel(values) {
     var btnDelete = document.getElementById('btnDelete');
     var scopeFlag = document.getElementById('folderAllScope');
     var limitWrap = document.getElementById('folderScopeLimitWrap');
+    var statusSel = document.getElementById('statusSelect');
+    var btnSetStatus = document.getElementById('btnSetStatus');
     // Snapshot the committed folder filter from the rendered checkbox state.
     // NOTE: at script-execution time the DOMContentLoaded defensive checkbox-sync
     // hasn't fired yet, so a missing th:checked on the (未設定) box would leave
@@ -742,6 +765,9 @@ function formatFolderLabel(values) {
         if (btnBindCarrier)   btnBindCarrier.disabled = !enable;
         if (btnUnbindCarrier) btnUnbindCarrier.disabled = !enable;
         if (btnDelete)        btnDelete.disabled = !enable;
+        // Status change: row-selection only, deliberately NOT enabled in folder-scope mode.
+        if (statusSel)   statusSel.disabled = !hasRows;
+        if (btnSetStatus) btnSetStatus.disabled = !hasRows;
 
         // checkAll indicator reflects ROW checks only, not folder scope.
         checkAll.indeterminate = hasRows && checkedList.length < rows().length;
@@ -830,6 +856,23 @@ function formatFolderLabel(values) {
                         return;
                     }
                 }
+                // Status change is row-selection only (never folder-scope) — confirm here,
+                // before the folder-scope early-return below skips the rest of this handler.
+                if (action && action.indexOf('bulk-set-status') >= 0) {
+                    var stSel = document.getElementById('statusSelect');
+                    var stTgt = stSel && stSel.value;
+                    if (!stTgt) {
+                        alert('変更先のステータスを選択してください');
+                        ev.preventDefault();
+                        return;
+                    }
+                    var stLabel = stSel.options[stSel.selectedIndex].text;
+                    if (!confirm('選択したユーザーのステータスを「' + stLabel + '」に変更します。よろしいですか?')) {
+                        ev.preventDefault();
+                        return;
+                    }
+                }
+
                 // Folder-scope mode requires at least one committed folder AND no row checks
                 // (gate is enforced by the refresh() function that toggles scope.checked).
                 if (!action || !scope.checked || committedFolders.length === 0) return;

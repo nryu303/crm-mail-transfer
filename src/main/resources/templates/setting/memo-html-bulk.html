@@ -80,7 +80,7 @@
                 </select>
             </div>
             <div class="text-xs text-slate-500" style="max-width:480px;">
-                選択したフォルダ内の全ユーザーに、下記6スロットの内容と使用中ラジオを上書きします。<br/>
+                選択したフォルダ内の全ユーザーに、下記<span th:text="${slotCount}">10</span>スロットの内容と使用中ラジオを上書きします。<br/>
                 空欄スロットは該当ユーザーのスロットを<strong>クリア</strong>します。
             </div>
         </div>
@@ -112,7 +112,7 @@
         <div class="flex items-center gap-2 pt-4 border-t border-slate-100 mt-3 flex-wrap">
             <button type="submit"
                     class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md"
-                    onclick="return confirm('対象フォルダ内の全ユーザーに6スロット分のHTMLと使用中設定を上書きします。よろしいですか?');">
+                    th:attr="onclick=|return confirm('対象フォルダ内の全ユーザーに${slotCount}スロット分のHTMLと使用中設定を上書きします。よろしいですか?');|">
                 フォルダ内ユーザーへ一括適用
             </button>
             <span class="text-xs text-slate-500">プレビュー →</span>

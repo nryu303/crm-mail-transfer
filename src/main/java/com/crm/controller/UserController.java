@@ -397,6 +397,34 @@ public class UserController {
         return "redirect:" + safeReturn;
     }
 
+    /** Bulk ACTIVE ⇄ SUSPENDED status change from the /manager/users list's row-checkbox
+     *  selection. Not password-gated — unlike delete, this is a reversible field flip. */
+    @PostMapping("/bulk-set-status")
+    public String bulkSetStatus(@RequestParam(name = "ids", required = false) java.util.List<Long> ids,
+                                 @RequestParam(name = "status", required = false) String status,
+                                 @RequestParam(name = "returnTo", required = false) String returnTo,
+                                 RedirectAttributes ra) {
+        String safeReturn = safeRelativeReturnUrl(returnTo, "/manager/users");
+        if (!CrmUser.STATUS_ACTIVE.equals(status) && !CrmUser.STATUS_SUSPENDED.equals(status)) {
+            ra.addFlashAttribute("flashError", "変更先のステータスを選択してください");
+            return "redirect:" + safeReturn;
+        }
+        if (ids == null || ids.isEmpty()) {
+            ra.addFlashAttribute("flashError", "ユーザーが選択されていません");
+            return "redirect:" + safeReturn;
+        }
+        int n = 0;
+        for (CrmUser u : userRepository.findAllById(ids)) {
+            u.setStatus(status);
+            userRepository.save(u);
+            n++;
+        }
+        auditLog.record(com.crm.service.AuditLogService.ACTION_USER_UPDATE,
+                "CrmUser", null, "bulk status=" + status + " count=" + n);
+        ra.addFlashAttribute("flashSuccess", n + " 件のユーザーを " + status + " に変更しました");
+        return "redirect:" + safeReturn;
+    }
+
     /**
      * Normalize the union of the plural sourceFolders list and the legacy singular
      * sourceFolder field into an ordered, deduped List<String> where each entry is either
@@ -519,13 +547,13 @@ public class UserController {
         model.addAttribute("statLastReply",  messageRepository.maxCreatedAtByUserIdAndDirection(id, com.crm.entity.Message.DIR_IN));
         java.math.BigDecimal totalPaid = paymentService.sumPaidByUser(id);
         model.addAttribute("statTotalPaid",  totalPaid != null ? totalPaid : java.math.BigDecimal.ZERO);
-        // 6-slot reply-HTML titles for the tab labels
+        // reply-HTML slot titles for the tab labels
         model.addAttribute("memoSlotTitles", replyHtmlSlotService.listSlotTitles());
-        // Per-slot attachment lists for the bottom-left attachment grids. Indexed 0..5
-        // (slot 1..6) so the template can do attachmentsBySlot[i] cleanly.
+        // Per-slot attachment lists for the bottom-left attachment grids. Indexed
+        // 0..SLOT_COUNT-1 (slot 1..SLOT_COUNT) so the template can do attachmentsBySlot[i] cleanly.
         java.util.List<java.util.List<com.crm.entity.ReplyPageAttachment>> attachmentsBySlot =
-                new java.util.ArrayList<>(6);
-        for (int s = 1; s <= 6; s++) {
+                new java.util.ArrayList<>(com.crm.service.ReplyHtmlSlotService.SLOT_COUNT);
+        for (int s = 1; s <= com.crm.service.ReplyHtmlSlotService.SLOT_COUNT; s++) {
             attachmentsBySlot.add(attachmentService.listForUserSlot(id, s));
         }
         model.addAttribute("attachmentsBySlot", attachmentsBySlot);
@@ -546,19 +574,30 @@ public class UserController {
                 .body(new org.springframework.core.io.FileSystemResource(f));
     }
 
+    /**
+     * Called only via fetch() from user/detail.html's attachment grid — the JS removes the
+     * thumbnail from the DOM directly on success/failure and never navigates to the redirect
+     * target below, so any flashSuccess/flashError set here would sit unconsumed in the
+     * session's FlashMap and resurface as a stale/duplicated message on some later, unrelated
+     * page load. Report the outcome in the JSON body instead; no flash attributes.
+     */
     @PostMapping("/{userId}/attachment/{attId}/delete")
-    public String deleteAttachment(@PathVariable Long userId,
-                                    @PathVariable Long attId,
-                                    RedirectAttributes ra) {
+    @org.springframework.web.bind.annotation.ResponseBody
+    public org.springframework.http.ResponseEntity<java.util.Map<String, Object>> deleteAttachment(
+            @PathVariable Long userId, @PathVariable Long attId) {
         com.crm.entity.ReplyPageAttachment att = attachmentService.findById(attId, userId).orElse(null);
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
         if (att == null) {
-            ra.addFlashAttribute("flashError", "添付ファイルが見つかりません");
+            body.put("success", false);
+            body.put("message", "添付ファイルが見つかりません");
         } else if (attachmentService.deleteById(attId)) {
-            ra.addFlashAttribute("flashSuccess", "添付ファイル「" + att.getFileName() + "」を削除しました");
+            body.put("success", true);
+            body.put("message", "添付ファイル「" + att.getFileName() + "」を削除しました");
         } else {
-            ra.addFlashAttribute("flashError", "添付ファイルの削除に失敗しました");
+            body.put("success", false);
+            body.put("message", "添付ファイルの削除に失敗しました");
         }
-        return "redirect:/manager/users/" + userId;
+        return org.springframework.http.ResponseEntity.ok(body);
     }
 
     /** Admin-side メッセージボックス preview — same HTML/CSS as the public /reply/{token}
@@ -899,8 +938,9 @@ public class UserController {
             ra.addFlashAttribute("flashError", "ユーザーが見つかりません");
             return "redirect:/manager/users";
         }
-        // Default to the slot the operator marked 使用中; allow ?slot=N override (1..6) for preview.
-        int effSlot = (slot != null && slot >= 1 && slot <= 6) ? slot : user.get().getActiveMemoSlot();
+        // Default to the slot the operator marked 使用中; allow ?slot=N override for preview.
+        int effSlot = (slot != null && slot >= 1 && slot <= com.crm.service.ReplyHtmlSlotService.SLOT_COUNT)
+                ? slot : user.get().getActiveMemoSlot();
         String rawMemo = user.get().getMemoSlot(effSlot);
         boolean usingDefault = rawMemo == null || rawMemo.trim().isEmpty();
         if (usingDefault) {

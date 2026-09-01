@@ -167,6 +167,54 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
                                            @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
 
     /**
+     * Same as {@link #countByDirectionBetween}, but buckets by the message's EFFECTIVE
+     * timestamp — SENT_AT once dispatched, else SCHEDULED_AT while still QUEUED, else
+     * CREATED_AT as a last resort — so a reservation set at 10:00 for delivery at 15:00
+     * lands in the 15:00 bucket instead of the 10:00 "set" time.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir " +
+            "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) >= :from " +
+            "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) < :to")
+    long countByDirectionBetweenEffective(@org.springframework.data.repository.query.Param("dir") String direction,
+                                           @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                           @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
+
+    /** Effective-timestamp variant of {@link #countByDirectionAndStatusBetween}. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.status = :status " +
+            "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) >= :from " +
+            "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) < :to")
+    long countByDirectionAndStatusBetweenEffective(@org.springframework.data.repository.query.Param("dir") String direction,
+                                                    @org.springframework.data.repository.query.Param("status") String status,
+                                                    @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                                    @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
+
+    /** Effective-timestamp variant of {@link #countByDirectionAndChannelBetween}. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.channel = :channel " +
+            "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) >= :from " +
+            "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) < :to")
+    long countByDirectionAndChannelBetweenEffective(@org.springframework.data.repository.query.Param("dir") String direction,
+                                                     @org.springframework.data.repository.query.Param("channel") String channel,
+                                                     @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                                     @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
+
+    /**
+     * Count of still-QUEUED (not yet dispatched) messages of one channel whose effective
+     * (future) send time falls in this window — the dashboard renders this portion of each
+     * bucket with a lighter shade to distinguish projected/future sends from completed ones.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.channel = :channel AND m.status = 'QUEUED' " +
+            "AND COALESCE(m.scheduledAt, m.createdAt) >= :from " +
+            "AND COALESCE(m.scheduledAt, m.createdAt) < :to")
+    long countQueuedByDirectionAndChannelBetweenEffective(@org.springframework.data.repository.query.Param("dir") String direction,
+                                                           @org.springframework.data.repository.query.Param("channel") String channel,
+                                                           @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                                           @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
+
+    /**
      * Last successful outbound timestamp per user. Returns rows {userId, MAX(sentAt)} for
      * messages where direction='OUT' AND status='SENT'.
      */

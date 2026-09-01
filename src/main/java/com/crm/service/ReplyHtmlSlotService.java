@@ -12,17 +12,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Manages the per-user reply-page HTML slots — there are SLOT_COUNT (6) of them per
- * user (CRM_USER.MEMO + MEMO_2..MEMO_6). Each slot gets an operator-supplied display
- * title (global, stored in CRM_SETTING keyed as memo.slot.N.title).
+ * Manages the per-user reply-page HTML slots — there are SLOT_COUNT (10) of them per
+ * user (CRM_USER.MEMO + MEMO_2..MEMO_10; 7-10 added 2026-09-02, displayed as a 5x2 grid
+ * in the admin UI). Each slot gets an operator-supplied display title (global, stored in
+ * CRM_SETTING keyed as memo.slot.N.title).
  *
  * <p>Also drives the bulk-edit page (/manager/settings/memo-html-bulk) that lets an
- * operator apply the same 6-slot HTML set + 使用中 selection to every user in a folder.
+ * operator apply the same SLOT_COUNT-slot HTML set + 使用中 selection to every user in a folder.
  */
 @Service
 public class ReplyHtmlSlotService {
 
-    public static final int SLOT_COUNT = 6;
+    public static final int SLOT_COUNT = 10;
 
     private final CrmSettingRepository settingRepository;
     private final CrmUserRepository userRepository;
@@ -79,6 +80,10 @@ public class ReplyHtmlSlotService {
             case 4: circled = "④"; break;
             case 5: circled = "⑤"; break;
             case 6: circled = "⑥"; break;
+            case 7: circled = "⑦"; break;
+            case 8: circled = "⑧"; break;
+            case 9: circled = "⑨"; break;
+            case 10: circled = "⑩"; break;
             default: circled = String.valueOf(slotNo);
         }
         return circled + " 返信HTML";

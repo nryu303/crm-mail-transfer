@@ -264,6 +264,32 @@ public class MessageController {
         return org.springframework.http.ResponseEntity.ok(body);
     }
 
+    /**
+     * 予約送信 削除 from the thread view: 削除ボタン → パスワード入力 → 認証 → 削除, a single
+     * password-gated step (no row-selection checkbox — that UI was the source of a bug where
+     * check-then-delete silently failed). Performs the same domain-safe cancelScheduled()
+     * (status -> CANCELLED, row kept for history) used elsewhere, not a hard delete, so it
+     * can never race the dispatcher into deleting a row it just picked up.
+     */
+    @PostMapping("/manager/messages/{id}/cancel-scheduled")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public org.springframework.http.ResponseEntity<java.util.Map<String, Object>> cancelScheduledFromThread(
+            @PathVariable Long id,
+            @RequestParam(name = "confirmPassword", required = false) String confirmPassword,
+            HttpSession session) {
+        Long adminId = (Long) session.getAttribute(AuthInterceptor.SESSION_ADMIN_ID);
+        java.util.Map<String, Object> body = new java.util.HashMap<>();
+        if (!adminAuthService.verifyPassword(adminId, confirmPassword)) {
+            body.put("success", false);
+            body.put("message", "削除には管理者パスワードの確認が必要です");
+            return org.springframework.http.ResponseEntity.ok(body);
+        }
+        boolean ok = messageService.cancelScheduled(id);
+        body.put("success", ok);
+        if (!ok) body.put("message", "削除できませんでした (予約状態のみ削除可能です)");
+        return org.springframework.http.ResponseEntity.ok(body);
+    }
+
     @PostMapping("/manager/messages/{id}/cancel")
     public String cancel(@PathVariable Long id, RedirectAttributes ra) {
         if (messageService.cancelScheduled(id)) {

@@ -49,6 +49,14 @@
         .ibx-row .del:hover { background:#b91c1c; }
         .ibx-row .del:disabled { background:#cbd5e1; cursor:wait; }
 
+        /* 予約送信 delete button — same red-delete language as .ibx-row .del, inline next to
+           the "予約: yyyy-MM-dd HH:mm" badge on a still-QUEUED history row. */
+        .sched-del {
+            font-size:.66rem; line-height:1; padding:2px 6px; border-radius:4px;
+            background:#dc2626; color:#fff; border:none; cursor:pointer; font-weight:700; margin-left:6px;
+        }
+        .sched-del:hover { background:#b91c1c; }
+
         .hist-item { padding:8px 10px; border-radius:6px; margin-bottom:6px; font-size:.8rem; line-height:1.5; }
         .hist-item.out { background:#dbeafe; color:#1e3a8a; margin-left:20px; }
         .hist-item.in  { background:#e2e8f0; color:#1e293b; margin-right:20px; }
@@ -274,6 +282,9 @@
                     <span th:if="${m.scheduledAt != null and m.status == 'QUEUED'}"
                           class="text-amber-700 font-semibold ml-2"
                           th:text="'予約: ' + ${#temporals.format(m.scheduledAt, 'yyyy-MM-dd HH:mm')}"></span>
+                    <button th:if="${m.scheduledAt != null and m.status == 'QUEUED'}"
+                            type="button" class="sched-del" th:attr="data-msg-id=${m.id}"
+                            onclick="deleteScheduledMessage(this)">削除</button>
                     <span th:if="${m.status == 'FAILED' and m.errorMessage != null}"
                           style="color:#dc2626;margin-left:6px;font-size:.66rem;"
                           th:text="${#strings.abbreviate(m.errorMessage, 80)}"></span>
@@ -629,6 +640,41 @@ document.querySelectorAll('code.tag-name[data-token]').forEach(function (el) {
             });
     });
 })();
+
+// --- 予約送信 削除: 削除ボタン → パスワード入力 → 認証 → 削除 の単純フロー。
+// (旧チェックボックス選択UIは廃止 — チェック後に削除できなくなる不具合の原因だったため)
+function deleteScheduledMessage(btn) {
+    if (btn.disabled) return;
+    var msgId = btn.getAttribute('data-msg-id');
+    if (!msgId) return;
+    if (!confirm('この予約送信を削除します。よろしいですか?')) return;
+    var pw = prompt('管理者パスワードを入力してください');
+    if (!pw) return;
+    btn.disabled = true;
+    fetch('/manager/messages/' + msgId + '/cancel-scheduled', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'confirmPassword=' + encodeURIComponent(pw)
+    })
+        .then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function (json) {
+            if (!json.success) {
+                alert(json.message || '削除に失敗しました');
+                btn.disabled = false;
+                return;
+            }
+            var item = btn.closest('.hist-item');
+            if (item && item.parentNode) item.parentNode.removeChild(item);
+        })
+        .catch(function (e) {
+            btn.disabled = false;
+            alert('削除に失敗しました: ' + e.message);
+        });
+}
 
 (function () {
     var btn = document.getElementById('btnTagSave');

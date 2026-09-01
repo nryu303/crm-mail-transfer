@@ -60,7 +60,7 @@ public class ReplyAttachmentService {
     }
 
     public List<ReplyPageAttachment> listForUserSlot(Long userId, Integer slot) {
-        int s = (slot == null || slot < 1 || slot > 6) ? 1 : slot;
+        int s = (slot == null || slot < 1 || slot > ReplyHtmlSlotService.SLOT_COUNT) ? 1 : slot;
         return repo.findByUserIdAndSlotNoOrderByCreatedAtDesc(userId, s);
     }
 
@@ -106,7 +106,7 @@ public class ReplyAttachmentService {
         if (mime == null || !ALLOWED_MIME.contains(mime.toLowerCase(Locale.ROOT))) {
             throw new AttachmentException("画像ファイル (JPEG / PNG / GIF / WebP) のみアップロード可能です");
         }
-        int s = (slot < 1 || slot > 6) ? 1 : slot;
+        int s = (slot < 1 || slot > ReplyHtmlSlotService.SLOT_COUNT) ? 1 : slot;
         long existing = repo.countByUserIdAndSlotNo(userId, s);
         if (existing >= MAX_PER_USER_SLOT) {
             throw new AttachmentException(

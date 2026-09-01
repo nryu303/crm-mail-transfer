@@ -99,26 +99,28 @@
                 </select>
             </div>
 
-            <!-- Six reply-page HTML slots — operator picks one as 使用中. The public reply
+            <!-- Ten reply-page HTML slots — operator picks one as 使用中. The public reply
                  page renders only the active slot. Each slot has an operator-supplied
                  display name (slotTitles, from CrmSetting memo.slot.N.title). Per-slot
-                 preview link in the action row below. Expanded 3→6 slots 2026-05-25. -->
+                 preview link in the action row below. Expanded 3→6 slots 2026-05-25,
+                 6→10 slots 2026-09-02 (displayed as a 5x2 grid per operator request). -->
             <div>
                 <label class="block text-xs text-slate-500 mb-1 flex items-center gap-2">
-                    <span>専用返信画面HTML <span class="text-slate-400 normal-case">(6スロットまで保存でき、使用中のみが公開ページに反映されます)</span></span>
+                    <span>専用返信画面HTML <span class="text-slate-400 normal-case">(10スロットまで保存でき、使用中のみが公開ページに反映されます)</span></span>
                     <a class="ml-auto text-xs text-blue-600 hover:underline"
                        th:href="@{/manager/settings/memo-html-bulk(loadFromUserId=${user.id})}" target="_blank">フォルダ内一括編集 →</a>
                 </label>
                 <div class="border border-slate-200 rounded-md overflow-hidden">
-                    <div class="flex border-b border-slate-200 bg-slate-50 text-xs overflow-x-auto">
-                        <button type="button" th:each="i : ${#numbers.sequence(1, 6)}"
-                                class="memo-tab px-3 py-2 text-left flex items-center gap-2 border-r border-slate-200"
-                                style="flex:1 1 0; min-width:140px;"
+                    <!-- 5x2 grid: slots 1-5 on row 1, slots 6-10 on row 2. -->
+                    <div class="memo-tab-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); border-bottom:1px solid #e2e8f0; background:#f8fafc;">
+                        <button type="button" th:each="i : ${#numbers.sequence(1, 10)}"
+                                class="memo-tab px-2 py-2 text-left flex items-center gap-1 border-r border-b border-slate-200 text-xs"
+                                style="min-width:0;"
                                 th:attr="data-slot=${i}">
                             <input type="radio" name="activeMemoSlot" th:value="${i}"
                                    th:checked="${form.activeMemoSlot == i}" title="このスロットを使用中にする"/>
-                            <span class="text-slate-700" th:text="${memoSlotTitles[i - 1]}">タイトル</span>
-                            <span class="ml-auto text-slate-400 memo-char" th:attr="data-for='memo' + ${i}">0 文字</span>
+                            <span class="text-slate-700 truncate" th:text="${memoSlotTitles[i - 1]}">タイトル</span>
+                            <span class="ml-auto text-slate-400 memo-char" style="font-size:.68rem;" th:attr="data-for='memo' + ${i}">0</span>
                         </button>
                     </div>
                     <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo1" name="memo"
@@ -151,6 +153,26 @@
                               th:style="${form.activeMemoSlot == 6 ? '' : 'display:none;'}"
                               style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
                               th:placeholder="${memoSlotTitles[5]} + ' の HTML を入力'"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo7" name="memo7"
+                              th:text="${form.memo7}"
+                              th:style="${form.activeMemoSlot == 7 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              th:placeholder="${memoSlotTitles[6]} + ' の HTML を入力'"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo8" name="memo8"
+                              th:text="${form.memo8}"
+                              th:style="${form.activeMemoSlot == 8 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              th:placeholder="${memoSlotTitles[7]} + ' の HTML を入力'"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo9" name="memo9"
+                              th:text="${form.memo9}"
+                              th:style="${form.activeMemoSlot == 9 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              th:placeholder="${memoSlotTitles[8]} + ' の HTML を入力'"></textarea>
+                    <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo10" name="memo10"
+                              th:text="${form.memo10}"
+                              th:style="${form.activeMemoSlot == 10 ? '' : 'display:none;'}"
+                              style="min-height:240px; max-height:60vh; overflow:auto; resize:vertical; white-space:pre; font-size:0.78rem; line-height:1.4;"
+                              th:placeholder="${memoSlotTitles[9]} + ' の HTML を入力'"></textarea>
                 </div>
                 <p class="mt-1 text-xs text-slate-500">タブのラジオボタンが「使用中」マークです。クリックでパネル切替、ラジオで公開反映スロットを変更し、保存後に反映されます。空白で保存すると該当スロットは削除扱いになります。スロットの表示名は<a class="text-blue-600 hover:underline" th:href="@{/manager/settings/memo-html-bulk}" target="_blank">一括編集ページ</a>から変更できます。</p>
 
@@ -159,7 +181,7 @@
                      only its own slot's attachments and follows the same display/hide rule as
                      the textareas above (display:none when activeMemoSlot != this slot). -->
                 <div class="mt-3">
-                    <div th:each="i : ${#numbers.sequence(1, 6)}" class="attach-pane"
+                    <div th:each="i : ${#numbers.sequence(1, 10)}" class="attach-pane"
                          th:attr="data-slot=${i}"
                          th:style="${form.activeMemoSlot == i ? '' : 'display:none;'}">
                         <div class="text-xs text-slate-600 mb-1.5">
@@ -237,7 +259,17 @@
                         btn.addEventListener('click', function (e) {
                             e.preventDefault();
                             e.stopPropagation();
+                            // Guard against a double-click firing two overlapping deletes: the
+                            // 18x18px button is easy to double-click, and two concurrent POSTs
+                            // each queue their own flash message (one "削除しました", one "見
+                            // つかりません" once the row is already gone) into the SAME session
+                            // FlashMap — both then render together on the next page load,
+                            // showing as a duplicated/contradictory message. Disabling on the
+                            // very first click (before the confirm dialog even blocks) prevents
+                            // a second click from reaching this handler at all.
+                            if (btn.disabled) return;
                             if (!confirm('この添付ファイルを削除します。よろしいですか?')) return;
+                            btn.disabled = true;
                             var userId = btn.getAttribute('data-userid');
                             var attId  = btn.getAttribute('data-attid');
                             var csrfInput = document.querySelector('input[name="_csrf"]');
@@ -249,14 +281,21 @@
                                 credentials: 'same-origin',
                                 body: fd
                             }).then(function (r) {
-                                if (r.ok || r.redirected) {
+                                if (!r.ok) throw new Error('HTTP ' + r.status);
+                                return r.json();
+                            }).then(function (json) {
+                                if (json.success) {
                                     // Remove the thumb tile from the DOM instead of full reload.
                                     var tile = btn.closest('.attach-thumb');
                                     if (tile) tile.remove();
                                 } else {
-                                    alert('削除に失敗しました (HTTP ' + r.status + ')');
+                                    alert(json.message || '削除に失敗しました');
+                                    btn.disabled = false;
                                 }
-                            }).catch(function (err) { alert('通信エラー: ' + err); });
+                            }).catch(function (err) {
+                                alert('通信エラー: ' + err);
+                                btn.disabled = false;
+                            });
                         });
                     });
                 </script>

@@ -854,7 +854,7 @@ public class SettingController {
         return "redirect:/manager/settings/reply-page";
     }
 
-    // ====== Reply-HTML bulk edit (6 slots × N users in a folder) ======
+    // ====== Reply-HTML bulk edit (ReplyHtmlSlotService.SLOT_COUNT slots × N users in a folder) ======
     @GetMapping("/memo-html-bulk")
     public String memoHtmlBulkForm(@RequestParam(name = "folder", required = false) String folder,
                                     @RequestParam(name = "loadFromUserId", required = false) Long loadFromUserId,
@@ -863,7 +863,7 @@ public class SettingController {
         model.addAttribute("slotCount", com.crm.service.ReplyHtmlSlotService.SLOT_COUNT);
         model.addAttribute("slotTitles", replyHtmlSlotService.listSlotTitles());
         model.addAttribute("selectedFolder", folder == null ? "" : folder);
-        // Optional bootstrap: copy the 6 HTMLs from an existing user (so the operator can
+        // Optional bootstrap: copy all slot HTMLs from an existing user (so the operator can
         // start from "the current state of user X" rather than from scratch).
         String[] htmls = new String[com.crm.service.ReplyHtmlSlotService.SLOT_COUNT];
         Integer activeSlot = 1;

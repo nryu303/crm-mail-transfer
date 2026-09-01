@@ -38,6 +38,12 @@ public class ReplyPageSetting {
     @Column(name = "CSS_PREVIEW_MODE", nullable = false, length = 16)
     private String cssPreviewMode = CSS_PREVIEW_ON;
 
+    /** Editable heading text shown above the CSS-preview iframe on the settings page itself
+     *  (e.g. "CSS プレビュー (ミニ返信フォームに適用)"). Purely a label for the admin UI — has
+     *  no effect on the public /reply/{token} page. */
+    @Column(name = "CSS_PREVIEW_LABEL", length = 200)
+    private String cssPreviewLabel;
+
     /** Whether the ヘッダー block actually renders on the public /reply/{token} page.
      *  Independent of cssPreviewMode, which only affects the admin settings-page preview. */
     @Column(name = "HEADER_VISIBLE", nullable = false)
@@ -74,6 +80,8 @@ public class ReplyPageSetting {
     public void setRequireLogin(Boolean v) { this.requireLogin = v; }
     public String getCssPreviewMode() { return cssPreviewMode; }
     public void setCssPreviewMode(String v) { this.cssPreviewMode = v; }
+    public String getCssPreviewLabel() { return cssPreviewLabel; }
+    public void setCssPreviewLabel(String v) { this.cssPreviewLabel = v; }
     public Boolean getHeaderVisible() { return headerVisible; }
     public void setHeaderVisible(Boolean v) { this.headerVisible = v; }
     public Boolean getReplyFormVisible() { return replyFormVisible; }

@@ -90,13 +90,24 @@
         <div class="field-row">
             <div class="editor-side">
                 <label class="block text-sm font-semibold text-slate-800 mb-1">共通フッターHTML</label>
-                <p class="text-xs text-slate-500 mb-2">返信ページの下部に表示されるHTML。</p>
+                <p class="text-xs text-slate-500 mb-2">
+                    ここに入力したHTMLが、返信ページ (/reply/{token}) の一番下・本文入力フォームより後ろに、
+                    そのまま挿入されます。右側の「▶ フッター プレビュー」に入力内容がリアルタイムで反映されます。
+                </p>
                 <textarea id="footerEditor" th:field="*{footerHtml}" rows="6"
                           class="tw-input font-mono"
-                          style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:180px;"></textarea>
+                          style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:180px;"
+                          placeholder="例) &lt;p style=&quot;text-align:center;color:#94a3b8;font-size:12px;&quot;&gt;お問い合わせは上記フォームよりお願いいたします&lt;/p&gt;"></textarea>
+                <p class="text-xs text-slate-400 mt-1">
+                    入力例: <code>&lt;p style="text-align:center;color:#94a3b8;font-size:12px;"&gt;お問い合わせは上記フォームよりお願いいたします&lt;/p&gt;</code>
+                    のように書くと、右側プレビューのように中央寄せ・グレー文字の一行が表示されます。
+                </p>
             </div>
             <div class="preview-pane" style="min-height:180px;">
                 <div class="preview-label">▶ フッター プレビュー</div>
+                <p class="text-xs text-slate-500" style="padding:4px 8px 0;">
+                    左のHTMLを入力すると、実際に返信ページの下部に表示される見た目がここに反映されます。
+                </p>
                 <div id="footerPreview" class="preview-html-body"></div>
             </div>
         </div>
@@ -104,19 +115,43 @@
         <div class="field-row">
             <div class="editor-side">
                 <label class="block text-sm font-semibold text-slate-800 mb-1">追加CSS</label>
-                <p class="text-xs text-slate-500 mb-2">返信ページに適用される追加スタイル。通常のCSS構文で記述します。</p>
+                <p class="text-xs text-slate-500 mb-2">
+                    ここに入力したCSSが、返信ページ全体（上のヘッダーHTML・本文フォーム・フッターHTMLすべて）に適用されます。
+                    通常のCSS構文（セレクタ { プロパティ: 値; }）で記述してください。右側のプレビューに即座に反映されます。
+                </p>
                 <textarea id="cssEditor" class="tw-input font-mono" rows="8" th:field="*{defaultCss}"
                           style="white-space:pre; font-size:0.78rem; line-height:1.45; min-height:220px;"
                           placeholder=".reply-banner { background: #003366; }"></textarea>
+                <p class="text-xs text-slate-400 mt-1">
+                    入力例: <code>.reply-banner { background: #003366; color: #fff; }</code> のように、
+                    対象にしたい要素のクラス名（返信ページのHTML内で使われているもの）を左に、変更したいスタイルを { } の中に書きます。
+                    どの要素がどんなクラス名かは、上の「共通ヘッダーHTML」に自分で入れたタグ、または開発担当にご確認ください。
+                </p>
             </div>
             <div class="preview-pane" style="min-height:220px;">
-                <div class="preview-label" style="display:flex; align-items:center; justify-content:space-between;">
-                    <span>▶ CSS プレビュー (ミニ返信フォームに適用)</span>
-                    <span class="css-preview-mode-toggle" style="font-weight:normal; letter-spacing:normal;">
-                        <label style="margin-right:8px;"><input type="radio" th:field="*{cssPreviewMode}" th:value="'ON'"/> オン</label>
-                        <label style="margin-right:8px;"><input type="radio" th:field="*{cssPreviewMode}" th:value="'OFF'"/> オフ</label>
-                        <label><input type="radio" th:field="*{cssPreviewMode}" th:value="'HIDDEN'"/> 表示しない</label>
-                    </span>
+                <div class="preview-label" style="display:block;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+                        <span style="font-weight:normal; font-size:.68rem; color:#94a3b8; letter-spacing:normal;">見出し:</span>
+                        <input type="text" th:field="*{cssPreviewLabel}" maxlength="200"
+                               style="flex:1; font-weight:normal; font-size:.78rem; letter-spacing:normal; border:1px solid #cbd5e1; border-radius:4px; padding:2px 6px; background:#fff; color:#1e293b;"/>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <span th:text="'▶ ' + ${form.cssPreviewLabel}">▶ CSS プレビュー</span>
+                    </div>
+                </div>
+                <div class="css-preview-mode-toggle" style="padding:6px 8px; font-size:.75rem;">
+                    <label style="display:block; margin-bottom:3px;">
+                        <input type="radio" th:field="*{cssPreviewMode}" th:value="'ON'"/>
+                        <strong>オン</strong> — この設定画面で、下のプレビュー欄を常に表示したままにします
+                    </label>
+                    <label style="display:block; margin-bottom:3px;">
+                        <input type="radio" th:field="*{cssPreviewMode}" th:value="'OFF'"/>
+                        <strong>オフ</strong> — プレビュー欄を折りたたんで表示します（「プレビューを表示」ボタンでその場だけ展開可能）
+                    </label>
+                    <label style="display:block;">
+                        <input type="radio" th:field="*{cssPreviewMode}" th:value="'HIDDEN'"/>
+                        <strong>表示しない</strong> — プレビュー欄自体を非表示にします（展開ボタンもなくなります）
+                    </label>
                 </div>
                 <div id="cssPreviewCollapseWrap" th:if="${form.cssPreviewMode != 'HIDDEN'}">
                     <button type="button" id="cssPreviewToggleBtn" th:if="${form.cssPreviewMode == 'OFF'}"

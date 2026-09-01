@@ -78,8 +78,9 @@ public class CrmUser {
     @Column(name = "MEMO", columnDefinition = "LONGTEXT")
     private String memo;
 
-    /** Slots 2-6 for the reply-page header HTML (slots 2-3 added 2026-05-23, 4-6 added
-     *  2026-05-25 for the bulk-edit workflow). The operator switches between them via
+    /** Slots 2-10 for the reply-page header HTML (slots 2-3 added 2026-05-23, 4-6 added
+     *  2026-05-25 for the bulk-edit workflow, 7-10 added 2026-09-02 per operator request —
+     *  displayed as a 5x2 grid in the admin UI). The operator switches between them via
      *  {@code activeMemoSlot}; the public /reply page reads whichever slot is currently
      *  marked 使用中. */
     @Column(name = "MEMO_2", columnDefinition = "LONGTEXT")
@@ -92,6 +93,14 @@ public class CrmUser {
     private String memo5;
     @Column(name = "MEMO_6", columnDefinition = "LONGTEXT")
     private String memo6;
+    @Column(name = "MEMO_7", columnDefinition = "LONGTEXT")
+    private String memo7;
+    @Column(name = "MEMO_8", columnDefinition = "LONGTEXT")
+    private String memo8;
+    @Column(name = "MEMO_9", columnDefinition = "LONGTEXT")
+    private String memo9;
+    @Column(name = "MEMO_10", columnDefinition = "LONGTEXT")
+    private String memo10;
     @Column(name = "ACTIVE_MEMO_SLOT", nullable = false)
     private Integer activeMemoSlot;
 
@@ -125,7 +134,7 @@ public class CrmUser {
         if (createdAt == null) createdAt = now;
         updatedAt = now;
         if (status == null) status = STATUS_ACTIVE;
-        if (activeMemoSlot == null || activeMemoSlot < 1 || activeMemoSlot > 6) activeMemoSlot = 1;
+        if (activeMemoSlot == null || activeMemoSlot < 1 || activeMemoSlot > 10) activeMemoSlot = 1;
     }
 
     @PreUpdate
@@ -181,25 +190,25 @@ public class CrmUser {
     public void setMemo5(String memo5) { this.memo5 = memo5; }
     public String getMemo6() { return memo6; }
     public void setMemo6(String memo6) { this.memo6 = memo6; }
+    public String getMemo7() { return memo7; }
+    public void setMemo7(String memo7) { this.memo7 = memo7; }
+    public String getMemo8() { return memo8; }
+    public void setMemo8(String memo8) { this.memo8 = memo8; }
+    public String getMemo9() { return memo9; }
+    public void setMemo9(String memo9) { this.memo9 = memo9; }
+    public String getMemo10() { return memo10; }
+    public void setMemo10(String memo10) { this.memo10 = memo10; }
     public Integer getActiveMemoSlot() { return activeMemoSlot == null ? 1 : activeMemoSlot; }
     public void setActiveMemoSlot(Integer s) {
-        this.activeMemoSlot = (s == null || s < 1 || s > 6) ? 1 : s;
+        this.activeMemoSlot = (s == null || s < 1 || s > 10) ? 1 : s;
     }
 
     /** Returns the HTML for the slot currently marked 使用中. */
     public String getActiveMemo() {
-        int s = getActiveMemoSlot();
-        switch (s) {
-            case 2: return memo2;
-            case 3: return memo3;
-            case 4: return memo4;
-            case 5: return memo5;
-            case 6: return memo6;
-            default: return memo;
-        }
+        return getMemoSlot(getActiveMemoSlot());
     }
 
-    /** Read any slot (1..6) by index. */
+    /** Read any slot (1..10) by index. */
     public String getMemoSlot(int n) {
         switch (n) {
             case 2: return memo2;
@@ -207,6 +216,10 @@ public class CrmUser {
             case 4: return memo4;
             case 5: return memo5;
             case 6: return memo6;
+            case 7: return memo7;
+            case 8: return memo8;
+            case 9: return memo9;
+            case 10: return memo10;
             default: return memo;
         }
     }
@@ -217,6 +230,10 @@ public class CrmUser {
             case 4: this.memo4 = value; break;
             case 5: this.memo5 = value; break;
             case 6: this.memo6 = value; break;
+            case 7: this.memo7 = value; break;
+            case 8: this.memo8 = value; break;
+            case 9: this.memo9 = value; break;
+            case 10: this.memo10 = value; break;
             default: this.memo = value;
         }
     }

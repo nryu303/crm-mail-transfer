@@ -108,21 +108,34 @@ public class DashboardService {
         s.nyukinDetailByUserId = detailByUser;
 
         // ---- 時間別送信数 (hourly send / NG for selected day) ----
+        // Bucketed by EFFECTIVE time (SENT_AT once dispatched, else SCHEDULED_AT while still
+        // QUEUED) so a reservation set at 10:00 for delivery at 15:00 shows up in the 15:00
+        // bucket, not the 10:00 "set" time. smsQueued/emailQueued additionally isolate the
+        // still-future (not yet dispatched) portion of each bucket so the UI can render it
+        // in a lighter shade, distinct from already-completed sends.
         List<HourlySend> hourly = new ArrayList<>(24);
         long totalSend = 0, totalNg = 0, totalSmsSent = 0;
         for (int h = 0; h < 24; h++) {
             LocalDateTime from = day.atTime(h, 0);
             LocalDateTime to = from.plusHours(1);
-            long sent = messageRepository.countByDirectionBetween(Message.DIR_OUT, from, to);
-            long ng = messageRepository.countByDirectionAndStatusBetween(
+            long sent = messageRepository.countByDirectionBetweenEffective(Message.DIR_OUT, from, to);
+            long ng = messageRepository.countByDirectionAndStatusBetweenEffective(
                     Message.DIR_OUT, Message.STATUS_FAILED, from, to);
-            long smsSent = messageRepository.countByDirectionAndChannelBetween(
+            long smsSent = messageRepository.countByDirectionAndChannelBetweenEffective(
                     Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
+            long smsQueued = messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
+            long emailQueued = messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_EMAIL, from, to)
+                    + messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_BROADCAST, from, to);
             HourlySend hb = new HourlySend();
             hb.label = String.format("%02d:00", h);
             hb.sent = sent;
             hb.ng = ng;
             hb.smsSent = smsSent;
+            hb.smsQueued = smsQueued;
+            hb.emailQueued = emailQueued;
             hourly.add(hb);
             totalSend += sent;
             totalNg += ng;
@@ -149,12 +162,19 @@ public class DashboardService {
         public long sent;
         public long ng;
         public long smsSent;
+        /** Portion of smsSent/emailSent that is still QUEUED (future scheduled send, not yet
+         *  dispatched) — rendered in a lighter shade on the dashboard chart to distinguish
+         *  projected sends from ones that already completed. */
+        public long smsQueued;
+        public long emailQueued;
         public String getLabel() { return label; }
         public long getSent() { return sent; }
         public long getNg() { return ng; }
         public long getSmsSent() { return smsSent; }
         /** Non-SMS outbound (email replies + email broadcasts) — sent minus smsSent. */
         public long getEmailSent() { return sent - smsSent; }
+        public long getSmsQueued() { return smsQueued; }
+        public long getEmailQueued() { return emailQueued; }
     }
 
     /**
@@ -171,11 +191,17 @@ public class DashboardService {
             LocalDateTime to   = from.plusDays(1);
             HourlySend hb = new HourlySend();
             hb.label = String.format("%02d-%02d", d.getMonthValue(), d.getDayOfMonth());
-            hb.sent = messageRepository.countByDirectionBetween(Message.DIR_OUT, from, to);
-            hb.ng   = messageRepository.countByDirectionAndStatusBetween(
+            hb.sent = messageRepository.countByDirectionBetweenEffective(Message.DIR_OUT, from, to);
+            hb.ng   = messageRepository.countByDirectionAndStatusBetweenEffective(
                     Message.DIR_OUT, Message.STATUS_FAILED, from, to);
-            hb.smsSent = messageRepository.countByDirectionAndChannelBetween(
+            hb.smsSent = messageRepository.countByDirectionAndChannelBetweenEffective(
                     Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
+            hb.smsQueued = messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
+            hb.emailQueued = messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_EMAIL, from, to)
+                    + messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_BROADCAST, from, to);
             out.add(hb);
         }
         return out;
@@ -195,11 +221,17 @@ public class DashboardService {
             LocalDateTime to   = ym.plusMonths(1).atDay(1).atStartOfDay();
             HourlySend hb = new HourlySend();
             hb.label = String.format("%04d-%02d", ym.getYear(), ym.getMonthValue());
-            hb.sent = messageRepository.countByDirectionBetween(Message.DIR_OUT, from, to);
-            hb.ng   = messageRepository.countByDirectionAndStatusBetween(
+            hb.sent = messageRepository.countByDirectionBetweenEffective(Message.DIR_OUT, from, to);
+            hb.ng   = messageRepository.countByDirectionAndStatusBetweenEffective(
                     Message.DIR_OUT, Message.STATUS_FAILED, from, to);
-            hb.smsSent = messageRepository.countByDirectionAndChannelBetween(
+            hb.smsSent = messageRepository.countByDirectionAndChannelBetweenEffective(
                     Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
+            hb.smsQueued = messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
+            hb.emailQueued = messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_EMAIL, from, to)
+                    + messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
+                    Message.DIR_OUT, Message.CHANNEL_BROADCAST, from, to);
             out.add(hb);
         }
         return out;

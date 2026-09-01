@@ -39,8 +39,10 @@ class DashboardServiceTest {
         CrmUserRepository userRepo = mock(CrmUserRepository.class);
         svc = new DashboardService(msgRepo, payRepo, bindingRepo, userRepo);
         // Defaults so every range returns 0 unless we override per-test.
-        when(msgRepo.countByDirectionBetween(any(), any(), any())).thenReturn(0L);
-        when(msgRepo.countByDirectionAndStatusBetween(any(), any(), any(), any())).thenReturn(0L);
+        when(msgRepo.countByDirectionBetweenEffective(any(), any(), any())).thenReturn(0L);
+        when(msgRepo.countByDirectionAndStatusBetweenEffective(any(), any(), any(), any())).thenReturn(0L);
+        when(msgRepo.countByDirectionAndChannelBetweenEffective(any(), any(), any(), any())).thenReturn(0L);
+        when(msgRepo.countQueuedByDirectionAndChannelBetweenEffective(any(), any(), any(), any())).thenReturn(0L);
     }
 
     @Test
@@ -56,12 +58,12 @@ class DashboardServiceTest {
     @Test
     void dailyBuckets_queryWindowIsHalfOpenStartOfDay() {
         // Each day's window must be [day 00:00, next-day 00:00).
-        when(msgRepo.countByDirectionBetween(eq(Message.DIR_OUT), any(), any())).thenReturn(7L);
+        when(msgRepo.countByDirectionBetweenEffective(eq(Message.DIR_OUT), any(), any())).thenReturn(7L);
         svc.dailyBuckets(LocalDate.of(2026, 5, 10), LocalDate.of(2026, 5, 10));
 
         ArgumentCaptor<LocalDateTime> fromCap = ArgumentCaptor.forClass(LocalDateTime.class);
         ArgumentCaptor<LocalDateTime> toCap = ArgumentCaptor.forClass(LocalDateTime.class);
-        verify(msgRepo).countByDirectionBetween(eq(Message.DIR_OUT), fromCap.capture(), toCap.capture());
+        verify(msgRepo).countByDirectionBetweenEffective(eq(Message.DIR_OUT), fromCap.capture(), toCap.capture());
         assertThat(fromCap.getValue()).isEqualTo(LocalDateTime.of(2026, 5, 10, 0, 0));
         assertThat(toCap.getValue()).isEqualTo(LocalDateTime.of(2026, 5, 11, 0, 0));
     }
@@ -90,8 +92,8 @@ class DashboardServiceTest {
      */
     @Test
     void hourlySend_emailSent_excludesSmsFromCombinedTotal() {
-        when(msgRepo.countByDirectionBetween(eq(Message.DIR_OUT), any(), any())).thenReturn(10L);
-        when(msgRepo.countByDirectionAndChannelBetween(eq(Message.DIR_OUT), eq(Message.CHANNEL_SMS), any(), any()))
+        when(msgRepo.countByDirectionBetweenEffective(eq(Message.DIR_OUT), any(), any())).thenReturn(10L);
+        when(msgRepo.countByDirectionAndChannelBetweenEffective(eq(Message.DIR_OUT), eq(Message.CHANNEL_SMS), any(), any()))
                 .thenReturn(4L);
 
         List<DashboardService.HourlySend> out = svc.dailyBuckets(
@@ -114,12 +116,12 @@ class DashboardServiceTest {
 
     @Test
     void monthlyBuckets_queryWindowsAreCalendarMonths() {
-        when(msgRepo.countByDirectionBetween(eq(Message.DIR_OUT), any(), any())).thenReturn(3L);
+        when(msgRepo.countByDirectionBetweenEffective(eq(Message.DIR_OUT), any(), any())).thenReturn(3L);
         svc.monthlyBuckets(YearMonth.of(2026, 2), YearMonth.of(2026, 3));
 
         ArgumentCaptor<LocalDateTime> fromCap = ArgumentCaptor.forClass(LocalDateTime.class);
         ArgumentCaptor<LocalDateTime> toCap = ArgumentCaptor.forClass(LocalDateTime.class);
-        verify(msgRepo, times(2)).countByDirectionBetween(eq(Message.DIR_OUT), fromCap.capture(), toCap.capture());
+        verify(msgRepo, times(2)).countByDirectionBetweenEffective(eq(Message.DIR_OUT), fromCap.capture(), toCap.capture());
         // Feb 2026
         assertThat(fromCap.getAllValues().get(0)).isEqualTo(LocalDateTime.of(2026, 2, 1, 0, 0));
         assertThat(toCap.getAllValues().get(0)).isEqualTo(LocalDateTime.of(2026, 3, 1, 0, 0));
@@ -128,10 +130,35 @@ class DashboardServiceTest {
         assertThat(toCap.getAllValues().get(1)).isEqualTo(LocalDateTime.of(2026, 4, 1, 0, 0));
     }
 
+    /**
+     * The bug being fixed: a reservation set at 10:00 for delivery at 15:00 must show up in
+     * the 15:00 bucket (its future/actual send time), not the 10:00 "set" time. The repository
+     * layer already does the COALESCE(sentAt, scheduledAt, createdAt) bucketing, so this test
+     * just verifies the service wires the QUEUED-specific count through as smsQueued/emailQueued
+     * for the UI to render as a lighter/projected sub-count distinct from completed sends.
+     */
+    @Test
+    void dailyBuckets_reportsQueuedFutureSendsSeparatelyFromCompleted() {
+        when(msgRepo.countByDirectionAndChannelBetweenEffective(eq(Message.DIR_OUT), eq(Message.CHANNEL_SMS), any(), any()))
+                .thenReturn(10L);
+        when(msgRepo.countQueuedByDirectionAndChannelBetweenEffective(eq(Message.DIR_OUT), eq(Message.CHANNEL_SMS), any(), any()))
+                .thenReturn(3L);
+        when(msgRepo.countQueuedByDirectionAndChannelBetweenEffective(eq(Message.DIR_OUT), eq(Message.CHANNEL_EMAIL), any(), any()))
+                .thenReturn(2L);
+
+        List<DashboardService.HourlySend> out = svc.dailyBuckets(
+                LocalDate.of(2026, 5, 10), LocalDate.of(2026, 5, 10));
+
+        assertThat(out).hasSize(1);
+        assertThat(out.get(0).getSmsSent()).isEqualTo(10L);
+        assertThat(out.get(0).getSmsQueued()).isEqualTo(3L);
+        assertThat(out.get(0).getEmailQueued()).isEqualTo(2L);
+    }
+
     @Test
     void monthlyBuckets_sentAndNgAreAggregatedPerBucket() {
-        when(msgRepo.countByDirectionBetween(any(), any(), any())).thenReturn(42L);
-        when(msgRepo.countByDirectionAndStatusBetween(any(), any(), any(), any())).thenReturn(5L);
+        when(msgRepo.countByDirectionBetweenEffective(any(), any(), any())).thenReturn(42L);
+        when(msgRepo.countByDirectionAndStatusBetweenEffective(any(), any(), any(), any())).thenReturn(5L);
         List<DashboardService.HourlySend> out = svc.monthlyBuckets(
                 YearMonth.of(2026, 4), YearMonth.of(2026, 4));
         assertThat(out).hasSize(1);

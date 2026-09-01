@@ -125,6 +125,9 @@
         /* send / ng rows */
         .dash td.send-v { color: var(--ok); font-weight:600; }
         .dash td.ng-v   { color: var(--ng); font-weight:600; }
+        /* Queued (future/not-yet-dispatched) sub-count shown under a bucket's send total —
+           lighter weight to distinguish a projected reservation from a completed send. */
+        .dash td .queued-note { display:block; font-weight:400; font-size:.65rem; color:#94a3b8; }
         .dash td.zero   { color:#cbd5e1; }
 
         /* Detail panel */
@@ -432,7 +435,7 @@
             </form>
             <script th:inline="javascript">
                 /*<![CDATA[*/
-                window.__hourlyChartData = /*[[${hourlyChartJson}]]*/ "{\"labels\":[],\"sent\":[],\"ng\":[],\"sms\":[],\"email\":[]}";
+                window.__hourlyChartData = /*[[${hourlyChartJson}]]*/ "{\"labels\":[],\"sent\":[],\"ng\":[],\"sms\":[],\"email\":[],\"smsQueued\":[],\"emailQueued\":[]}";
                 /*]]>*/
             </script>
 
@@ -459,14 +462,20 @@
                         <tr>
                             <td class="lbl">SMS送信数</td>
                             <td th:each="h : ${sendBuckets}"
-                                th:classappend="${h.smsSent > 0} ? 'send-v' : 'zero'"
-                                th:text="${#numbers.formatInteger(h.smsSent, 1, 'COMMA')}">0</td>
+                                th:classappend="${h.smsSent > 0} ? 'send-v' : 'zero'">
+                                <span th:text="${#numbers.formatInteger(h.smsSent, 1, 'COMMA')}">0</span>
+                                <span class="queued-note" th:if="${h.smsQueued > 0}"
+                                      th:text="'(うち予約 ' + ${#numbers.formatInteger(h.smsQueued, 1, 'COMMA')} + ')'"></span>
+                            </td>
                         </tr>
                         <tr>
                             <td class="lbl">メール送信数</td>
                             <td th:each="h : ${sendBuckets}"
-                                th:classappend="${h.emailSent > 0} ? 'send-v' : 'zero'"
-                                th:text="${#numbers.formatInteger(h.emailSent, 1, 'COMMA')}">0</td>
+                                th:classappend="${h.emailSent > 0} ? 'send-v' : 'zero'">
+                                <span th:text="${#numbers.formatInteger(h.emailSent, 1, 'COMMA')}">0</span>
+                                <span class="queued-note" th:if="${h.emailQueued > 0}"
+                                      th:text="'(うち予約 ' + ${#numbers.formatInteger(h.emailQueued, 1, 'COMMA')} + ')'"></span>
+                            </td>
                         </tr>
                         <tr>
                             <td class="lbl">NG数</td>
@@ -520,7 +529,8 @@
                     </tr>
                     <tr th:each="m : ${stats.recentMessages}">
                         <td class="px-3 py-1.5">
-                            <span th:if="${m.direction == 'OUT'}" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">送信</span>
+                            <span th:if="${m.direction == 'OUT' and m.channel == 'SMS'}" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">SMS送信</span>
+                            <span th:if="${m.direction == 'OUT' and m.channel != 'SMS'}" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">送信</span>
                             <span th:if="${m.direction == 'IN' and m.channel == 'EMAIL'}" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700">メール返信</span>
                             <span th:if="${m.direction == 'IN' and m.channel == 'WEB_REPLY'}" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-sky-100 text-sky-700">Web返信</span>
                         </td>
@@ -529,7 +539,18 @@
                                th:href="@{'/manager/users/' + ${m.userId} + '/thread'}" target="_blank"
                                th:text="${userLabels.get(m.userId)} ?: ('ID=' + ${m.userId})">name</a>
                         </td>
-                        <td class="px-3 py-1.5 text-slate-700 truncate" th:text="${m.subject}"></td>
+                        <td class="px-3 py-1.5 text-slate-700 truncate">
+                            <!-- SMS has no subject field — show the body under a "本文" label instead
+                                 of leaving the column blank or misleadingly labelled "件名". -->
+                            <span th:if="${m.channel == 'SMS'}">
+                                <span class="text-slate-400 text-xs">本文:</span>
+                                <span th:text="${m.bodyText}"></span>
+                            </span>
+                            <span th:if="${m.channel != 'SMS'}">
+                                <span class="text-slate-400 text-xs">件名:</span>
+                                <span th:text="${m.subject}"></span>
+                            </span>
+                        </td>
                         <td class="px-3 py-1.5 text-slate-500 text-xs" th:text="${m.sentAt != null} ? ${#temporals.format(m.sentAt, 'MM-dd HH:mm')} : (${m.createdAt != null} ? ${#temporals.format(m.createdAt, 'MM-dd HH:mm')} : '-')"></td>
                     </tr>
                     </tbody>
@@ -696,13 +717,20 @@
         var data;
         try { data = JSON.parse(window.__hourlyChartData || '{}'); } catch (e) { return; }
         if (!data.labels || !data.labels.length) return;
+        // Split each bucket into "確定分" (already completed — full opacity) and "予約中"
+        // (still QUEUED / future scheduled send — light opacity) stacked on the same bar,
+        // so a reservation appears as a dim preview at its actual future send time.
+        var smsConfirmed = (data.sms || []).map(function (v, i) { return v - ((data.smsQueued || [])[i] || 0); });
+        var emailConfirmed = (data.email || []).map(function (v, i) { return v - ((data.emailQueued || [])[i] || 0); });
         new Chart(canvas.getContext('2d'), {
             type: 'bar',
             data: {
                 labels: data.labels,
                 datasets: [
-                    { label: 'SMS送信数', data: data.sms,   backgroundColor: 'rgba(8,145,178,0.7)', borderRadius: 3 },
-                    { label: 'メール送信数', data: data.email, backgroundColor: 'rgba(22,163,74,0.7)', borderRadius: 3 },
+                    { label: 'SMS送信数', data: smsConfirmed, backgroundColor: 'rgba(8,145,178,0.7)', borderRadius: 3, stack: 'sms' },
+                    { label: 'SMS予約中(未来)', data: data.smsQueued, backgroundColor: 'rgba(8,145,178,0.25)', borderRadius: 3, stack: 'sms' },
+                    { label: 'メール送信数', data: emailConfirmed, backgroundColor: 'rgba(22,163,74,0.7)', borderRadius: 3, stack: 'email' },
+                    { label: 'メール予約中(未来)', data: data.emailQueued, backgroundColor: 'rgba(22,163,74,0.25)', borderRadius: 3, stack: 'email' },
                     { label: 'NG',     data: data.ng,   backgroundColor: 'rgba(220,38,38,0.7)', borderRadius: 3 }
                 ]
             },
@@ -714,8 +742,8 @@
                 layout: { padding: { left: 0, right: 0, top: 0, bottom: 0 } },
                 plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
                 scales: {
-                    x: { ticks: { font: { size: 10 }, maxRotation: 0 }, grid: { display: false } },
-                    y: { display: false, beginAtZero: true }
+                    x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 0 }, grid: { display: false } },
+                    y: { stacked: true, display: false, beginAtZero: true }
                 }
             }
         });

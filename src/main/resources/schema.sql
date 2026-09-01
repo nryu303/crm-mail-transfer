@@ -36,8 +36,12 @@ CREATE TABLE IF NOT EXISTS CRM_USER (
   MEMO_4              LONGTEXT      DEFAULT NULL,
   MEMO_5              LONGTEXT      DEFAULT NULL,
   MEMO_6              LONGTEXT      DEFAULT NULL,
+  MEMO_7              LONGTEXT      DEFAULT NULL,
+  MEMO_8              LONGTEXT      DEFAULT NULL,
+  MEMO_9              LONGTEXT      DEFAULT NULL,
+  MEMO_10             LONGTEXT      DEFAULT NULL,
   ACTIVE_MEMO_SLOT    INT           NOT NULL DEFAULT 1
-    COMMENT 'which of MEMO..MEMO_6 (1..6) the public /reply page currently renders',
+    COMMENT 'which of MEMO..MEMO_10 (1..10) the public /reply page currently renders',
   INTERNAL_MEMO       LONGTEXT      DEFAULT NULL COMMENT 'admin-only, never shown to the user',
   TAG1_KEY            VARCHAR(64)   DEFAULT NULL,
   TAG1_VALUE          VARCHAR(500)  DEFAULT NULL,
@@ -246,6 +250,8 @@ CREATE TABLE IF NOT EXISTS REPLY_PAGE_SETTING (
   REQUIRE_LOGIN       TINYINT(1) DEFAULT 0,
   CSS_PREVIEW_MODE    VARCHAR(16) NOT NULL DEFAULT 'ON'
     COMMENT 'ON | OFF | HIDDEN — controls the "▶ CSS プレビュー" pane on /manager/settings/reply-page. ON = pane always shown. OFF = pane collapsed by default, admin can still expand it per-session. HIDDEN = pane never rendered, no way to expand',
+  CSS_PREVIEW_LABEL   VARCHAR(200) DEFAULT NULL
+    COMMENT 'Operator-editable heading text shown above the CSS-preview iframe on the settings page. Admin-UI label only — no effect on the public /reply/{token} page. NULL/empty falls back to the default "CSS プレビュー (ミニ返信フォームに適用)".',
   HEADER_VISIBLE      TINYINT(1) NOT NULL DEFAULT 1
     COMMENT 'Controls whether the ヘッダー (header HTML block) actually renders on the public /reply/{token} page. Independent of CSS_PREVIEW_MODE, which only affects the admin settings-page preview pane.',
   REPLY_FORM_VISIBLE  TINYINT(1) NOT NULL DEFAULT 1

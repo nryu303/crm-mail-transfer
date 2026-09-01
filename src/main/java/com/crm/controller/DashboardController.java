@@ -91,6 +91,11 @@ public class DashboardController {
         List<Long> ngSeries = new java.util.ArrayList<>();
         List<Long> smsSeries = new java.util.ArrayList<>();
         List<Long> emailSeries = new java.util.ArrayList<>();
+        // "Queued" (future/not-yet-dispatched) portions of smsSeries/emailSeries — rendered
+        // with a lighter shade so a reservation shows up (dimly) in its future send-time
+        // bucket, distinguishable from sends that have actually completed.
+        List<Long> smsQueuedSeries = new java.util.ArrayList<>();
+        List<Long> emailQueuedSeries = new java.util.ArrayList<>();
         if (buckets != null) {
             for (DashboardService.HourlySend h : buckets) {
                 labels.add(h.getLabel());
@@ -98,6 +103,8 @@ public class DashboardController {
                 ngSeries.add(h.getNg());
                 smsSeries.add(h.getSmsSent());
                 emailSeries.add(h.getEmailSent());
+                smsQueuedSeries.add(h.getSmsQueued());
+                emailQueuedSeries.add(h.getEmailQueued());
                 sendTotal  += h.getSent();
                 ngTotal    += h.getNg();
                 smsTotal   += h.getSmsSent();
@@ -112,9 +119,11 @@ public class DashboardController {
         // separate, non-summed series per operator request (2026-07-14); "sent" (combined) is
         // kept in the payload for any other consumer but no longer rendered directly.
         hourlyChart.put("email", emailSeries);
+        hourlyChart.put("smsQueued", smsQueuedSeries);
+        hourlyChart.put("emailQueued", emailQueuedSeries);
         String hourlyJson;
         try { hourlyJson = objectMapper.writeValueAsString(hourlyChart); }
-        catch (JsonProcessingException e) { hourlyJson = "{\"labels\":[],\"sent\":[],\"ng\":[],\"sms\":[],\"email\":[]}"; }
+        catch (JsonProcessingException e) { hourlyJson = "{\"labels\":[],\"sent\":[],\"ng\":[],\"sms\":[],\"email\":[],\"smsQueued\":[],\"emailQueued\":[]}"; }
         model.addAttribute("hourlyChartJson", hourlyJson);
         // Totals adjust to the active scope so the cards above the chart stay in sync.
         if (!"hour".equals(sendScope)) {
