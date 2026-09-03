@@ -50,9 +50,13 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">設定に戻る</a>
     </div>
 
+    <!-- ===== Two-column layout: 左=フォルダ名編集+移動設定 / 右=履歴クリーンアップ ===== -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start mb-6">
+    <div class="flex flex-col gap-6">
+
     <!-- ===== Folder name editor (row-based) ===== -->
     <form method="post" th:action="@{/manager/settings/folders}" id="foldersForm"
-          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-3xl mb-6">
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-6">
         <div class="flex items-center mb-3">
             <label class="block text-sm font-semibold text-slate-800 flex-1">
                 フォルダ名 <span class="text-xs text-slate-500 font-normal">（1行1フォルダ、上から表示順）</span>
@@ -102,8 +106,110 @@
         </div>
     </form>
 
+    <!-- ===== フォルダ内ユーザー移動設定 ===== -->
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6">
+        <h2 class="text-base font-semibold text-slate-800 mb-2">フォルダ内ユーザー移動設定</h2>
+        <p class="text-xs text-slate-500 mb-4">
+            指定した時刻になると、移動元フォルダ内の全ユーザーを移動先フォルダへ毎日自動的に移動します。
+            複数のルールを同時に設定できます。
+        </p>
+        <table class="w-full text-sm mb-3">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-2 py-2 text-left">移動元</th>
+                    <th class="px-2 py-2 text-left">移動先</th>
+                    <th class="px-2 py-2 text-left" style="width:90px;">時刻</th>
+                    <th class="px-2 py-2 text-center" style="width:60px;">有効</th>
+                    <th class="px-2 py-2 text-right" style="width:60px;">操作</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                <tr th:if="${autoMoveRules == null or autoMoveRules.empty}">
+                    <td colspan="5" class="px-2 py-4 text-center text-slate-400 text-xs">設定されていません</td>
+                </tr>
+                <!-- HTML doesn't allow a <form> to wrap <td> elements inside a <tr> (a browser's
+                     HTML parser silently relocates/breaks it), so each row's <form> is declared
+                     empty right before the row and every input references it via form="id". -->
+                <tr th:each="rule : ${autoMoveRules}">
+                    <td class="px-2 py-1.5">
+                        <form th:id="'autoMoveForm' + ${rule.id}" method="post"
+                              th:action="@{'/manager/settings/folders/auto-move/' + ${rule.id}}">
+                            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                        </form>
+                        <select name="sourceFolder" class="tw-input" style="font-size:.75rem;padding:3px 4px;"
+                                th:attr="form='autoMoveForm' + ${rule.id}">
+                            <option value="" th:selected="${rule.sourceFolder == null}">（未設定）</option>
+                            <option th:each="f : ${allFolders}" th:value="${f}" th:text="${f}"
+                                    th:selected="${f == rule.sourceFolder}"></option>
+                        </select>
+                    </td>
+                    <td class="px-2 py-1.5">
+                        <select name="destFolder" class="tw-input" style="font-size:.75rem;padding:3px 4px;"
+                                th:attr="form='autoMoveForm' + ${rule.id}">
+                            <option value="" th:selected="${rule.destFolder == null}">（未設定）</option>
+                            <option th:each="f : ${allFolders}" th:value="${f}" th:text="${f}"
+                                    th:selected="${f == rule.destFolder}"></option>
+                        </select>
+                    </td>
+                    <td class="px-2 py-1.5">
+                        <input type="time" name="moveTime" th:value="${rule.moveTime}"
+                               th:attr="form='autoMoveForm' + ${rule.id}"
+                               class="tw-input" style="font-size:.75rem;padding:3px 4px;" required/>
+                    </td>
+                    <td class="px-2 py-1.5 text-center">
+                        <input type="checkbox" name="enabled" value="true" th:checked="${rule.enabled}"
+                               th:attr="form='autoMoveForm' + ${rule.id}"/>
+                    </td>
+                    <td class="px-2 py-1.5 text-right whitespace-nowrap">
+                        <button type="submit" th:attr="form='autoMoveForm' + ${rule.id}"
+                                class="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded">保存</button>
+                        <button type="button" class="px-2 py-1 text-xs bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 rounded"
+                                th:attr="onclick=|deleteAutoMoveRule(${rule.id})|">削除</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <div th:each="rule : ${autoMoveRules}">
+            <form th:id="'autoMoveDelForm' + ${rule.id}" method="post"
+                  th:action="@{'/manager/settings/folders/auto-move/' + ${rule.id} + '/delete'}" style="display:none;">
+                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+            </form>
+        </div>
+
+        <!-- New-rule form -->
+        <form method="post" th:action="@{/manager/settings/folders/auto-move}" class="border-t border-slate-100 pt-3 flex items-end gap-2 flex-wrap">
+            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+            <div>
+                <label class="block text-xs text-slate-500 mb-1">移動元</label>
+                <select name="sourceFolder" class="tw-input" style="font-size:.8rem;">
+                    <option value="">（未設定）</option>
+                    <option th:each="f : ${allFolders}" th:value="${f}" th:text="${f}"></option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-500 mb-1">移動先</label>
+                <select name="destFolder" class="tw-input" style="font-size:.8rem;">
+                    <option value="">（未設定）</option>
+                    <option th:each="f : ${allFolders}" th:value="${f}" th:text="${f}"></option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-500 mb-1">時刻</label>
+                <input type="time" name="moveTime" class="tw-input" style="font-size:.8rem;" required/>
+            </div>
+            <div class="flex items-center gap-1">
+                <input type="checkbox" name="enabled" value="true" id="newRuleEnabled" checked/>
+                <label for="newRuleEnabled" class="text-xs text-slate-500">有効</label>
+            </div>
+            <button type="submit" class="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded">＋ ルール追加</button>
+        </form>
+    </div>
+
+    </div>
+    <div>
+
     <!-- ===== Per-folder history / binding purge + auto-retention ===== -->
-    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6 max-w-5xl mt-6">
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6">
         <h2 class="text-base font-semibold text-slate-800 mb-2">フォルダ単位の履歴クリーンアップ</h2>
         <p class="text-xs text-slate-500 mb-4">
             メモリ圧を下げるため、フォルダ内ユーザーの一斉送信返信履歴 / キャリア登録割り当てを削除できます。<br/>
@@ -209,6 +315,9 @@
             return true;
         }
         </script>
+    </div>
+
+    </div>
     </div>
 
     <!-- ===== Stranded folders (DB values not in the configured list) ===== -->
@@ -337,6 +446,12 @@
         var sel = form.querySelector('select[name="toFolder"]');
         var to = sel && sel.value ? sel.value : '（未設定）';
         return confirm('フォルダ「' + from + '」の ' + count + ' 名を「' + to + '」に移行します。\nよろしいですか?');
+    }
+
+    function deleteAutoMoveRule(id) {
+        if (!confirm('この移動設定を削除します。よろしいですか?')) return;
+        var f = document.getElementById('autoMoveDelForm' + id);
+        if (f) f.submit();
     }
     </script>
 </section>

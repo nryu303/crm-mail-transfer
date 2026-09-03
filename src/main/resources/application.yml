@@ -124,3 +124,7 @@ app:
   scheduler:
     queued-poll-rate-ms: 30000
     queued-poll-initial-delay-ms: 15000
+    folder-auto-move-poll-ms: 60000
+    folder-auto-move-poll-initial-ms: 25000
+    diff-schedule-poll-ms: 60000
+    diff-schedule-poll-initial-ms: 20000

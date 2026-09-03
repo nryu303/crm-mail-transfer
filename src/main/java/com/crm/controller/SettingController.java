@@ -48,6 +48,7 @@ public class SettingController {
     private final com.crm.service.FolderRetentionService folderRetentionService;
     private final com.crm.service.ImapEnvSyncService imapEnvSyncService;
     private final com.crm.service.SmsSettingService smsSettingService;
+    private final com.crm.service.FolderAutoMoveService folderAutoMoveService;
 
     public SettingController(RelayServerService relayServerService,
                              com.crm.service.ExternalLinkDomainService externalLinkDomainService,
@@ -63,7 +64,8 @@ public class SettingController {
                              com.crm.service.ReplyHtmlSlotService replyHtmlSlotService,
                              com.crm.service.FolderRetentionService folderRetentionService,
                              com.crm.service.ImapEnvSyncService imapEnvSyncService,
-                             com.crm.service.SmsSettingService smsSettingService) {
+                             com.crm.service.SmsSettingService smsSettingService,
+                             com.crm.service.FolderAutoMoveService folderAutoMoveService) {
         this.relayServerService = relayServerService;
         this.externalLinkDomainService = externalLinkDomainService;
         this.templateService = templateService;
@@ -79,6 +81,7 @@ public class SettingController {
         this.folderRetentionService = folderRetentionService;
         this.imapEnvSyncService = imapEnvSyncService;
         this.smsSettingService = smsSettingService;
+        this.folderAutoMoveService = folderAutoMoveService;
     }
 
     /** Page: current IMAP-monitor sync state + manual re-sync button. Auto-sync also fires
@@ -192,7 +195,53 @@ public class SettingController {
         // Per-folder retention day count for the new auto-purge UI (2026-05-26).
         model.addAttribute("retentionDaysByFolder",
                 folderRetentionService.getRetentionDaysMap(folders));
+        model.addAttribute("autoMoveRules", folderAutoMoveService.listAll());
+        model.addAttribute("allFolders", folders);
         return "setting/folders";
+    }
+
+    /** Register a new daily folder-to-folder auto-move rule. */
+    @PostMapping("/folders/auto-move")
+    public String folderAutoMoveCreate(@RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                        @RequestParam(name = "destFolder", required = false) String destFolder,
+                                        @RequestParam("moveTime") String moveTime,
+                                        @RequestParam(name = "enabled", required = false) String enabled,
+                                        RedirectAttributes ra) {
+        folderAutoMoveService.create(sourceFolder, destFolder, moveTime, enabled != null);
+        ra.addFlashAttribute("flashSuccess", "フォルダ内ユーザー移動設定を追加しました");
+        return "redirect:/manager/settings/folders";
+    }
+
+    /** Update an existing auto-move rule (source/dest/time/enabled). */
+    @PostMapping("/folders/auto-move/{id}")
+    public String folderAutoMoveUpdate(@PathVariable Long id,
+                                        @RequestParam(name = "sourceFolder", required = false) String sourceFolder,
+                                        @RequestParam(name = "destFolder", required = false) String destFolder,
+                                        @RequestParam("moveTime") String moveTime,
+                                        @RequestParam(name = "enabled", required = false) String enabled,
+                                        RedirectAttributes ra) {
+        boolean ok = folderAutoMoveService.update(id, sourceFolder, destFolder, moveTime, enabled != null).isPresent();
+        ra.addFlashAttribute(ok ? "flashSuccess" : "flashError",
+                ok ? "移動設定を更新しました" : "移動設定が見つかりません");
+        return "redirect:/manager/settings/folders";
+    }
+
+    /** Quick enable/disable toggle for one rule (checkbox auto-submit). */
+    @PostMapping("/folders/auto-move/{id}/toggle")
+    public String folderAutoMoveToggle(@PathVariable Long id,
+                                        @RequestParam(name = "enabled", required = false) String enabled,
+                                        RedirectAttributes ra) {
+        boolean ok = folderAutoMoveService.toggle(id, enabled != null);
+        ra.addFlashAttribute(ok ? "flashSuccess" : "flashError",
+                ok ? "移動設定を更新しました" : "移動設定が見つかりません");
+        return "redirect:/manager/settings/folders";
+    }
+
+    @PostMapping("/folders/auto-move/{id}/delete")
+    public String folderAutoMoveDelete(@PathVariable Long id, RedirectAttributes ra) {
+        folderAutoMoveService.delete(id);
+        ra.addFlashAttribute("flashSuccess", "移動設定を削除しました");
+        return "redirect:/manager/settings/folders";
     }
 
     /** Manual one-shot: delete every MESSAGE row for users in this folder. */

@@ -64,10 +64,11 @@ class ScheduledTaskServiceTest {
                 mock(com.crm.repository.UserAccessLogRepository.class);
         smsSettingService = mock(SmsSettingService.class);
         when(smsSettingService.getRatePerMinute()).thenReturn(600); // fast in tests: 100ms/msg
+        FolderAutoMoveService folderAutoMoveService = mock(FolderAutoMoveService.class);
         svc = new ScheduledTaskService(msgRepo, poolRepo, messageService,
                 settingRepo, bindingRepo, domainSettings, broadcastRepo,
                 folderSettings, folderRetention, inboundLogRepo, inboundMail, userAccessLogRepo,
-                smsSettingService);
+                smsSettingService, folderAutoMoveService);
     }
 
     private static Message scheduledBroadcastRow(Long id, Long userId, Long broadcastId,

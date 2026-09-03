@@ -52,6 +52,7 @@ public class ScheduledTaskService {
     private final InboundMailService inboundMailService;
     private final com.crm.repository.UserAccessLogRepository userAccessLogRepository;
     private final SmsSettingService smsSettingService;
+    private final FolderAutoMoveService folderAutoMoveService;
 
     /** Wall-clock time (nanoTime) the SMS serial lane is next allowed to send. Guards against
      *  two dispatchQueued() ticks racing on SMS pacing — see dispatchSmsSerially(). */
@@ -69,7 +70,8 @@ public class ScheduledTaskService {
                                 com.crm.repository.InboundMailLogRepository inboundLogRepo,
                                 InboundMailService inboundMailService,
                                 com.crm.repository.UserAccessLogRepository userAccessLogRepository,
-                                SmsSettingService smsSettingService) {
+                                SmsSettingService smsSettingService,
+                                FolderAutoMoveService folderAutoMoveService) {
         this.messageRepository = messageRepository;
         this.poolRepository = poolRepository;
         this.messageService = messageService;
@@ -83,6 +85,7 @@ public class ScheduledTaskService {
         this.inboundMailService = inboundMailService;
         this.userAccessLogRepository = userAccessLogRepository;
         this.smsSettingService = smsSettingService;
+        this.folderAutoMoveService = folderAutoMoveService;
     }
 
     /** How long USER_ACCESS_LOG rows are kept before the daily purge removes them. */
@@ -186,6 +189,20 @@ public class ScheduledTaskService {
             log.info("Daily folder-retention purge: {} MESSAGE rows deleted across {} folders",
                     totalDeleted, folders.size());
         }
+    }
+
+    /**
+     * Every 60 seconds — check FOLDER_AUTO_MOVE_RULE for rules whose MOVE_TIME (HH:mm)
+     * matches now and fire them. A poll (not a per-rule cron) because rules are
+     * operator-configured at runtime — {@code @Scheduled(cron=...)} is fixed at
+     * compile/config time and can't represent an arbitrary admin-added HH:mm without a
+     * restart. One sweep checks every enabled rule against the current time each tick.
+     */
+    @Scheduled(fixedRateString = "${app.scheduler.folder-auto-move-poll-ms:60000}",
+               initialDelayString = "${app.scheduler.folder-auto-move-poll-initial-ms:25000}")
+    public void runFolderAutoMove() {
+        if (!acquireOrRefreshLock()) return;
+        folderAutoMoveService.runDueRules(LocalDateTime.now());
     }
 
     /**

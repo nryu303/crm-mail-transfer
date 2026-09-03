@@ -43,6 +43,12 @@ public class AuditLogService {
     public static final String ACTION_PAYMENT_MARK_PAID = "PAYMENT_MARK_PAID";
     public static final String ACTION_SETTINGS_UPDATE = "SETTINGS_UPDATE";
     public static final String ACTION_MESSAGE_BOX_DELETE = "MESSAGE_BOX_DELETE";
+    public static final String ACTION_FOLDER_AUTO_MOVE = "FOLDER_AUTO_MOVE";
+    public static final String ACTION_HTML_IMAGE_UPLOAD = "HTML_IMAGE_UPLOAD";
+    public static final String ACTION_HTML_IMAGE_DELETE = "HTML_IMAGE_DELETE";
+    public static final String ACTION_DIFF_SCHEDULE_CREATE = "DIFF_SCHEDULE_CREATE";
+    public static final String ACTION_DIFF_SCHEDULE_CANCEL = "DIFF_SCHEDULE_CANCEL";
+    public static final String ACTION_DIFF_SCHEDULE_EXECUTE = "DIFF_SCHEDULE_EXECUTE";
 
     private final AuditLogRepository repository;
 
