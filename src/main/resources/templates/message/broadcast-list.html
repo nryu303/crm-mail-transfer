@@ -47,10 +47,6 @@
            th:href="@{/manager/messages/broadcast/summary}">一斉送信サマリー</a>
     </div>
 
-    <!-- Flash messages -->
-    <div th:if="${flashSuccess}" class="mb-3 px-4 py-2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm" th:text="${flashSuccess}"></div>
-    <div th:if="${flashError}" class="mb-3 px-4 py-2 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm" th:text="${flashError}"></div>
-
     <!-- Address search bar -->
     <form method="get" th:action="@{/manager/messages/broadcast}" class="bg-white rounded-lg shadow-sm border border-slate-100 p-3 mb-4">
         <div class="search-bar">
