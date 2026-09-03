@@ -49,6 +49,7 @@ public class SettingController {
     private final com.crm.service.ImapEnvSyncService imapEnvSyncService;
     private final com.crm.service.SmsSettingService smsSettingService;
     private final com.crm.service.FolderAutoMoveService folderAutoMoveService;
+    private final com.crm.service.HtmlImageService htmlImageService;
 
     public SettingController(RelayServerService relayServerService,
                              com.crm.service.ExternalLinkDomainService externalLinkDomainService,
@@ -65,7 +66,8 @@ public class SettingController {
                              com.crm.service.FolderRetentionService folderRetentionService,
                              com.crm.service.ImapEnvSyncService imapEnvSyncService,
                              com.crm.service.SmsSettingService smsSettingService,
-                             com.crm.service.FolderAutoMoveService folderAutoMoveService) {
+                             com.crm.service.FolderAutoMoveService folderAutoMoveService,
+                             com.crm.service.HtmlImageService htmlImageService) {
         this.relayServerService = relayServerService;
         this.externalLinkDomainService = externalLinkDomainService;
         this.templateService = templateService;
@@ -82,6 +84,7 @@ public class SettingController {
         this.imapEnvSyncService = imapEnvSyncService;
         this.smsSettingService = smsSettingService;
         this.folderAutoMoveService = folderAutoMoveService;
+        this.htmlImageService = htmlImageService;
     }
 
     /** Page: current IMAP-monitor sync state + manual re-sync button. Auto-sync also fires
@@ -369,6 +372,7 @@ public class SettingController {
         model.addAttribute("templateCount", templateService.count());
         model.addAttribute("maxTemplates", MessageTemplateService.MAX_TEMPLATES);
         model.addAttribute("externalLinkDomainCount", externalLinkDomainService.listAll().size());
+        model.addAttribute("htmlImageCount", htmlImageService.listAll().size());
         return "setting/index";
     }
 

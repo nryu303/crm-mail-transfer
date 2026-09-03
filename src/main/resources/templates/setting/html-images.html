@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>HTML画像管理</title>
+    <style>
+        .img-card {
+            border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #fff;
+            display: flex; flex-direction: column;
+        }
+        .img-card .thumb-wrap {
+            aspect-ratio: 1/1; background: #f8fafc; display: flex; align-items: center; justify-content: center;
+            overflow: hidden; border-bottom: 1px solid #e2e8f0;
+        }
+        .img-card .thumb-wrap img { width: 100%; height: 100%; object-fit: contain; }
+        .img-card .body { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+        .img-card .url-row { display: flex; gap: 4px; }
+        .img-card .url-row input[readonly] {
+            flex: 1; min-width: 0; font-size: .68rem; padding: 3px 5px;
+            border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; color: #475569;
+            font-family: monospace;
+        }
+        .img-card .copy-btn {
+            font-size: .68rem; padding: 3px 7px; border-radius: 4px; border: 1px solid #cbd5e1;
+            background: #fff; color: #475569; cursor: pointer; white-space: nowrap;
+        }
+        .img-card .copy-btn.copied { background: #10b981; color: #fff; border-color: #10b981; }
+        .img-card .meta { font-size: .66rem; color: #94a3b8; }
+        .img-card .label-form { display: flex; gap: 4px; }
+        .img-card .label-form input[type="text"] {
+            flex: 1; min-width: 0; font-size: .72rem; padding: 3px 5px;
+            border: 1px solid #cbd5e1; border-radius: 4px;
+        }
+        .img-card .actions { display: flex; gap: 4px; margin-top: 2px; }
+        .img-card .btn-mini {
+            font-size: .68rem; padding: 3px 8px; border-radius: 4px; border: 1px solid transparent; cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">HTML画像管理</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">設定に戻る</a>
+    </div>
+
+    <p class="text-sm text-slate-500 mb-4">
+        画像をアップロードすると、CRM内のどのHTML欄（返信ページ設定の共通ヘッダーHTML・共通フッターHTML、専用返信画面HTML等）にも貼り付けて使えるURLが発行されます。
+        発行されたURLは認証なしで公開されるため、管理画面のプレビューでもユーザー側の公開ページでも同じように画像が表示されます。
+    </p>
+
+    <!-- Upload form -->
+    <form method="post" th:action="@{/manager/settings/html-images}" enctype="multipart/form-data"
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-4 mb-4 flex items-end gap-3 flex-wrap">
+        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+        <div>
+            <label class="block text-xs text-slate-500 mb-1">画像ファイル</label>
+            <input type="file" name="file" accept="image/jpeg,image/png,image/gif,image/webp" required
+                   class="text-sm"/>
+        </div>
+        <div>
+            <label class="block text-xs text-slate-500 mb-1">ラベル（任意）</label>
+            <input type="text" name="label" maxlength="255" placeholder="例: バナー画像A"
+                   class="tw-input" style="font-size:.85rem;"/>
+        </div>
+        <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded">
+            アップロード
+        </button>
+        <span class="text-xs text-slate-400">JPEG / PNG / GIF / WebP、最大5MB</span>
+    </form>
+
+    <div th:if="${images == null or images.empty}" class="bg-white rounded-lg shadow-sm border border-slate-100 p-8 text-center text-slate-400 text-sm">
+        まだ画像が登録されていません
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4" th:if="${images != null and !images.empty}">
+        <div class="img-card" th:each="img : ${images}">
+            <div class="thumb-wrap">
+                <img th:src="@{'/img/' + ${img.id}}" th:alt="${img.fileName}"/>
+            </div>
+            <div class="body">
+                <form class="label-form" method="post" th:action="@{'/manager/settings/html-images/' + ${img.id} + '/label'}">
+                    <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                    <input type="text" name="label" th:value="${img.label}" maxlength="255" placeholder="ラベル未設定"/>
+                    <button type="submit" class="btn-mini bg-emerald-600 hover:bg-emerald-700 text-white">保存</button>
+                </form>
+                <div class="url-row">
+                    <input type="text" readonly th:id="'imgUrl' + ${img.id}" th:value="${imageUrlBase} + '/img/' + ${img.id}"/>
+                    <button type="button" class="copy-btn" th:attr="onclick=|copyImageUrl(${img.id}, this)|">コピー</button>
+                </div>
+                <div class="meta">
+                    <span th:text="${#temporals.format(img.createdAt, 'yyyy-MM-dd HH:mm')}"></span>
+                    ・<span th:text="${#numbers.formatInteger(img.sizeBytes / 1024, 1)}"></span> KB
+                </div>
+                <div class="actions">
+                    <form method="post" th:action="@{'/manager/settings/html-images/' + ${img.id} + '/delete'}"
+                          onsubmit="return confirm('この画像を削除します。CRM内のHTMLで既に使用されている場合、そのURLは表示されなくなります。よろしいですか?');">
+                        <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                        <button type="submit" class="btn-mini bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100">削除</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function copyImageUrl(id, btn) {
+            var input = document.getElementById('imgUrl' + id);
+            if (!input) return;
+            input.select();
+            navigator.clipboard.writeText(input.value).then(function () {
+                var orig = btn.textContent;
+                btn.textContent = 'コピー済';
+                btn.classList.add('copied');
+                setTimeout(function () { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+            }).catch(function () {
+                document.execCommand('copy');
+            });
+        }
+    </script>
+</section>
+</body>
+</html>
