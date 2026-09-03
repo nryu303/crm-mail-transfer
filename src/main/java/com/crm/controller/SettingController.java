@@ -594,7 +594,8 @@ public class SettingController {
     public String templateList(@RequestParam(name = "q", required = false) String q,
                                @RequestParam(name = "page", required = false, defaultValue = "1") Integer pageNo,
                                Model model) {
-        if (pageNo == null || pageNo < 1 || pageNo > MessageTemplateService.MAX_PAGES) pageNo = 1;
+        java.util.List<Integer> activePages = templateService.listActivePageNumbers();
+        if (pageNo == null || !activePages.contains(pageNo)) pageNo = activePages.get(0);
         java.util.List<com.crm.entity.MessageTemplate> all = templateService.listByPage(pageNo);
         java.util.List<com.crm.entity.MessageTemplate> filtered;
         if (q == null || q.trim().isEmpty()) {
@@ -613,33 +614,57 @@ public class SettingController {
         model.addAttribute("templates", filtered);
         model.addAttribute("q", q == null ? "" : q);
         model.addAttribute("pageNo", pageNo);
-        model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+        model.addAttribute("activePages", activePages);
         model.addAttribute("pageTitles", templateService.listPageTitles());
-        // Per-page counts so the tab strip can display "X/50"
-        int[] perPage = new int[MessageTemplateService.MAX_PAGES + 1];
-        for (int i = 1; i <= MessageTemplateService.MAX_PAGES; i++) perPage[i] = (int) templateService.countByPage(i);
+        // Per-page counts so the tab strip can display "X/50" — keyed by page number,
+        // not array index, since page numbers are no longer a contiguous 1..N range.
+        java.util.Map<Integer, Integer> perPage = new java.util.LinkedHashMap<>();
+        for (Integer p : activePages) perPage.put(p, (int) templateService.countByPage(p));
         model.addAttribute("perPageCounts", perPage);
         model.addAttribute("maxTemplates", MessageTemplateService.MAX_TEMPLATES);
         model.addAttribute("canCreate", templateService.countByPage(pageNo) < MessageTemplateService.MAX_TEMPLATES);
         return "setting/template-list";
     }
 
-    /** Save the operator-supplied titles for pages 1..MAX_PAGES. */
+    /** Save the operator-supplied titles for every currently active page. */
     @PostMapping("/message-templates/page-titles")
     public String templatePageTitles(@RequestParam java.util.Map<String, String> params,
                                       RedirectAttributes ra) {
-        for (int i = 1; i <= MessageTemplateService.MAX_PAGES; i++) {
-            String v = params.get("title" + i);
-            if (v != null) templateService.setPageTitle(i, v);
+        for (Integer p : templateService.listActivePageNumbers()) {
+            String v = params.get("title" + p);
+            if (v != null) templateService.setPageTitle(p, v);
         }
         ra.addFlashAttribute("flashSuccess", "ページタイトルを保存しました");
         return "redirect:/manager/settings/message-templates";
     }
 
+    /** Adds a new empty page and jumps straight to it. */
+    @PostMapping("/message-templates/add-page")
+    public String templateAddPage(RedirectAttributes ra) {
+        int newPage = templateService.addPage();
+        ra.addFlashAttribute("flashSuccess", "ページ " + newPage + " を追加しました");
+        return "redirect:/manager/settings/message-templates?page=" + newPage;
+    }
+
+    /** Removes an empty page. Refuses if templates remain on it or it's the last page. */
+    @PostMapping("/message-templates/delete-page")
+    public String templateDeletePage(@RequestParam(name = "page") int pageNo, RedirectAttributes ra) {
+        boolean ok = templateService.deletePage(pageNo);
+        if (ok) {
+            ra.addFlashAttribute("flashSuccess", "ページ " + pageNo + " を削除しました");
+        } else if (templateService.countByPage(pageNo) > 0) {
+            ra.addFlashAttribute("flashError", "このページには定型文が残っているため削除できません。先に定型文を削除または他のページへ移動してください。");
+        } else {
+            ra.addFlashAttribute("flashError", "最後の1ページは削除できません");
+        }
+        return "redirect:/manager/settings/message-templates?page=" + pageNo;
+    }
+
     @GetMapping("/message-templates/new")
     public String templateCreateForm(@RequestParam(name = "page", required = false, defaultValue = "1") Integer pageNo,
                                      Model model, RedirectAttributes ra) {
-        if (pageNo == null || pageNo < 1 || pageNo > MessageTemplateService.MAX_PAGES) pageNo = 1;
+        java.util.List<Integer> activePages = templateService.listActivePageNumbers();
+        if (pageNo == null || !activePages.contains(pageNo)) pageNo = activePages.get(0);
         if (templateService.countByPage(pageNo) >= MessageTemplateService.MAX_TEMPLATES) {
             ra.addFlashAttribute("flashError",
                     "ページ " + pageNo + " は既に最大" + MessageTemplateService.MAX_TEMPLATES + "件登録済みです");
@@ -649,7 +674,7 @@ public class SettingController {
         f.setPageNo(pageNo);
         model.addAttribute("form", f);
         model.addAttribute("editing", false);
-        model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+        model.addAttribute("activePages", activePages);
         model.addAttribute("pageTitles", templateService.listPageTitles());
         model.addAttribute("builtinTags", com.crm.service.PlaceholderService.BUILTIN_TAGS);
         return "setting/template-form";
@@ -660,7 +685,7 @@ public class SettingController {
                                  BindingResult br, RedirectAttributes ra, Model model) {
         if (br.hasErrors()) {
             model.addAttribute("editing", false);
-            model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+            model.addAttribute("activePages", templateService.listActivePageNumbers());
             model.addAttribute("pageTitles", templateService.listPageTitles());
             return "setting/template-form";
         }
@@ -684,7 +709,7 @@ public class SettingController {
         model.addAttribute("form", MessageTemplateForm.from(t.get()));
         model.addAttribute("templateId", id);
         model.addAttribute("editing", true);
-        model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+        model.addAttribute("activePages", templateService.listActivePageNumbers());
         model.addAttribute("pageTitles", templateService.listPageTitles());
         model.addAttribute("builtinTags", com.crm.service.PlaceholderService.BUILTIN_TAGS);
         return "setting/template-form";
@@ -697,7 +722,7 @@ public class SettingController {
         if (br.hasErrors()) {
             model.addAttribute("templateId", id);
             model.addAttribute("editing", true);
-            model.addAttribute("maxPages", MessageTemplateService.MAX_PAGES);
+            model.addAttribute("activePages", templateService.listActivePageNumbers());
             model.addAttribute("pageTitles", templateService.listPageTitles());
             return "setting/template-form";
         }

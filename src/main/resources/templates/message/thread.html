@@ -430,18 +430,18 @@
         </header>
         <!-- Page-tab strip: click switches the visible page in-place (no reload). 2026-05-23. -->
         <div id="tplTabs" class="flex border-b border-slate-200 bg-slate-50 text-xs overflow-x-auto" style="flex:0 0 auto;">
-            <button type="button" th:each="i : ${#numbers.sequence(1, templateMaxPages)}"
+            <button type="button" th:each="p, iter : ${templateActivePages}"
                     class="tpl-tab px-3 py-1.5 whitespace-nowrap border-r border-slate-200"
-                    th:classappend="${i == 1 ? 'bg-white text-blue-700 font-semibold border-b-2 border-b-blue-500' : 'text-slate-600 hover:bg-white'}"
-                    th:attr="data-page=${i}"
-                    th:text="${templatePageTitles[i - 1]}">タイトル</button>
+                    th:classappend="${iter.index == 0 ? 'bg-white text-blue-700 font-semibold border-b-2 border-b-blue-500' : 'text-slate-600 hover:bg-white'}"
+                    th:attr="data-page=${p}"
+                    th:text="${templatePageTitles[iter.index]}">タイトル</button>
         </div>
         <div class="body">
             <div th:if="${templates.empty}" class="text-xs text-slate-400 p-2">定型文はまだ登録されていません</div>
             <div th:each="t : ${templates}" class="tpl-item"
                  th:attr="data-page=${t.pageNo}"
                  th:classappend="${t.color != null and t.color != ''} ? 'color-' + ${t.color} : ''"
-                 th:style="${t.pageNo != 1 ? 'display:none;' : null}">
+                 th:style="${t.pageNo != templateActivePages[0] ? 'display:none;' : null}">
                 <div class="txt"
                      th:attr="data-subject=${t.subject},data-body=${t.body}"
                      onclick="applyTemplateFromElement(this)"

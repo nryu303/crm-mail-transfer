@@ -268,7 +268,7 @@ public class BroadcastController {
         }
         model.addAttribute("templates", templateService.listAll());
         model.addAttribute("templatePageTitles", templateService.listPageTitles());
-        model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
+        model.addAttribute("templateActivePages", templateService.listActivePageNumbers());
         // Shared with the reply-page settings / message-thread panel — same ReplyPageSetting
         // row, so a change here is reflected everywhere %reply_url% / %external_url% expand.
         model.addAttribute("urlLeadText", replyPageSettingService.getOrCreate().getUrlLeadText());
@@ -297,7 +297,7 @@ public class BroadcastController {
         if (br.hasErrors()) {
             model.addAttribute("templates", templateService.listAll());
         model.addAttribute("templatePageTitles", templateService.listPageTitles());
-        model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
+        model.addAttribute("templateActivePages", templateService.listActivePageNumbers());
             return "message/broadcast-form";
         }
         Long adminId = (Long) session.getAttribute(AuthInterceptor.SESSION_ADMIN_ID);

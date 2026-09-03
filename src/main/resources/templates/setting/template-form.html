@@ -67,12 +67,13 @@
             <div class="mb-4">
                 <label class="block text-sm font-medium text-slate-700 mb-1">ページ</label>
                 <select class="tw-input" th:field="*{pageNo}" style="max-width: 360px;">
-                    <option th:each="i : ${#numbers.sequence(1, maxPages)}"
-                            th:value="${i}"
-                            th:text="${i} + ': ' + ${pageTitles[i - 1]}"></option>
+                    <option th:each="p, iter : ${activePages}"
+                            th:value="${p}"
+                            th:text="${p} + ': ' + ${pageTitles[iter.index]}"></option>
                 </select>
                 <p class="mt-1 text-xs text-slate-500">
-                    定型文をシーン別に最大5ページに振り分けできます。各ページのタイトルは一覧画面のタブ部分で編集できます。
+                    定型文をシーン別にページに振り分けできます。各ページのタイトルは一覧画面のタブ部分で編集でき、
+                    一覧画面の「＋ページ追加」から新しいページを追加できます。
                 </p>
             </div>
 

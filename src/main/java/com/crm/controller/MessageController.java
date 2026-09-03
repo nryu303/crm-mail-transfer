@@ -145,9 +145,9 @@ public class MessageController {
         model.addAttribute("builtinTags", PlaceholderService.BUILTIN_TAGS);
         model.addAttribute("urlLeadText", replyPageSettingService.getOrCreate().getUrlLeadText());
         model.addAttribute("templates", templateService.listAll());
-        // Page-tab strip data for the templates panel: titles + max-page.
+        // Page-tab strip data for the templates panel: titles + active page numbers.
         model.addAttribute("templatePageTitles", templateService.listPageTitles());
-        model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
+        model.addAttribute("templateActivePages", templateService.listActivePageNumbers());
         model.addAttribute("boundAddresses", bindingService.listBoundFor(userId));
         // Inbound attachment thumbnails — fetch every attachment linked to any IN-message
         // in this thread, group by message_id so the template can render the badge + grid.

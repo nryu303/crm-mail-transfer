@@ -43,7 +43,7 @@ public class InboxController {
         // single-user reply screen with template tabs + tag references).
         model.addAttribute("templates", templateService.listAll());
         model.addAttribute("templatePageTitles", templateService.listPageTitles());
-        model.addAttribute("templateMaxPages", com.crm.service.MessageTemplateService.MAX_PAGES);
+        model.addAttribute("templateActivePages", templateService.listActivePageNumbers());
         model.addAttribute("builtinTags", com.crm.service.PlaceholderService.BUILTIN_TAGS);
         // User-specific tag keys are dynamic per-user, but for the bulk-reply panel we expose
         // the conventional 5-slot key names so operators can drop the tokens into the body.

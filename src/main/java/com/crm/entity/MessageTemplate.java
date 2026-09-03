@@ -53,7 +53,7 @@ public class MessageTemplate {
         if (createdAt == null) createdAt = now;
         updatedAt = now;
         if (displayOrder == null) displayOrder = 0;
-        if (pageNo == null || pageNo < 1 || pageNo > 5) pageNo = 1;
+        if (pageNo == null || pageNo < 1) pageNo = 1;
     }
 
     @PreUpdate
