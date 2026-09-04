@@ -40,6 +40,8 @@ class ScheduledTaskServiceTest {
     private DomainSettingService domainSettings;
     private BroadcastRepository broadcastRepo;
     private SmsSettingService smsSettingService;
+    private com.crm.repository.DiffScheduleRepository diffScheduleRepo;
+    private DiffScheduleService diffScheduleService;
     private ScheduledTaskService svc;
 
     @BeforeEach
@@ -65,10 +67,12 @@ class ScheduledTaskServiceTest {
         smsSettingService = mock(SmsSettingService.class);
         when(smsSettingService.getRatePerMinute()).thenReturn(600); // fast in tests: 100ms/msg
         FolderAutoMoveService folderAutoMoveService = mock(FolderAutoMoveService.class);
+        diffScheduleRepo = mock(com.crm.repository.DiffScheduleRepository.class);
+        diffScheduleService = mock(DiffScheduleService.class);
         svc = new ScheduledTaskService(msgRepo, poolRepo, messageService,
                 settingRepo, bindingRepo, domainSettings, broadcastRepo,
                 folderSettings, folderRetention, inboundLogRepo, inboundMail, userAccessLogRepo,
-                smsSettingService, folderAutoMoveService);
+                smsSettingService, folderAutoMoveService, diffScheduleRepo, diffScheduleService);
     }
 
     private static Message scheduledBroadcastRow(Long id, Long userId, Long broadcastId,
@@ -205,4 +209,67 @@ class ScheduledTaskServiceTest {
     }
 
     private static <T> T eq(T expected) { return org.mockito.ArgumentMatchers.eq(expected); }
+
+    // ---- Diff-schedule dispatcher ----
+
+    private static com.crm.entity.DiffSchedule diffSchedule(Long id, String status) {
+        com.crm.entity.DiffSchedule s = new com.crm.entity.DiffSchedule();
+        s.setId(id);
+        s.setStatus(status);
+        s.setDiffDefinitionId(1L);
+        s.setDiffNameSnapshot("test-diff");
+        s.setMemoSlotSnapshot(2);
+        s.setTargetType(com.crm.entity.DiffSchedule.TARGET_FOLDER);
+        s.setTargetValue("F");
+        s.setTargetUserIds("1,2,3");
+        s.setOffsetMode(com.crm.entity.DiffSchedule.OFFSET_MINUTES);
+        s.setOffsetMinutes(1);
+        s.setSetAt(LocalDateTime.now().minusMinutes(2));
+        s.setScheduledFor(LocalDateTime.now().minusMinutes(1));
+        return s;
+    }
+
+    @Test
+    void dispatchDueDiffSchedules_executesDueRow() {
+        com.crm.entity.DiffSchedule s = diffSchedule(10L, com.crm.entity.DiffSchedule.STATUS_PENDING);
+        when(diffScheduleRepo.findDueForExecution(eq(com.crm.entity.DiffSchedule.STATUS_PENDING), any()))
+                .thenReturn(Collections.singletonList(s));
+        when(diffScheduleRepo.findById(10L)).thenReturn(Optional.of(s));
+
+        svc.dispatchDueDiffSchedules();
+
+        verify(diffScheduleService).execute(s);
+    }
+
+    @Test
+    void dispatchDueDiffSchedules_reFetchesBeforeExecuting_skipsIfCancelledMidTick() {
+        // The initial findDueForExecution() snapshot says PENDING, but by the time this tick
+        // re-fetches the row (immediately before executing) an operator has cancelled it —
+        // execute() must never be called on an already-CANCELLED row.
+        com.crm.entity.DiffSchedule stale = diffSchedule(11L, com.crm.entity.DiffSchedule.STATUS_PENDING);
+        com.crm.entity.DiffSchedule fresh = diffSchedule(11L, com.crm.entity.DiffSchedule.STATUS_CANCELLED);
+        when(diffScheduleRepo.findDueForExecution(eq(com.crm.entity.DiffSchedule.STATUS_PENDING), any()))
+                .thenReturn(Collections.singletonList(stale));
+        when(diffScheduleRepo.findById(11L)).thenReturn(Optional.of(fresh));
+
+        svc.dispatchDueDiffSchedules();
+
+        verify(diffScheduleService, org.mockito.Mockito.never()).execute(any());
+    }
+
+    @Test
+    void dispatchDueDiffSchedules_continuesAfterOneRowThrows() {
+        com.crm.entity.DiffSchedule s1 = diffSchedule(12L, com.crm.entity.DiffSchedule.STATUS_PENDING);
+        com.crm.entity.DiffSchedule s2 = diffSchedule(13L, com.crm.entity.DiffSchedule.STATUS_PENDING);
+        when(diffScheduleRepo.findDueForExecution(eq(com.crm.entity.DiffSchedule.STATUS_PENDING), any()))
+                .thenReturn(java.util.Arrays.asList(s1, s2));
+        when(diffScheduleRepo.findById(12L)).thenReturn(Optional.of(s1));
+        when(diffScheduleRepo.findById(13L)).thenReturn(Optional.of(s2));
+        org.mockito.Mockito.doThrow(new RuntimeException("boom")).when(diffScheduleService).execute(s1);
+
+        svc.dispatchDueDiffSchedules();
+
+        verify(diffScheduleService).execute(s1);
+        verify(diffScheduleService).execute(s2);
+    }
 }

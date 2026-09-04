@@ -53,6 +53,8 @@ public class ScheduledTaskService {
     private final com.crm.repository.UserAccessLogRepository userAccessLogRepository;
     private final SmsSettingService smsSettingService;
     private final FolderAutoMoveService folderAutoMoveService;
+    private final com.crm.repository.DiffScheduleRepository diffScheduleRepository;
+    private final DiffScheduleService diffScheduleService;
 
     /** Wall-clock time (nanoTime) the SMS serial lane is next allowed to send. Guards against
      *  two dispatchQueued() ticks racing on SMS pacing — see dispatchSmsSerially(). */
@@ -71,7 +73,9 @@ public class ScheduledTaskService {
                                 InboundMailService inboundMailService,
                                 com.crm.repository.UserAccessLogRepository userAccessLogRepository,
                                 SmsSettingService smsSettingService,
-                                FolderAutoMoveService folderAutoMoveService) {
+                                FolderAutoMoveService folderAutoMoveService,
+                                com.crm.repository.DiffScheduleRepository diffScheduleRepository,
+                                DiffScheduleService diffScheduleService) {
         this.messageRepository = messageRepository;
         this.poolRepository = poolRepository;
         this.messageService = messageService;
@@ -86,6 +90,8 @@ public class ScheduledTaskService {
         this.userAccessLogRepository = userAccessLogRepository;
         this.smsSettingService = smsSettingService;
         this.folderAutoMoveService = folderAutoMoveService;
+        this.diffScheduleRepository = diffScheduleRepository;
+        this.diffScheduleService = diffScheduleService;
     }
 
     /** How long USER_ACCESS_LOG rows are kept before the daily purge removes them. */
@@ -203,6 +209,44 @@ public class ScheduledTaskService {
     public void runFolderAutoMove() {
         if (!acquireOrRefreshLock()) return;
         folderAutoMoveService.runDueRules(LocalDateTime.now());
+    }
+
+    /**
+     * Every 60 seconds — execute PENDING DIFF_SCHEDULE rows whose SCHEDULED_FOR has arrived.
+     * 60s granularity is coarser than the 30s message dispatcher poll because the finest
+     * configurable unit here is whole minutes (当日 N分後) — sub-minute precision isn't
+     * meaningful to the operator.
+     */
+    @Scheduled(fixedRateString = "${app.scheduler.diff-schedule-poll-ms:60000}",
+               initialDelayString = "${app.scheduler.diff-schedule-poll-initial-ms:20000}")
+    public void dispatchDueDiffSchedules() {
+        if (!acquireOrRefreshLock()) return;
+        java.util.List<com.crm.entity.DiffSchedule> due =
+                diffScheduleRepository.findDueForExecution(com.crm.entity.DiffSchedule.STATUS_PENDING, LocalDateTime.now());
+        if (due.isEmpty()) return;
+        log.info("Diff-schedule dispatcher: {} schedule(s) due", due.size());
+        for (com.crm.entity.DiffSchedule initial : due) {
+            try {
+                // CRITICAL race-condition gate — same re-fetch-before-mutate pattern as
+                // dispatchOne(): an operator cancel that lands between findDueForExecution()'s
+                // snapshot and this loop iteration must not be silently overwritten to EXECUTED.
+                com.crm.entity.DiffSchedule fresh = diffScheduleRepository.findById(initial.getId()).orElse(null);
+                if (fresh == null || !com.crm.entity.DiffSchedule.STATUS_PENDING.equals(fresh.getStatus())) continue;
+                diffScheduleService.execute(fresh);
+            } catch (Exception e) {
+                log.warn("Diff-schedule execution failed for id {}: {}", initial.getId(), e.toString());
+                try {
+                    com.crm.entity.DiffSchedule failRow = diffScheduleRepository.findById(initial.getId()).orElse(null);
+                    if (failRow != null && com.crm.entity.DiffSchedule.STATUS_PENDING.equals(failRow.getStatus())) {
+                        failRow.setStatus(com.crm.entity.DiffSchedule.STATUS_FAILED);
+                        failRow.setResultDetail("scheduler error: " + e);
+                        diffScheduleRepository.save(failRow);
+                    }
+                } catch (Exception inner) {
+                    log.warn("Diff-schedule failure-record write failed: {}", inner.toString());
+                }
+            }
+        }
     }
 
     /**

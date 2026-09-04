@@ -50,6 +50,7 @@ public class SettingController {
     private final com.crm.service.SmsSettingService smsSettingService;
     private final com.crm.service.FolderAutoMoveService folderAutoMoveService;
     private final com.crm.service.HtmlImageService htmlImageService;
+    private final com.crm.service.DiffScheduleService diffScheduleService;
 
     public SettingController(RelayServerService relayServerService,
                              com.crm.service.ExternalLinkDomainService externalLinkDomainService,
@@ -67,7 +68,8 @@ public class SettingController {
                              com.crm.service.ImapEnvSyncService imapEnvSyncService,
                              com.crm.service.SmsSettingService smsSettingService,
                              com.crm.service.FolderAutoMoveService folderAutoMoveService,
-                             com.crm.service.HtmlImageService htmlImageService) {
+                             com.crm.service.HtmlImageService htmlImageService,
+                             com.crm.service.DiffScheduleService diffScheduleService) {
         this.relayServerService = relayServerService;
         this.externalLinkDomainService = externalLinkDomainService;
         this.templateService = templateService;
@@ -85,6 +87,7 @@ public class SettingController {
         this.smsSettingService = smsSettingService;
         this.folderAutoMoveService = folderAutoMoveService;
         this.htmlImageService = htmlImageService;
+        this.diffScheduleService = diffScheduleService;
     }
 
     /** Page: current IMAP-monitor sync state + manual re-sync button. Auto-sync also fires
@@ -373,6 +376,7 @@ public class SettingController {
         model.addAttribute("maxTemplates", MessageTemplateService.MAX_TEMPLATES);
         model.addAttribute("externalLinkDomainCount", externalLinkDomainService.listAll().size());
         model.addAttribute("htmlImageCount", htmlImageService.listAll().size());
+        model.addAttribute("pendingScheduleCount", diffScheduleService.listPending().size());
         return "setting/index";
     }
 

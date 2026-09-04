@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>差分スケジュール履歴</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">差分スケジュール履歴</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings/diff-schedule}">差分スケジュール設定に戻る</a>
+    </div>
+
+    <p class="text-sm text-slate-500 mb-4">
+        どのユーザーに、どの条件で、どの差分が発動したのかを確認できます。取消されたスケジュールも表示されます。
+    </p>
+
+    <form method="get" th:action="@{/manager/settings/diff-schedule/history}"
+          class="bg-white rounded-lg shadow-sm border border-slate-100 p-4 mb-4 flex items-end gap-3 flex-wrap">
+        <div>
+            <label class="block text-xs text-slate-500 mb-1">ステータス</label>
+            <select name="status" class="tw-input">
+                <option value="">すべて</option>
+                <option value="PENDING" th:selected="${status == 'PENDING'}">保留中</option>
+                <option value="EXECUTED" th:selected="${status == 'EXECUTED'}">実行済み</option>
+                <option value="CANCELLED" th:selected="${status == 'CANCELLED'}">取消済み</option>
+                <option value="FAILED" th:selected="${status == 'FAILED'}">失敗</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-slate-500 mb-1">条件種別</label>
+            <select name="targetType" class="tw-input">
+                <option value="">すべて</option>
+                <option value="PHONE" th:selected="${targetType == 'PHONE'}">番号縛り</option>
+                <option value="EMAIL" th:selected="${targetType == 'EMAIL'}">アドレス縛り</option>
+                <option value="FOLDER" th:selected="${targetType == 'FOLDER'}">フォルダ縛り</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-slate-500 mb-1">差分名</label>
+            <select name="diffDefinitionId" class="tw-input">
+                <option value="">すべて</option>
+                <option th:each="d : ${definitions}" th:value="${d.id}" th:text="${d.name}"
+                        th:selected="${diffDefinitionId != null and diffDefinitionId == d.id}"></option>
+            </select>
+        </div>
+        <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded">検索</button>
+        <a class="inline-flex items-center px-3 py-2 border border-slate-300 bg-white text-slate-600 text-sm rounded hover:bg-slate-50"
+           th:href="@{/manager/settings/diff-schedule/history}">クリア</a>
+    </form>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left">対象</th>
+                <th class="px-3 py-2 text-left">条件</th>
+                <th class="px-3 py-2 text-left">差分名</th>
+                <th class="px-3 py-2 text-left">セット日時</th>
+                <th class="px-3 py-2 text-left">実行/取消日時</th>
+                <th class="px-3 py-2 text-left">結果</th>
+                <th class="px-3 py-2 text-left">詳細</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:if="${results.empty}">
+                <td colspan="7" class="px-3 py-6 text-center text-slate-400">該当する履歴がありません</td>
+            </tr>
+            <tr th:each="s : ${results.content}" class="hover:bg-slate-50">
+                <td class="px-3 py-2 text-xs font-mono text-slate-600"
+                    th:text="${#strings.arraySplit(s.targetUserIds, ',').length} + ' 名'"></td>
+                <td class="px-3 py-2 text-xs text-slate-600">
+                    <span th:if="${s.targetType == 'PHONE'}">番号縛り</span>
+                    <span th:if="${s.targetType == 'EMAIL'}">アドレス縛り</span>
+                    <span th:if="${s.targetType == 'FOLDER'}" th:text="'フォルダ: ' + ${s.targetValue}"></span>
+                </td>
+                <td class="px-3 py-2 text-slate-700" th:text="${s.diffNameSnapshot}"></td>
+                <td class="px-3 py-2 text-xs text-slate-500" th:text="${#temporals.format(s.setAt, 'yyyy-MM-dd HH:mm')}"></td>
+                <td class="px-3 py-2 text-xs text-slate-500"
+                    th:text="${s.executedAt != null} ? ${#temporals.format(s.executedAt, 'yyyy-MM-dd HH:mm')} : (${s.cancelledAt != null} ? ${#temporals.format(s.cancelledAt, 'yyyy-MM-dd HH:mm')} : '-')"></td>
+                <td class="px-3 py-2">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
+                          th:classappend="${s.status == 'EXECUTED'} ? 'bg-emerald-100 text-emerald-700' :
+                                          (${s.status == 'PENDING'} ? 'bg-amber-100 text-amber-800' :
+                                          (${s.status == 'CANCELLED'} ? 'bg-slate-100 text-slate-700' : 'bg-red-100 text-red-700'))"
+                          th:text="${s.status == 'EXECUTED'} ? '実行済み' : (${s.status == 'PENDING'} ? '保留中' : (${s.status == 'CANCELLED'} ? '取消済み' : '失敗'))"></span>
+                </td>
+                <td class="px-3 py-2 text-xs text-slate-500 truncate" style="max-width: 260px;"
+                    th:text="${s.status == 'CANCELLED'} ? ('取消者: ' + (${s.cancelledByAdminName} ?: '-')) : ${s.resultDetail}"></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <nav class="mt-4" th:if="${results.totalPages > 1}">
+        <ul class="flex items-center gap-1 text-sm">
+            <li>
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${results.first} ? 'opacity-50 pointer-events-none'"
+                   th:href="@{/manager/settings/diff-schedule/history(page=${results.number - 1},status=${status},targetType=${targetType},diffDefinitionId=${diffDefinitionId})}">前へ</a>
+            </li>
+            <li th:each="i : ${#numbers.sequence(0, results.totalPages - 1)}">
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${i == results.number} ? 'bg-blue-600 text-white border-blue-600'"
+                   th:href="@{/manager/settings/diff-schedule/history(page=${i},status=${status},targetType=${targetType},diffDefinitionId=${diffDefinitionId})}" th:text="${i + 1}"></a>
+            </li>
+            <li>
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${results.last} ? 'opacity-50 pointer-events-none'"
+                   th:href="@{/manager/settings/diff-schedule/history(page=${results.number + 1},status=${status},targetType=${targetType},diffDefinitionId=${diffDefinitionId})}">次へ</a>
+            </li>
+        </ul>
+    </nav>
+    <p class="mt-3 text-sm text-slate-500">全<span th:text="${results.totalElements}">0</span>件</p>
+</section>
+</body>
+</html>
