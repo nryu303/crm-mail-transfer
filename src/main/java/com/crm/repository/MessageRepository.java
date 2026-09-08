@@ -171,9 +171,14 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
      * timestamp — SENT_AT once dispatched, else SCHEDULED_AT while still QUEUED, else
      * CREATED_AT as a last resort — so a reservation set at 10:00 for delivery at 15:00
      * lands in the 15:00 bucket instead of the 10:00 "set" time.
+     *
+     * <p>Excludes CANCELLED: a reservation cancelled before it fired was never sent and
+     * never will be, so it must not inflate this "sent" total for the future bucket it
+     * had been scheduled into (2026-09-07 client report: cancelling a reservation still
+     * left the dashboard showing "送信 1" for that hour).
      */
     @org.springframework.data.jpa.repository.Query(
-            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir " +
+            "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.status <> 'CANCELLED' " +
             "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) >= :from " +
             "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) < :to")
     long countByDirectionBetweenEffective(@org.springframework.data.repository.query.Param("dir") String direction,
@@ -190,9 +195,11 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
                                                     @org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
                                                     @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
 
-    /** Effective-timestamp variant of {@link #countByDirectionAndChannelBetween}. */
+    /** Effective-timestamp variant of {@link #countByDirectionAndChannelBetween}. Excludes
+     *  CANCELLED for the same reason as {@link #countByDirectionBetweenEffective}. */
     @org.springframework.data.jpa.repository.Query(
             "SELECT COUNT(m) FROM Message m WHERE m.direction = :dir AND m.channel = :channel " +
+            "AND m.status <> 'CANCELLED' " +
             "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) >= :from " +
             "AND COALESCE(m.sentAt, m.scheduledAt, m.createdAt) < :to")
     long countByDirectionAndChannelBetweenEffective(@org.springframework.data.repository.query.Param("dir") String direction,
