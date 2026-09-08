@@ -54,9 +54,18 @@ class PlaceholderServiceTest {
     }
 
     @Test
-    void unknownTag_isLeftUnchanged() {
+    void unknownTag_isBlankedOut() {
+        // 2026-09-09 operator requirement: a tag with no value configured for this user
+        // (custom key never set, or set but blank) must render as nothing, not the literal
+        // "%token%" text — applies to message-box display and pre-login received email alike.
         CrmUser u = user("a", "b@c");
-        assertThat(svc.substitute("%unknown_tag%", u)).isEqualTo("%unknown_tag%");
+        assertThat(svc.substitute("%unknown_tag%", u)).isEqualTo("");
+    }
+
+    @Test
+    void customTagWithNoValueForThisUser_isBlankedOut() {
+        CrmUser u = user("a", "b@c");
+        assertThat(svc.substitute("お支払い金額は %amount% です", u)).isEqualTo("お支払い金額は  です");
     }
 
     @Test

@@ -100,6 +100,12 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
      *  the stuck-broadcast sweeper to detect parents whose children all finalised. */
     long countByBroadcastIdAndStatus(Long broadcastId, String status);
 
+    /** Distinct target user ids for one broadcast — powers the 詳細 screen's 対象ユーザー
+     *  button so the operator can see/copy who a past send actually went to. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT DISTINCT m.userId FROM Message m WHERE m.broadcastId = :broadcastId AND m.userId IS NOT NULL")
+    java.util.List<Long> findDistinctUserIdsByBroadcastId(@org.springframework.data.repository.query.Param("broadcastId") Long broadcastId);
+
     /** Bulk-delete every MESSAGE row whose user_id is in the given list. Used by
      *  FolderRetentionService for the operator's per-folder "履歴削除" button. */
     @org.springframework.data.jpa.repository.Modifying

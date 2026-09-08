@@ -82,6 +82,7 @@
                 <th class="px-3 py-2 text-left" style="width: 36px;"><input type="checkbox" id="msgCheckAll" title="全選択"/></th>
                 <th class="px-3 py-2 text-left" style="width: 60px;">No</th>
                 <th class="px-3 py-2 text-left" style="width: 90px;">種別</th>
+                <th class="px-3 py-2 text-left" style="width: 120px;">番号</th>
                 <th class="px-3 py-2 text-left">メールアドレス</th>
                 <th class="px-3 py-2 text-left">表示名</th>
                 <th class="px-3 py-2 text-left">広告コード</th>
@@ -95,7 +96,7 @@
             </thead>
             <tbody class="divide-y divide-slate-100">
             <tr th:if="${messages.totalElements == 0}">
-                <td colspan="12" class="px-3 py-6 text-center text-slate-400">該当するメッセージはありません</td>
+                <td colspan="13" class="px-3 py-6 text-center text-slate-400">該当するメッセージはありません</td>
             </tr>
             <tr th:each="m,it : ${messages.content}" class="hover:bg-slate-50">
                 <td class="px-3 py-2"><input type="checkbox" class="msg-row-item" name="ids" th:value="${m.id}"/></td>
@@ -115,6 +116,8 @@
                           class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800"
                           title="ユーザーからのSMS返信">SMS返信</span>
                 </td>
+                <td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap"
+                    th:text="${userPhones != null and userPhones.get(m.userId) != null} ? ${userPhones.get(m.userId)} : '-'"></td>
                 <td class="px-3 py-2 text-xs">
                     <a class="text-blue-600 hover:underline whitespace-nowrap"
                        th:href="@{'/manager/users/' + ${m.userId}}" target="_blank"

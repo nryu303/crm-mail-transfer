@@ -47,6 +47,32 @@
             <div><div class="text-xs text-slate-500">残り</div><div class="text-2xl font-bold" th:text="${broadcast.totalCount - doneCount}"></div></div>
         </div>
 
+        <!-- 対象ユーザー: full resolved recipient list, so a past send's targets can still be
+             looked up later. Address/number copy separately per operator request (2026-09-09). -->
+        <details th:if="${targetUsers != null and !targetUsers.empty}" class="mt-4 rounded border border-slate-200 bg-slate-50">
+            <summary class="px-3 py-2 text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                対象ユーザー（<span th:text="${targetUsers.size()}"></span> 名）
+            </summary>
+            <div class="px-3 pb-3">
+                <div class="flex gap-2 mb-2">
+                    <button type="button" class="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded hover:bg-slate-100"
+                            onclick="copyTargetColumn('targetPhones')">番号をコピー</button>
+                    <button type="button" class="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded hover:bg-slate-100"
+                            onclick="copyTargetColumn('targetEmails')">アドレスをコピー</button>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">番号</div>
+                        <textarea id="targetPhones" readonly rows="8" class="tw-input text-xs" style="font-family:monospace;" th:text="${targetPhonesText}"></textarea>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 mb-1">アドレス</div>
+                        <textarea id="targetEmails" readonly rows="8" class="tw-input text-xs" style="font-family:monospace;" th:text="${targetEmailsText}"></textarea>
+                    </div>
+                </div>
+            </div>
+        </details>
+
         <!-- Error detail accordion: collapsed by default; click 「エラー詳細を表示」 to reveal
              the list of skipped addresses with their failure reason. Uses native <details>
              so no JavaScript is needed and screen-readers behave correctly. -->
@@ -117,6 +143,17 @@
             </tbody>
         </table>
     </div>
+
+    <script>
+        function copyTargetColumn(elId) {
+            var el = document.getElementById(elId);
+            if (!el) return;
+            el.select();
+            navigator.clipboard.writeText(el.value).catch(function () {
+                document.execCommand('copy');
+            });
+        }
+    </script>
 </section>
 </body>
 </html>

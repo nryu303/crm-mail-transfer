@@ -116,6 +116,17 @@ public class DiffScheduleController {
         return "redirect:/manager/settings/diff-schedule";
     }
 
+    /** Bulk-cancel by phone/email search (partial match against actual target users, not the
+     *  raw registration string — see {@link DiffScheduleService#cancelByUserSearch}). */
+    @PostMapping("/cancel-by-user-search")
+    public String cancelByUserSearch(@RequestParam String targetType,
+                                      @RequestParam String query,
+                                      HttpSession session, RedirectAttributes ra) {
+        int n = scheduleService.cancelByUserSearch(targetType, query, adminName(session));
+        ra.addFlashAttribute("flashSuccess", n + " 件のステップを取消しました");
+        return "redirect:/manager/settings/diff-schedule";
+    }
+
     // ====== Diff definitions (names, max MAX_DEFINITIONS) ======
     @GetMapping("/definitions")
     public String definitions(Model model) {
@@ -125,6 +136,7 @@ public class DiffScheduleController {
         model.addAttribute("definitions", defs);
         model.addAttribute("stepCounts", stepCounts);
         model.addAttribute("maxDefinitions", DiffDefinitionService.MAX_DEFINITIONS);
+        model.addAttribute("maxSteps", DiffDefinitionService.MAX_STEPS_PER_DEFINITION);
         return "setting/diff-schedule-definitions";
     }
 

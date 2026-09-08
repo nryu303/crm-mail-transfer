@@ -96,12 +96,14 @@ public class BroadcastController {
             if (m.getUserId() != null) uids.add(m.getUserId());
         }
         java.util.Map<Long, String> userEmails       = new java.util.HashMap<>();
+        java.util.Map<Long, String> userPhones       = new java.util.HashMap<>();
         java.util.Map<Long, String> userDisplayNames = new java.util.HashMap<>();
         java.util.Map<Long, String> userAdCodes      = new java.util.HashMap<>();
         java.util.Map<Long, String> userFolders      = new java.util.HashMap<>();
         if (!uids.isEmpty()) {
             for (com.crm.entity.CrmUser u : userService.findAllByIds(uids)) {
                 userEmails.put(u.getId(), u.getEmail());
+                if (u.getPhoneNumber() != null) userPhones.put(u.getId(), u.getPhoneNumber());
                 String name = (u.getDisplayName() == null || u.getDisplayName().isEmpty())
                         ? "" : u.getDisplayName();
                 userDisplayNames.put(u.getId(), name);
@@ -130,6 +132,7 @@ public class BroadcastController {
         }
         model.addAttribute("messages", messages);
         model.addAttribute("userEmails", userEmails);
+        model.addAttribute("userPhones", userPhones);
         model.addAttribute("userDisplayNames", userDisplayNames);
         model.addAttribute("userAdCodes", userAdCodes);
         model.addAttribute("userFolders", userFolders);
@@ -349,6 +352,20 @@ public class BroadcastController {
             if (!ids.isEmpty()) unsendableUsers = userService.findAllByIds(ids);
         }
         model.addAttribute("unsendableUsers", unsendableUsers);
+
+        // 対象ユーザー button: full resolved target list for this broadcast, so the operator
+        // can look up who a past send actually reached (2026-09-09 request — previously only
+        // visible indirectly via the message history search).
+        java.util.List<Long> targetUserIds = messageRepository.findDistinctUserIdsByBroadcastId(id);
+        java.util.List<com.crm.entity.CrmUser> targetUsers = targetUserIds.isEmpty()
+                ? java.util.Collections.emptyList() : userService.findAllByIds(targetUserIds);
+        model.addAttribute("targetUsers", targetUsers);
+        model.addAttribute("targetPhonesText", targetUsers.stream()
+                .map(u -> u.getPhoneNumber() == null ? "-" : u.getPhoneNumber())
+                .collect(java.util.stream.Collectors.joining("\n")));
+        model.addAttribute("targetEmailsText", targetUsers.stream()
+                .map(u -> u.getEmail() == null ? "-" : u.getEmail())
+                .collect(java.util.stream.Collectors.joining("\n")));
         return "message/broadcast-progress";
     }
 

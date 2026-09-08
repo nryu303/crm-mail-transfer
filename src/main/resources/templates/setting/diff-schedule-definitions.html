@@ -12,9 +12,6 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings/diff-schedule}">差分スケジュール設定に戻る</a>
     </div>
 
-    <div th:if="${flashSuccess}" class="bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4 text-sm text-emerald-800" th:text="${flashSuccess}"></div>
-    <div th:if="${flashError}" class="bg-rose-50 border border-rose-300 rounded-lg p-3 mb-4 text-sm text-rose-800" th:text="${flashError}"></div>
-
     <p class="text-sm text-slate-500 mb-4">
         差分名ごとに、複数のタイミングで送信・HTML切替を行う「ステップ」のタイムラインを登録できます。
         最大 <span th:text="${maxDefinitions}">20</span> 件まで登録できます。ステップの追加・編集は各差分名の「ステップを編集」から行います。
@@ -37,12 +34,12 @@
                 <!-- HTML doesn't allow a <form> to wrap <td> elements inside a <tr>, so each
                      row's <form> is declared empty right before the row and every input
                      references it via form="id" (same pattern as folders.html's auto-move rows). -->
-                <tr th:each="d : ${definitions}">
+                <tr th:each="d, iter : ${definitions}">
                     <td class="px-3 py-2 text-slate-500 font-mono text-xs">
                         <form th:id="'defForm' + ${d.id}" method="post" th:action="@{'/manager/settings/diff-schedule/definitions/' + ${d.id} + '/rename'}">
                             <input type="hidden" name="_csrf" th:value="${_csrf}"/>
                         </form>
-                        <span th:text="${d.id}"></span>
+                        <span th:text="${iter.index + 1}"></span>
                     </td>
                     <td class="px-3 py-2">
                         <input type="text" name="name" th:value="${d.name}" maxlength="100" required

@@ -203,6 +203,30 @@ public class DiffScheduleService {
         return n;
     }
 
+    /** Bulk-cancel by phone/email search: resolves the query to matching CRM_USER ids (same
+     *  partial-match search as registration), then cancels every PENDING step whose parent
+     *  schedule's frozen target-user snapshot contains any of those ids — unlike
+     *  {@link #cancelByTarget}, this matches on actual resolved users rather than requiring
+     *  the operator to retype the exact original raw target string. */
+    @Transactional
+    public int cancelByUserSearch(String targetType, String rawQuery, String cancelledByAdminName) {
+        List<Long> matchIds = resolveTargetIds(targetType, rawQuery);
+        if (matchIds.isEmpty()) return 0;
+        java.util.Set<Long> matchSet = new java.util.HashSet<>(matchIds);
+        List<DiffScheduleStep> pending = scheduleStepRepository.findAllPending();
+        int n = 0;
+        for (DiffScheduleStep step : pending) {
+            DiffSchedule sched = scheduleRepository.findById(step.getDiffScheduleId()).orElse(null);
+            if (sched == null) continue;
+            boolean matches = false;
+            for (Long uid : parseIds(sched.getTargetUserIds())) {
+                if (matchSet.contains(uid)) { matches = true; break; }
+            }
+            if (matches && cancelStep(step.getId(), cancelledByAdminName)) n++;
+        }
+        return n;
+    }
+
     /** Execute one due step: MESSAGE steps queue a real send via the same pipeline as 一斉送信
      *  (placeholders/%reply_url% resolved per-recipient, delivered by the existing message
      *  dispatcher); HTML_SWITCH steps flip activeMemoSlot for every target user, chunked

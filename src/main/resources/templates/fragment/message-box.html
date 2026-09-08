@@ -42,13 +42,16 @@
             <span class="message-box-date"
                   th:text="'受信時間 : ' + ${#temporals.format(item.sentAt, 'yyyy/MM/dd HH:mm')}"></span>
         </div>
-        <div class="message-box-body" th:text="${item.bodyText}"></div>
-
-        <div class="message-box-divider"></div>
 
         <!-- Re: 件名 — de-emphasized, fixed display. Never deletable from the user side; only
              the checkbox above (admin-only) can remove the whole item. -->
         <div class="message-box-reply-label" th:text="${item.replyLabel}"></div>
+
+        <div class="message-box-subject" th:if="${item.subject != null and !item.subject.isEmpty()}"
+             th:text="${item.subject}"></div>
+        <div class="message-box-body" th:text="${item.bodyText}"></div>
+
+        <div class="message-box-divider"></div>
 
         <!-- Public reply form: posts to /reply/{token}/send with replyToMessageId targeting
              this specific historical message. The subject hidden field mirrors item.replyLabel

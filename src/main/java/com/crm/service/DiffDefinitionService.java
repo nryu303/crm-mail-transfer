@@ -16,7 +16,7 @@ import java.util.Optional;
 public class DiffDefinitionService {
 
     public static final int MAX_DEFINITIONS = 20;
-    public static final int MAX_STEPS_PER_DEFINITION = 20;
+    public static final int MAX_STEPS_PER_DEFINITION = 50;
 
     private final DiffDefinitionRepository definitionRepository;
     private final DiffStepRepository stepRepository;
@@ -103,7 +103,9 @@ public class DiffDefinitionService {
         s.setSubject(DiffStep.STEP_MESSAGE.equals(stepType) && DiffStep.CHANNEL_EMAIL.equals(channel) ? subject : null);
         s.setBody(DiffStep.STEP_MESSAGE.equals(stepType) ? body : null);
         s.setMemoSlot(DiffStep.STEP_HTML_SWITCH.equals(stepType) ? clampSlot(memoSlot) : null);
-        return stepRepository.save(s);
+        DiffStep saved = stepRepository.save(s);
+        resortByTime(diffDefinitionId);
+        return saved;
     }
 
     @Transactional
@@ -124,7 +126,9 @@ public class DiffDefinitionService {
         s.setSubject(DiffStep.STEP_MESSAGE.equals(stepType) && DiffStep.CHANNEL_EMAIL.equals(channel) ? subject : null);
         s.setBody(DiffStep.STEP_MESSAGE.equals(stepType) ? body : null);
         s.setMemoSlot(DiffStep.STEP_HTML_SWITCH.equals(stepType) ? clampSlot(memoSlot) : null);
-        return Optional.of(stepRepository.save(s));
+        DiffStep saved = stepRepository.save(s);
+        resortByTime(s.getDiffDefinitionId());
+        return Optional.of(saved);
     }
 
     @Transactional
@@ -133,13 +137,41 @@ public class DiffDefinitionService {
         if (!opt.isPresent()) return;
         Long defId = opt.get().getDiffDefinitionId();
         stepRepository.deleteById(stepId);
-        // Renumber remaining steps 0..N-1 so ordering stays contiguous for future inserts/display.
-        List<DiffStep> remaining = stepRepository.findByDiffDefinitionIdOrderByStepOrderAsc(defId);
+        resortByTime(defId);
+    }
+
+    /** Re-numbers every step of a definition (0..N-1) in chronological fire-time order, so the
+     *  registered-steps list always reads top-to-bottom as "soonest to latest" regardless of
+     *  the order steps were added or edited in. 当日(分後) steps always sort before 翌日以降
+     *  (日数+時刻) steps; within each mode, by the offset value itself. */
+    private void resortByTime(Long diffDefinitionId) {
+        List<DiffStep> all = stepRepository.findByDiffDefinitionIdOrderByStepOrderAsc(diffDefinitionId);
+        all.sort(DiffDefinitionService::compareByTime);
         int order = 0;
-        for (DiffStep s : remaining) {
-            s.setStepOrder(order++);
-            stepRepository.save(s);
+        for (DiffStep s : all) {
+            if (!java.util.Objects.equals(s.getStepOrder(), order)) {
+                s.setStepOrder(order);
+                stepRepository.save(s);
+            }
+            order++;
         }
+    }
+
+    private static int compareByTime(DiffStep a, DiffStep b) {
+        boolean aMinutes = DiffStep.OFFSET_MINUTES.equals(a.getOffsetMode());
+        boolean bMinutes = DiffStep.OFFSET_MINUTES.equals(b.getOffsetMode());
+        if (aMinutes != bMinutes) return aMinutes ? -1 : 1;
+        if (aMinutes) {
+            int av = a.getOffsetMinutes() == null ? 0 : a.getOffsetMinutes();
+            int bv = b.getOffsetMinutes() == null ? 0 : b.getOffsetMinutes();
+            return Integer.compare(av, bv);
+        }
+        int ad = a.getOffsetDays() == null ? 0 : a.getOffsetDays();
+        int bd = b.getOffsetDays() == null ? 0 : b.getOffsetDays();
+        if (ad != bd) return Integer.compare(ad, bd);
+        String at = a.getOffsetClockTime() == null ? "00:00" : a.getOffsetClockTime();
+        String bt = b.getOffsetClockTime() == null ? "00:00" : b.getOffsetClockTime();
+        return at.compareTo(bt);
     }
 
     private static void validateStep(String offsetMode, Integer offsetMinutes, Integer offsetDays,

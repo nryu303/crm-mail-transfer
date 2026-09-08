@@ -71,12 +71,14 @@ public class MessageController {
         java.util.Set<Long> uids = new java.util.HashSet<>();
         for (Message m : messages.getContent()) if (m.getUserId() != null) uids.add(m.getUserId());
         java.util.Map<Long, String> userEmails       = new java.util.HashMap<>();
+        java.util.Map<Long, String> userPhones       = new java.util.HashMap<>();
         java.util.Map<Long, String> userDisplayNames = new java.util.HashMap<>();
         java.util.Map<Long, String> userAdCodes      = new java.util.HashMap<>();
         java.util.Map<Long, String> userFolders      = new java.util.HashMap<>();
         if (!uids.isEmpty()) {
             for (CrmUser u : userService.findAllByIds(uids)) {
                 userEmails.put(u.getId(), u.getEmail());
+                if (u.getPhoneNumber() != null) userPhones.put(u.getId(), u.getPhoneNumber());
                 if (u.getDisplayName() != null && !u.getDisplayName().isEmpty()) {
                     userDisplayNames.put(u.getId(), u.getDisplayName());
                 }
@@ -85,6 +87,7 @@ public class MessageController {
             }
         }
         model.addAttribute("userEmails", userEmails);
+        model.addAttribute("userPhones", userPhones);
         model.addAttribute("userDisplayNames", userDisplayNames);
         model.addAttribute("userAdCodes", userAdCodes);
         model.addAttribute("userFolders", userFolders);

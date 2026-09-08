@@ -211,6 +211,13 @@ body {
     color: #666;
 }
 
+.message-box-subject {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f1f1f;
+    margin-bottom: 4px;
+}
+
 .message-box-body {
     font-size: 14px;
     line-height: 1.6;

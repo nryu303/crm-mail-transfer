@@ -5,7 +5,7 @@
 <head>
     <title th:text="'ステップ編集 - ' + ${definition.name}">ステップ編集</title>
     <style>
-        .steps-scroll { max-height: 640px; overflow-y: auto; }
+        .steps-scroll { max-height: calc(100vh - 260px); min-height: 300px; overflow-y: auto; }
         .step-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: #fff; }
         .step-badge { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 999px; background: #1e40af; color: #fff; font-size: .7rem; font-weight: 700; }
         .offset-panel, .type-panel { display: none; }
@@ -24,9 +24,6 @@
         </h1>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings/diff-schedule/definitions}">差分定義一覧に戻る</a>
     </div>
-
-    <div th:if="${flashSuccess}" class="bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4 text-sm text-emerald-800" th:text="${flashSuccess}"></div>
-    <div th:if="${flashError}" class="bg-rose-50 border border-rose-300 rounded-lg p-3 mb-4 text-sm text-rose-800" th:text="${flashError}"></div>
 
     <p class="text-sm text-slate-500 mb-4">
         セットした時刻を起点に、各ステップが指定のタイミングで実行されます（「分後」は当日、「日後+時刻」は翌日以降）。
@@ -51,7 +48,8 @@
                                 <span th:if="${s.offsetMode == 'MINUTES'}" th:text="'セットから ' + ${s.offsetMinutes} + ' 分後'"></span>
                                 <span th:if="${s.offsetMode == 'DAYS'}" th:text="'セットから ' + ${s.offsetDays} + ' 日後 ' + ${s.offsetClockTime}"></span>
                                 &nbsp;·&nbsp;
-                                <span th:if="${s.stepType == 'MESSAGE'}" th:text="'送信 (' + ${s.channel} + ')'" class="font-semibold text-blue-700"></span>
+                                <span th:if="${s.stepType == 'MESSAGE'}" th:text="'送信 (' + ${s.channel} + ')'" class="font-semibold"
+                                      th:classappend="${s.channel == 'SMS'} ? 'text-yellow-800' : 'text-blue-700'"></span>
                                 <span th:if="${s.stepType == 'HTML_SWITCH'}" th:text="'ユーザーHTML切替 → スロット' + ${s.memoSlot}" class="font-semibold text-amber-700"></span>
                             </div>
                             <div th:if="${s.stepType == 'MESSAGE'}" class="text-sm text-slate-700">
@@ -122,12 +120,20 @@
                                         <span class="tag-desc" th:text="${t.description}"></span>
                                     </div>
                                     <div class="tag-row">
-                                        <code class="tag-name" th:attr="onclick=|insertTag(${s.id}, '%reply_url%')|">%reply_url%</code>
-                                        <span class="tag-desc">返信URL（送信時に自動生成）</span>
-                                    </div>
-                                    <div class="tag-row">
                                         <code class="tag-name" th:attr="onclick=|insertTag(${s.id}, '%amount%')|">%amount%</code>
                                         <span class="tag-desc">ユーザー専用タグ（ユーザー詳細で保存・編集）</span>
+                                    </div>
+                                    <div class="tag-row">
+                                        <code class="tag-name" th:attr="onclick=|insertTag(${s.id}, '%product%')|">%product%</code>
+                                        <span class="tag-desc">商品（ユーザー詳細で設定）</span>
+                                    </div>
+                                    <div class="tag-row">
+                                        <code class="tag-name" th:attr="onclick=|insertTag(${s.id}, '%full_address%')|">%full_address%</code>
+                                        <span class="tag-desc">住所（ユーザー詳細で設定）</span>
+                                    </div>
+                                    <div class="tag-row">
+                                        <code class="tag-name" th:attr="onclick=|insertTag(${s.id}, '%reply_url%')|">%reply_url%</code>
+                                        <span class="tag-desc">返信URL（送信時に自動生成）</span>
                                     </div>
                                 </div>
                             </div>
@@ -191,12 +197,20 @@
                             <span class="tag-desc" th:text="${t.description}"></span>
                         </div>
                         <div class="tag-row">
-                            <code class="tag-name" onclick="insertTag('new', '%reply_url%')">%reply_url%</code>
-                            <span class="tag-desc">返信URL（送信時に自動生成）</span>
-                        </div>
-                        <div class="tag-row">
                             <code class="tag-name" onclick="insertTag('new', '%amount%')">%amount%</code>
                             <span class="tag-desc">ユーザー専用タグ（ユーザー詳細で保存・編集）</span>
+                        </div>
+                        <div class="tag-row">
+                            <code class="tag-name" onclick="insertTag('new', '%product%')">%product%</code>
+                            <span class="tag-desc">商品（ユーザー詳細で設定）</span>
+                        </div>
+                        <div class="tag-row">
+                            <code class="tag-name" onclick="insertTag('new', '%full_address%')">%full_address%</code>
+                            <span class="tag-desc">住所（ユーザー詳細で設定）</span>
+                        </div>
+                        <div class="tag-row">
+                            <code class="tag-name" onclick="insertTag('new', '%reply_url%')">%reply_url%</code>
+                            <span class="tag-desc">返信URL（送信時に自動生成）</span>
                         </div>
                     </div>
                 </div>

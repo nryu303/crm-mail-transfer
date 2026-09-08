@@ -317,6 +317,22 @@
         </script>
     </div>
 
+    <!-- ===== Diff-schedule history auto-purge (global, not per-folder) ===== -->
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6">
+        <h2 class="text-base font-semibold text-slate-800 mb-2">差分スケジュール履歴の自動削除</h2>
+        <p class="text-xs text-slate-500 mb-4">
+            毎日 00:00 に、実行済み・取消済み・失敗の差分スケジュール履歴のうち
+            <strong>指定日数より古いもの</strong>を自動削除します（0 で無効化）。保留中のステップは対象外です。
+        </p>
+        <form method="post" th:action="@{/manager/settings/folders/diff-history-retention}" class="flex items-center gap-2">
+            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+            <input type="number" name="days" min="0" max="3650" th:value="${diffHistoryRetentionDays ?: 0}"
+                   class="tw-input" style="width:80px;padding:4px 8px;font-size:.85rem;"/>
+            <span class="text-xs text-slate-500">日</span>
+            <button type="submit" class="inline-flex items-center px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded">保存</button>
+        </form>
+    </div>
+
     </div>
     </div>
 

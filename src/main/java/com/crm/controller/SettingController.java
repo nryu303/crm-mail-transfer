@@ -51,6 +51,7 @@ public class SettingController {
     private final com.crm.service.FolderAutoMoveService folderAutoMoveService;
     private final com.crm.service.HtmlImageService htmlImageService;
     private final com.crm.service.DiffScheduleService diffScheduleService;
+    private final com.crm.service.BackupService backupService;
 
     public SettingController(RelayServerService relayServerService,
                              com.crm.service.ExternalLinkDomainService externalLinkDomainService,
@@ -69,7 +70,8 @@ public class SettingController {
                              com.crm.service.SmsSettingService smsSettingService,
                              com.crm.service.FolderAutoMoveService folderAutoMoveService,
                              com.crm.service.HtmlImageService htmlImageService,
-                             com.crm.service.DiffScheduleService diffScheduleService) {
+                             com.crm.service.DiffScheduleService diffScheduleService,
+                             com.crm.service.BackupService backupService) {
         this.relayServerService = relayServerService;
         this.externalLinkDomainService = externalLinkDomainService;
         this.templateService = templateService;
@@ -88,6 +90,30 @@ public class SettingController {
         this.folderAutoMoveService = folderAutoMoveService;
         this.htmlImageService = htmlImageService;
         this.diffScheduleService = diffScheduleService;
+        this.backupService = backupService;
+    }
+
+    @GetMapping("/backup")
+    public String backupPage(Model model) {
+        model.addAttribute("config", backupService.getConfig());
+        return "setting/backup";
+    }
+
+    @PostMapping("/backup")
+    public String saveBackupConfig(@RequestParam(defaultValue = "false") boolean enabled,
+                                    @RequestParam int intervalHours,
+                                    @RequestParam int retentionCount,
+                                    RedirectAttributes ra) {
+        backupService.saveConfig(enabled, intervalHours, retentionCount);
+        ra.addFlashAttribute("flashSuccess", "バックアップ設定を保存しました");
+        return "redirect:/manager/settings/backup";
+    }
+
+    @PostMapping("/backup/run-now")
+    public String runBackupNow(RedirectAttributes ra) {
+        backupService.runBackupNow();
+        ra.addFlashAttribute("flashSuccess", "バックアップを実行しました");
+        return "redirect:/manager/settings/backup";
     }
 
     /** Page: current IMAP-monitor sync state + manual re-sync button. Auto-sync also fires
@@ -203,7 +229,18 @@ public class SettingController {
                 folderRetentionService.getRetentionDaysMap(folders));
         model.addAttribute("autoMoveRules", folderAutoMoveService.listAll());
         model.addAttribute("allFolders", folders);
+        model.addAttribute("diffHistoryRetentionDays", folderRetentionService.getDiffHistoryRetentionDays());
         return "setting/folders";
+    }
+
+    /** Global auto-purge day count for finished (non-PENDING) 差分スケジュール履歴 rows. */
+    @PostMapping("/folders/diff-history-retention")
+    public String diffHistoryRetention(@RequestParam("days") int days, RedirectAttributes ra) {
+        folderRetentionService.setDiffHistoryRetentionDays(days);
+        ra.addFlashAttribute("flashSuccess", days > 0
+                ? "差分スケジュール履歴の自動削除を " + days + " 日に設定しました"
+                : "差分スケジュール履歴の自動削除を無効化しました");
+        return "redirect:/manager/settings/folders";
     }
 
     /** Register a new daily folder-to-folder auto-move rule. */

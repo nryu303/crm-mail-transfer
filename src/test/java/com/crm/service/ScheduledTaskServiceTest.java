@@ -69,10 +69,12 @@ class ScheduledTaskServiceTest {
         FolderAutoMoveService folderAutoMoveService = mock(FolderAutoMoveService.class);
         diffScheduleStepRepo = mock(com.crm.repository.DiffScheduleStepRepository.class);
         diffScheduleService = mock(DiffScheduleService.class);
+        BackupService backupService = mock(BackupService.class);
         svc = new ScheduledTaskService(msgRepo, poolRepo, messageService,
                 settingRepo, bindingRepo, domainSettings, broadcastRepo,
                 folderSettings, folderRetention, inboundLogRepo, inboundMail, userAccessLogRepo,
-                smsSettingService, folderAutoMoveService, diffScheduleStepRepo, diffScheduleService);
+                smsSettingService, folderAutoMoveService, diffScheduleStepRepo, diffScheduleService,
+                backupService);
     }
 
     private static Message scheduledBroadcastRow(Long id, Long userId, Long broadcastId,

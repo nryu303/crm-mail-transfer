@@ -69,8 +69,12 @@
                 <td colspan="8" class="px-3 py-6 text-center text-slate-400">該当する履歴がありません</td>
             </tr>
             <tr th:each="s : ${results.content}" class="hover:bg-slate-50" th:with="sched=${schedulesById.get(s.diffScheduleId)}">
-                <td class="px-3 py-2 text-xs font-mono text-slate-600"
-                    th:text="${sched != null ? (#strings.arraySplit(sched.targetUserIds, ',').length + ' 名') : '-'}"></td>
+                <td class="px-3 py-2 text-xs" th:if="${sched != null}">
+                    <a class="font-mono text-blue-600 hover:underline"
+                       th:href="@{/manager/users(ids=${sched.targetUserIds})}"
+                       th:text="${#strings.arraySplit(sched.targetUserIds, ',').length} + ' 名'"></a>
+                </td>
+                <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched == null}">-</td>
                 <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched != null}">
                     <span th:if="${sched.targetType == 'PHONE'}">番号縛り</span>
                     <span th:if="${sched.targetType == 'EMAIL'}">アドレス縛り</span>
@@ -79,7 +83,9 @@
                 <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched == null}">-</td>
                 <td class="px-3 py-2 text-slate-700" th:text="${sched != null ? sched.diffNameSnapshot : '-'}"></td>
                 <td class="px-3 py-2 text-xs text-slate-600">
-                    <span th:if="${s.stepType == 'MESSAGE'}" th:text="'送信(' + ${s.channel} + ')'"></span>
+                    <span th:if="${s.stepType == 'MESSAGE'}" th:text="'送信(' + ${s.channel} + ')'"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                          th:classappend="${s.channel == 'SMS'} ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-700'"></span>
                     <span th:if="${s.stepType == 'HTML_SWITCH'}" th:text="'HTML切替→スロット' + ${s.memoSlotSnapshot}"></span>
                 </td>
                 <td class="px-3 py-2 text-xs text-slate-500" th:text="${sched != null ? #temporals.format(sched.setAt, 'yyyy-MM-dd HH:mm') : '-'}"></td>

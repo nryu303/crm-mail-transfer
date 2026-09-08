@@ -3,6 +3,7 @@ package com.crm.service;
 import com.crm.entity.CrmSetting;
 import com.crm.repository.CrmSettingRepository;
 import com.crm.repository.CrmUserRepository;
+import com.crm.repository.DiffScheduleStepRepository;
 import com.crm.repository.MessageRepository;
 import com.crm.repository.CarrierUserBindingRepository;
 import org.slf4j.Logger;
@@ -35,15 +36,63 @@ public class FolderRetentionService {
     private final CrmUserRepository userRepository;
     private final MessageRepository messageRepository;
     private final CarrierUserBindingRepository bindingRepository;
+    private final DiffScheduleStepRepository diffScheduleStepRepository;
+
+    private static final String DIFF_HISTORY_RETENTION_KEY = "diffSchedule.history.retentionDays";
 
     public FolderRetentionService(CrmSettingRepository settingRepository,
                                   CrmUserRepository userRepository,
                                   MessageRepository messageRepository,
-                                  CarrierUserBindingRepository bindingRepository) {
+                                  CarrierUserBindingRepository bindingRepository,
+                                  DiffScheduleStepRepository diffScheduleStepRepository) {
         this.settingRepository = settingRepository;
         this.userRepository = userRepository;
         this.messageRepository = messageRepository;
         this.bindingRepository = bindingRepository;
+        this.diffScheduleStepRepository = diffScheduleStepRepository;
+    }
+
+    /** Global (not per-folder) auto-purge day count for finished 差分スケジュール履歴 rows
+     *  (EXECUTED/CANCELLED/FAILED — PENDING rows are never touched). 0 = disabled. */
+    public int getDiffHistoryRetentionDays() {
+        String v = settingRepository.findBySettingKey(DIFF_HISTORY_RETENTION_KEY)
+                .map(CrmSetting::getSettingValue).orElse(null);
+        if (v == null || v.trim().isEmpty()) return 0;
+        try {
+            int n = Integer.parseInt(v.trim());
+            return n < 0 ? 0 : n;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    @Transactional
+    public void setDiffHistoryRetentionDays(int days) {
+        if (days < 0) days = 0;
+        String value = Integer.toString(days);
+        CrmSetting s = settingRepository.findBySettingKey(DIFF_HISTORY_RETENTION_KEY).orElseGet(() -> {
+            CrmSetting ns = new CrmSetting();
+            ns.setSettingKey(DIFF_HISTORY_RETENTION_KEY);
+            ns.setDescription("Auto-purge retention days for finished 差分スケジュール履歴 rows");
+            ns.setUpdatedAt(LocalDateTime.now());
+            return ns;
+        });
+        s.setSettingValue(value);
+        s.setUpdatedAt(LocalDateTime.now());
+        settingRepository.save(s);
+    }
+
+    /** Deletes finished (non-PENDING) DIFF_SCHEDULE_STEP rows older than {@code olderThanDays}.
+     *  Called by the daily auto-purge tick when the retention setting is > 0. */
+    @Transactional
+    public long purgeOldDiffScheduleHistory(int olderThanDays) {
+        if (olderThanDays <= 0) return 0;
+        LocalDateTime cutoff = LocalDateTime.now().minusDays(olderThanDays);
+        long deleted = diffScheduleStepRepository.deleteByStatusNotAndUpdatedAtBefore("PENDING", cutoff);
+        if (deleted > 0) {
+            log.info("FolderRetention: deleted {} finished DIFF_SCHEDULE_STEP rows older than {}d", deleted, olderThanDays);
+        }
+        return deleted;
     }
 
     private static String key(String folderName) { return "folder.retention." + folderName; }

@@ -561,6 +561,10 @@ public class CrmUserService {
                 for (String t : phoneTokens) ors.add(cb.like(root.get("phoneNumber"), "%" + t + "%"));
                 predicates.add(cb.or(ors.toArray(new Predicate[0])));
             }
+            List<Long> idFilter = form.idList();
+            if (!idFilter.isEmpty()) {
+                predicates.add(root.get("id").in(idFilter));
+            }
             if (hasText(form.getStatus())) {
                 predicates.add(cb.equal(root.get("status"), form.getStatus()));
             }

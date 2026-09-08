@@ -55,6 +55,7 @@ public class ScheduledTaskService {
     private final FolderAutoMoveService folderAutoMoveService;
     private final com.crm.repository.DiffScheduleStepRepository diffScheduleStepRepository;
     private final DiffScheduleService diffScheduleService;
+    private final BackupService backupService;
 
     /** Wall-clock time (nanoTime) the SMS serial lane is next allowed to send. Guards against
      *  two dispatchQueued() ticks racing on SMS pacing — see dispatchSmsSerially(). */
@@ -75,7 +76,8 @@ public class ScheduledTaskService {
                                 SmsSettingService smsSettingService,
                                 FolderAutoMoveService folderAutoMoveService,
                                 com.crm.repository.DiffScheduleStepRepository diffScheduleStepRepository,
-                                DiffScheduleService diffScheduleService) {
+                                DiffScheduleService diffScheduleService,
+                                BackupService backupService) {
         this.messageRepository = messageRepository;
         this.poolRepository = poolRepository;
         this.messageService = messageService;
@@ -92,6 +94,7 @@ public class ScheduledTaskService {
         this.folderAutoMoveService = folderAutoMoveService;
         this.diffScheduleStepRepository = diffScheduleStepRepository;
         this.diffScheduleService = diffScheduleService;
+        this.backupService = backupService;
     }
 
     /** How long USER_ACCESS_LOG rows are kept before the daily purge removes them. */
@@ -103,6 +106,20 @@ public class ScheduledTaskService {
      * pure click-history for operator confirmation, not something whose loss is operationally
      * risky, so a fixed cutoff is enough.
      */
+    /**
+     * Hourly — run a DB backup if the operator has enabled it in 設定 and the configured
+     * interval has elapsed since the last run. Disabled by default; see {@link BackupService}.
+     */
+    @Scheduled(cron = "0 5 * * * *")
+    public void runScheduledBackup() {
+        if (!acquireOrRefreshLock()) return;
+        try {
+            backupService.runIfDue(java.time.LocalDateTime.now());
+        } catch (Exception e) {
+            log.warn("Scheduled backup failed: {}", e.toString());
+        }
+    }
+
     @Scheduled(cron = "0 30 3 * * *")
     public void purgeOldAccessLogs() {
         java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusDays(ACCESS_LOG_RETENTION_DAYS);
@@ -194,6 +211,15 @@ public class ScheduledTaskService {
         if (totalDeleted > 0) {
             log.info("Daily folder-retention purge: {} MESSAGE rows deleted across {} folders",
                     totalDeleted, folders.size());
+        }
+
+        int diffHistoryDays = folderRetentionService.getDiffHistoryRetentionDays();
+        if (diffHistoryDays > 0) {
+            try {
+                folderRetentionService.purgeOldDiffScheduleHistory(diffHistoryDays);
+            } catch (Exception e) {
+                log.warn("Diff-schedule-history retention purge failed: {}", e.toString());
+            }
         }
     }
 

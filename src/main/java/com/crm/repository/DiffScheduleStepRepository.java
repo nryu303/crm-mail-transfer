@@ -43,4 +43,8 @@ public interface DiffScheduleStepRepository extends JpaRepository<DiffScheduleSt
     @Query("SELECT s FROM DiffScheduleStep s JOIN DiffSchedule ds ON s.diffScheduleId = ds.id " +
            "WHERE s.status = 'PENDING' AND ds.diffDefinitionId = :diffDefinitionId")
     List<DiffScheduleStep> findPendingByDiffDefinition(@Param("diffDefinitionId") Long diffDefinitionId);
+
+    /** Daily auto-purge support: drop finished (non-PENDING) step rows older than a cutoff,
+     *  keyed off updatedAt since that's set on every status transition (executed/cancelled/failed). */
+    long deleteByStatusNotAndUpdatedAtBefore(String notStatus, LocalDateTime cutoff);
 }

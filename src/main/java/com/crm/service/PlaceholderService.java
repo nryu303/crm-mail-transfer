@@ -37,6 +37,12 @@ public class PlaceholderService {
     private static final DateTimeFormatter JP_DATE =
             DateTimeFormatter.ofPattern("yyyy年M月d日", Locale.JAPAN);
 
+    /** Matches any remaining %token% shape after known substitutions — i.e. a custom tag
+     *  (%amount%, %product%, %full_address%, or any admin-typed key) whose user has no
+     *  key/value configured for it. Operator requirement (2026-09-09): show blank, not the
+     *  literal placeholder text, whether in the message box or a received email. */
+    private static final java.util.regex.Pattern UNRESOLVED_TAG = java.util.regex.Pattern.compile("%[A-Za-z0-9_]+%");
+
     /** Replace all known placeholders in template with values from this user. Null template -> null. */
     public String substitute(String template, CrmUser user) {
         if (template == null) return null;
@@ -45,6 +51,7 @@ public class PlaceholderService {
         for (Map.Entry<String, String> e : bindings.entrySet()) {
             out = out.replace(e.getKey(), e.getValue());
         }
+        out = UNRESOLVED_TAG.matcher(out).replaceAll("");
         return out;
     }
 

@@ -93,7 +93,7 @@ public class SystemStatsController {
         return out;
     }
 
-    private static final String BACKUP_DIR = "/home/centos/crm-backups";
+    private static final String BACKUP_DIR = "/home/centos/crm-platform/crm-backups";
 
     private static Map<String, Object> readBackupStatus() {
         Map<String, Object> b = new LinkedHashMap<>();

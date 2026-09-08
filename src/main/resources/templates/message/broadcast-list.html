@@ -50,10 +50,8 @@
     <!-- Address search bar -->
     <form method="get" th:action="@{/manager/messages/broadcast}" class="bg-white rounded-lg shadow-sm border border-slate-100 p-3 mb-4">
         <div class="search-bar">
-            <label class="text-xs text-slate-500 font-semibold"
-                   th:text="${channel == 'SMS'} ? '番号検索:' : 'アドレス検索:'">アドレス検索:</label>
-            <input type="text" name="addr" th:value="${addr}"
-                   th:placeholder="${channel == 'SMS'} ? '宛先の電話番号で絞り込み (部分一致)' : '宛先 / FROM のメールアドレスで絞り込み (部分一致)'"/>
+            <label class="text-xs text-slate-500 font-semibold">番号/アドレス/FROM検索:</label>
+            <input type="text" name="addr" th:value="${addr}" placeholder="番号・メールアドレス・FROM で絞り込み (部分一致)"/>
             <input type="hidden" name="channel" th:value="${channel}"/>
             <button type="submit" class="btn primary">検索</button>
             <a class="btn ghost" th:href="@{/manager/messages/broadcast}" th:if="${addr != null and addr != ''}">クリア</a>
@@ -71,6 +69,7 @@
                 <th class="px-3 py-2 text-left" style="width:36px;"><input type="checkbox" id="bcastMsgCheckAll" title="全選択"/></th>
                 <th class="px-3 py-2 text-left" style="width:60px;">No</th>
                 <th class="px-3 py-2 text-left" style="width:90px;">種別</th>
+                <th class="px-3 py-2 text-left" style="width:120px;">番号</th>
                 <th class="px-3 py-2 text-left" th:text="${channel == 'SMS'} ? '番号' : 'メールアドレス'">メールアドレス</th>
                 <th class="px-3 py-2 text-left">FROM</th>
                 <th class="px-3 py-2 text-left">表示名</th>
@@ -85,7 +84,7 @@
             </thead>
             <tbody class="divide-y divide-slate-100">
             <tr th:if="${messages.totalElements == 0}">
-                <td colspan="13" class="px-3 py-6 text-center text-slate-400">
+                <td colspan="14" class="px-3 py-6 text-center text-slate-400">
                     <span th:if="${addr != null and addr != ''}">該当する送信履歴はありません</span>
                     <span th:unless="${addr != null and addr != ''}">一斉送信履歴はまだありません</span>
                 </td>
@@ -107,6 +106,8 @@
                           class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-200 text-slate-600"
                           title="ユーザーからの直接メール返信">メール返信</span>
                 </td>
+                <td class="px-3 py-2 text-xs text-slate-700 whitespace-nowrap"
+                    th:text="${userPhones != null and userPhones.get(m.userId) != null} ? ${userPhones.get(m.userId)} : '-'"></td>
                 <td class="px-3 py-2 text-xs">
                     <a th:if="${channel == 'SMS'}" class="text-blue-600 hover:underline whitespace-nowrap"
                        th:href="@{'/manager/users/' + ${m.userId}}" target="_blank"

@@ -10,6 +10,9 @@ public class UserSearchForm {
     private String status;
     /** Legacy URL param tolerated for backwards-compat with old bookmarks; ignored. */
     private String carrierCode;
+    /** Comma-separated CRM_USER.ID list — narrows the result set to exactly these users
+     *  (e.g. "show me who a diff schedule targeted"). Combines via AND with other filters. */
+    private String ids;
     /**
      * Filters that accept multiple values from the user-list <select multiple> widgets.
      * Each list is the canonical store; the singular getter/setter pair below is a
@@ -52,6 +55,15 @@ public class UserSearchForm {
     public java.util.List<String> displayNameTokens() { return splitTokens(displayName); }
     public java.util.List<String> phoneNumberTokens() { return splitTokens(phoneNumber); }
 
+    /** Parses {@link #ids} into Longs, silently skipping malformed tokens. Empty list if blank. */
+    public java.util.List<Long> idList() {
+        java.util.List<Long> out = new java.util.ArrayList<>();
+        for (String t : splitTokens(ids)) {
+            try { out.add(Long.parseLong(t)); } catch (NumberFormatException ignored) { /* skip */ }
+        }
+        return out;
+    }
+
     private static java.util.List<String> splitTokens(String raw) {
         if (raw == null || raw.trim().isEmpty()) return java.util.Collections.emptyList();
         java.util.List<String> out = new java.util.ArrayList<>();
@@ -76,6 +88,9 @@ public class UserSearchForm {
 
     public String getCarrierCode() { return carrierCode; }
     public void setCarrierCode(String carrierCode) { this.carrierCode = carrierCode; }
+
+    public String getIds() { return ids; }
+    public void setIds(String ids) { this.ids = ids; }
 
     public java.util.List<String> getEmailDomains() { return emailDomains; }
     public void setEmailDomains(java.util.List<String> emailDomains) {
