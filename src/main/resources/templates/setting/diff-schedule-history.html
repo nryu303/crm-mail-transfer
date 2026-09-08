@@ -57,6 +57,7 @@
                 <th class="px-3 py-2 text-left">対象</th>
                 <th class="px-3 py-2 text-left">条件</th>
                 <th class="px-3 py-2 text-left">差分名</th>
+                <th class="px-3 py-2 text-left">ステップ</th>
                 <th class="px-3 py-2 text-left">セット日時</th>
                 <th class="px-3 py-2 text-left">実行/取消日時</th>
                 <th class="px-3 py-2 text-left">結果</th>
@@ -65,18 +66,23 @@
             </thead>
             <tbody class="divide-y divide-slate-100">
             <tr th:if="${results.empty}">
-                <td colspan="7" class="px-3 py-6 text-center text-slate-400">該当する履歴がありません</td>
+                <td colspan="8" class="px-3 py-6 text-center text-slate-400">該当する履歴がありません</td>
             </tr>
-            <tr th:each="s : ${results.content}" class="hover:bg-slate-50">
+            <tr th:each="s : ${results.content}" class="hover:bg-slate-50" th:with="sched=${schedulesById.get(s.diffScheduleId)}">
                 <td class="px-3 py-2 text-xs font-mono text-slate-600"
-                    th:text="${#strings.arraySplit(s.targetUserIds, ',').length} + ' 名'"></td>
-                <td class="px-3 py-2 text-xs text-slate-600">
-                    <span th:if="${s.targetType == 'PHONE'}">番号縛り</span>
-                    <span th:if="${s.targetType == 'EMAIL'}">アドレス縛り</span>
-                    <span th:if="${s.targetType == 'FOLDER'}" th:text="'フォルダ: ' + ${s.targetValue}"></span>
+                    th:text="${sched != null ? (#strings.arraySplit(sched.targetUserIds, ',').length + ' 名') : '-'}"></td>
+                <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched != null}">
+                    <span th:if="${sched.targetType == 'PHONE'}">番号縛り</span>
+                    <span th:if="${sched.targetType == 'EMAIL'}">アドレス縛り</span>
+                    <span th:if="${sched.targetType == 'FOLDER'}" th:text="'フォルダ: ' + ${sched.targetValue}"></span>
                 </td>
-                <td class="px-3 py-2 text-slate-700" th:text="${s.diffNameSnapshot}"></td>
-                <td class="px-3 py-2 text-xs text-slate-500" th:text="${#temporals.format(s.setAt, 'yyyy-MM-dd HH:mm')}"></td>
+                <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched == null}">-</td>
+                <td class="px-3 py-2 text-slate-700" th:text="${sched != null ? sched.diffNameSnapshot : '-'}"></td>
+                <td class="px-3 py-2 text-xs text-slate-600">
+                    <span th:if="${s.stepType == 'MESSAGE'}" th:text="'送信(' + ${s.channel} + ')'"></span>
+                    <span th:if="${s.stepType == 'HTML_SWITCH'}" th:text="'HTML切替→スロット' + ${s.memoSlotSnapshot}"></span>
+                </td>
+                <td class="px-3 py-2 text-xs text-slate-500" th:text="${sched != null ? #temporals.format(sched.setAt, 'yyyy-MM-dd HH:mm') : '-'}"></td>
                 <td class="px-3 py-2 text-xs text-slate-500"
                     th:text="${s.executedAt != null} ? ${#temporals.format(s.executedAt, 'yyyy-MM-dd HH:mm')} : (${s.cancelledAt != null} ? ${#temporals.format(s.cancelledAt, 'yyyy-MM-dd HH:mm')} : '-')"></td>
                 <td class="px-3 py-2">

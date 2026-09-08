@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title th:text="'ステップ編集 - ' + ${definition.name}">ステップ編集</title>
+    <style>
+        .steps-scroll { max-height: 640px; overflow-y: auto; }
+        .step-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: #fff; }
+        .step-badge { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 999px; background: #1e40af; color: #fff; font-size: .7rem; font-weight: 700; }
+        .offset-panel, .type-panel { display: none; }
+        .offset-panel.active, .type-panel.active { display: block; }
+        .tag-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+        .tag-name { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 1px 6px; font-size: .72rem; cursor: pointer; color: #1e40af; }
+        .tag-name:hover { background: #e0e7ff; }
+        .tag-desc { font-size: .72rem; color: #64748b; }
+    </style>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">
+            ステップ編集: <span th:text="${definition.name}"></span>
+        </h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings/diff-schedule/definitions}">差分定義一覧に戻る</a>
+    </div>
+
+    <div th:if="${flashSuccess}" class="bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4 text-sm text-emerald-800" th:text="${flashSuccess}"></div>
+    <div th:if="${flashError}" class="bg-rose-50 border border-rose-300 rounded-lg p-3 mb-4 text-sm text-rose-800" th:text="${flashError}"></div>
+
+    <p class="text-sm text-slate-500 mb-4">
+        セットした時刻を起点に、各ステップが指定のタイミングで実行されます（「分後」は当日、「日後+時刻」は翌日以降）。
+        下にスクロールすると、後のタイミングのステップを確認できます。ステップは最大 <span th:text="${maxSteps}">20</span> 件まで登録できます。
+    </p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <!-- 左2/3: 既存ステップ（縦スクロール） -->
+        <div class="lg:col-span-2 bg-white rounded-lg shadow-sm border border-slate-100 p-4">
+            <h2 class="text-sm font-semibold text-slate-700 mb-3">登録済みステップ（<span th:text="${steps.size()}"></span> / <span th:text="${maxSteps}"></span>）</h2>
+
+            <div th:if="${steps == null or steps.empty}" class="text-sm text-slate-400 text-center py-8">
+                まだステップがありません。右のフォームから最初のステップを追加してください。
+            </div>
+
+            <div class="steps-scroll" th:if="${steps != null and !steps.empty}">
+                <div class="step-card" th:each="s, iter : ${steps}">
+                    <div class="flex items-start gap-3">
+                        <span class="step-badge" th:text="${iter.index + 1}"></span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs text-slate-500 mb-1">
+                                <span th:if="${s.offsetMode == 'MINUTES'}" th:text="'セットから ' + ${s.offsetMinutes} + ' 分後'"></span>
+                                <span th:if="${s.offsetMode == 'DAYS'}" th:text="'セットから ' + ${s.offsetDays} + ' 日後 ' + ${s.offsetClockTime}"></span>
+                                &nbsp;·&nbsp;
+                                <span th:if="${s.stepType == 'MESSAGE'}" th:text="'送信 (' + ${s.channel} + ')'" class="font-semibold text-blue-700"></span>
+                                <span th:if="${s.stepType == 'HTML_SWITCH'}" th:text="'ユーザーHTML切替 → スロット' + ${s.memoSlot}" class="font-semibold text-amber-700"></span>
+                            </div>
+                            <div th:if="${s.stepType == 'MESSAGE'}" class="text-sm text-slate-700">
+                                <div th:if="${s.channel == 'EMAIL' and s.subject != null and !s.subject.isEmpty()}" class="font-semibold" th:text="${s.subject}"></div>
+                                <div class="whitespace-pre-wrap text-xs text-slate-600" th:text="${s.body}"></div>
+                            </div>
+                        </div>
+                        <div class="flex gap-1 shrink-0">
+                            <button type="button" class="px-2 py-1 text-xs bg-slate-50 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded"
+                                    th:attr="onclick=|toggleEdit(${s.id})|">編集</button>
+                            <form method="post" th:action="@{'/manager/settings/diff-schedule/steps/' + ${s.id} + '/delete'}"
+                                  onsubmit="return confirm('このステップを削除します。よろしいですか?');">
+                                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                                <input type="hidden" name="diffDefinitionId" th:value="${definition.id}"/>
+                                <button type="submit" class="px-2 py-1 text-xs bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 rounded">削除</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- インライン編集フォーム（通常は非表示） -->
+                    <div th:id="'editBox' + ${s.id}" style="display:none;" class="mt-3 pt-3 border-t border-slate-100">
+                        <form method="post" th:action="@{'/manager/settings/diff-schedule/steps/' + ${s.id}}" th:id="'editForm' + ${s.id}">
+                            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                            <input type="hidden" name="diffDefinitionId" th:value="${definition.id}"/>
+
+                            <div class="flex gap-4 mb-2 text-xs">
+                                <label><input type="radio" th:name="'offsetModeRadio' + ${s.id}" value="MINUTES"
+                                              th:checked="${s.offsetMode == 'MINUTES'}"
+                                              th:attr="onchange=|switchOffsetPanel(${s.id}, 'MINUTES')|"/> 当日(分後)</label>
+                                <label><input type="radio" th:name="'offsetModeRadio' + ${s.id}" value="DAYS"
+                                              th:checked="${s.offsetMode == 'DAYS'}"
+                                              th:attr="onchange=|switchOffsetPanel(${s.id}, 'DAYS')|"/> 翌日以降(日数+時刻)</label>
+                            </div>
+                            <input type="hidden" name="offsetMode" th:id="'offsetMode' + ${s.id}" th:value="${s.offsetMode}"/>
+
+                            <div th:id="'offsetPanelMINUTES' + ${s.id}" th:class="${s.offsetMode == 'MINUTES'} ? 'offset-panel active' : 'offset-panel'" class="mb-2">
+                                <input type="number" name="offsetMinutes" min="1" class="tw-input" style="width:100px;" th:value="${s.offsetMinutes}"/> 分後
+                            </div>
+                            <div th:id="'offsetPanelDAYS' + ${s.id}" th:class="${s.offsetMode == 'DAYS'} ? 'offset-panel active' : 'offset-panel'" class="mb-2 flex items-center gap-2">
+                                <input type="number" name="offsetDays" min="1" class="tw-input" style="width:80px;" th:value="${s.offsetDays}"/> 日後
+                                <input type="time" name="offsetClockTime" class="tw-input" style="width:120px;" th:value="${s.offsetClockTime}"/>
+                            </div>
+
+                            <div class="flex gap-4 mb-2 text-xs">
+                                <label><input type="radio" th:name="'stepTypeRadio' + ${s.id}" value="MESSAGE"
+                                              th:checked="${s.stepType == 'MESSAGE'}"
+                                              th:attr="onchange=|switchTypePanel(${s.id}, 'MESSAGE')|"/> 送信</label>
+                                <label><input type="radio" th:name="'stepTypeRadio' + ${s.id}" value="HTML_SWITCH"
+                                              th:checked="${s.stepType == 'HTML_SWITCH'}"
+                                              th:attr="onchange=|switchTypePanel(${s.id}, 'HTML_SWITCH')|"/> ユーザーHTML切替</label>
+                            </div>
+                            <input type="hidden" name="stepType" th:id="'stepType' + ${s.id}" th:value="${s.stepType}"/>
+
+                            <div th:id="'typePanelMESSAGE' + ${s.id}" th:class="${s.stepType == 'MESSAGE'} ? 'type-panel active' : 'type-panel'" class="mb-2">
+                                <div class="flex gap-4 mb-2 text-xs">
+                                    <label><input type="radio" name="channel" value="EMAIL" th:checked="${s.channel == 'EMAIL'}"
+                                                  th:attr="onchange=|switchChannelPanel(${s.id}, 'EMAIL')|"/> メール</label>
+                                    <label><input type="radio" name="channel" value="SMS" th:checked="${s.channel == 'SMS'}"
+                                                  th:attr="onchange=|switchChannelPanel(${s.id}, 'SMS')|"/> SMS</label>
+                                </div>
+                                <div th:id="'subjectBox' + ${s.id}" class="mb-2" th:style="${s.channel == 'EMAIL'} ? '' : 'display:none;'">
+                                    <input type="text" name="subject" placeholder="件名" maxlength="500" class="tw-input" th:value="${s.subject}"/>
+                                </div>
+                                <textarea name="body" rows="4" placeholder="本文" class="tw-input" th:id="'body' + ${s.id}" th:text="${s.body}"></textarea>
+                                <div class="tag-panel mt-1">
+                                    <div class="tag-row" th:each="t : ${builtinTags}">
+                                        <code class="tag-name" th:text="${t.token}" th:attr="data-token=${t.token},onclick=|insertTag(${s.id}, '${t.token}')|"></code>
+                                        <span class="tag-desc" th:text="${t.description}"></span>
+                                    </div>
+                                    <div class="tag-row">
+                                        <code class="tag-name" th:attr="onclick=|insertTag(${s.id}, '%reply_url%')|">%reply_url%</code>
+                                        <span class="tag-desc">返信URL（送信時に自動生成）</span>
+                                    </div>
+                                    <div class="tag-row">
+                                        <code class="tag-name" th:attr="onclick=|insertTag(${s.id}, '%amount%')|">%amount%</code>
+                                        <span class="tag-desc">ユーザー専用タグ（ユーザー詳細で保存・編集）</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div th:id="'typePanelHTML_SWITCH' + ${s.id}" th:class="${s.stepType == 'HTML_SWITCH'} ? 'type-panel active' : 'type-panel'" class="mb-2">
+                                <label class="text-xs text-slate-500">切替先スロット</label>
+                                <select name="memoSlot" class="tw-input">
+                                    <option th:each="i : ${#numbers.sequence(1, 10)}" th:value="${i}"
+                                            th:text="'スロット' + ${i}" th:selected="${i == s.memoSlot}"></option>
+                                </select>
+                            </div>
+
+                            <div class="flex gap-2">
+                                <button type="submit" class="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded">保存</button>
+                                <button type="button" class="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 hover:bg-slate-200 rounded"
+                                        th:attr="onclick=|toggleEdit(${s.id})|">キャンセル</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右1/3: 新規ステップ追加 -->
+        <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4" th:if="${steps.size() < maxSteps}">
+            <h2 class="text-sm font-semibold text-slate-700 mb-3">ステップを追加</h2>
+            <form method="post" th:action="@{'/manager/settings/diff-schedule/definitions/' + ${definition.id} + '/steps'}">
+                <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+
+                <div class="flex gap-4 mb-2 text-xs">
+                    <label><input type="radio" name="offsetModeRadio" value="MINUTES" checked onchange="switchOffsetPanel('new', 'MINUTES')"/> 当日(分後)</label>
+                    <label><input type="radio" name="offsetModeRadio" value="DAYS" onchange="switchOffsetPanel('new', 'DAYS')"/> 翌日以降(日数+時刻)</label>
+                </div>
+                <input type="hidden" name="offsetMode" id="offsetModenew" value="MINUTES"/>
+
+                <div id="offsetPanelMINUTESnew" class="offset-panel active mb-2">
+                    <input type="number" name="offsetMinutes" min="1" value="1" class="tw-input" style="width:100px;"/> 分後
+                </div>
+                <div id="offsetPanelDAYSnew" class="offset-panel mb-2 flex items-center gap-2">
+                    <input type="number" name="offsetDays" min="1" value="1" class="tw-input" style="width:80px;"/> 日後
+                    <input type="time" name="offsetClockTime" value="09:00" class="tw-input" style="width:120px;"/>
+                </div>
+
+                <div class="flex gap-4 mb-2 text-xs">
+                    <label><input type="radio" name="stepTypeRadio" value="MESSAGE" checked onchange="switchTypePanel('new', 'MESSAGE')"/> 送信</label>
+                    <label><input type="radio" name="stepTypeRadio" value="HTML_SWITCH" onchange="switchTypePanel('new', 'HTML_SWITCH')"/> ユーザーHTML切替</label>
+                </div>
+                <input type="hidden" name="stepType" id="stepTypenew" value="MESSAGE"/>
+
+                <div id="typePanelMESSAGEnew" class="type-panel active mb-2">
+                    <div class="flex gap-4 mb-2 text-xs">
+                        <label><input type="radio" name="channel" value="EMAIL" checked onchange="switchChannelPanel('new', 'EMAIL')"/> メール</label>
+                        <label><input type="radio" name="channel" value="SMS" onchange="switchChannelPanel('new', 'SMS')"/> SMS</label>
+                    </div>
+                    <div id="subjectBoxnew" class="mb-2">
+                        <input type="text" name="subject" placeholder="件名" maxlength="500" class="tw-input"/>
+                    </div>
+                    <textarea name="body" rows="4" placeholder="本文" class="tw-input" id="bodynew"></textarea>
+                    <div class="tag-panel mt-1">
+                        <div class="tag-row" th:each="t : ${builtinTags}">
+                            <code class="tag-name" th:text="${t.token}" th:attr="onclick=|insertTag('new', '${t.token}')|"></code>
+                            <span class="tag-desc" th:text="${t.description}"></span>
+                        </div>
+                        <div class="tag-row">
+                            <code class="tag-name" onclick="insertTag('new', '%reply_url%')">%reply_url%</code>
+                            <span class="tag-desc">返信URL（送信時に自動生成）</span>
+                        </div>
+                        <div class="tag-row">
+                            <code class="tag-name" onclick="insertTag('new', '%amount%')">%amount%</code>
+                            <span class="tag-desc">ユーザー専用タグ（ユーザー詳細で保存・編集）</span>
+                        </div>
+                    </div>
+                </div>
+                <div id="typePanelHTML_SWITCHnew" class="type-panel mb-2">
+                    <label class="text-xs text-slate-500">切替先スロット</label>
+                    <select name="memoSlot" class="tw-input">
+                        <option th:each="i : ${#numbers.sequence(1, 10)}" th:value="${i}" th:text="'スロット' + ${i}"></option>
+                    </select>
+                </div>
+
+                <button type="submit" class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded">ステップを追加</button>
+            </form>
+        </div>
+        <div th:if="${steps.size() >= maxSteps}" class="text-xs text-amber-700 p-4">
+            既に最大件数まで登録されています。新しく追加するには、不要なステップを削除してください。
+        </div>
+    </div>
+
+    <script>
+        function toggleEdit(id) {
+            var box = document.getElementById('editBox' + id);
+            if (box) box.style.display = (box.style.display === 'none' || !box.style.display) ? 'block' : 'none';
+        }
+        function switchOffsetPanel(id, mode) {
+            var field = document.getElementById('offsetMode' + id);
+            if (field) field.value = mode;
+            ['MINUTES', 'DAYS'].forEach(function (m) {
+                var p = document.getElementById('offsetPanel' + m + id);
+                if (p) p.classList.toggle('active', m === mode);
+            });
+        }
+        function switchTypePanel(id, type) {
+            var field = document.getElementById('stepType' + id);
+            if (field) field.value = type;
+            ['MESSAGE', 'HTML_SWITCH'].forEach(function (t) {
+                var p = document.getElementById('typePanel' + t + id);
+                if (p) p.classList.toggle('active', t === type);
+            });
+        }
+        function switchChannelPanel(id, channel) {
+            var box = document.getElementById('subjectBox' + id);
+            if (box) box.style.display = (channel === 'EMAIL') ? 'block' : 'none';
+        }
+        function insertTag(id, token) {
+            var ta = document.getElementById('body' + id);
+            if (!ta) return;
+            var pos = ta.selectionStart || ta.value.length;
+            ta.value = ta.value.slice(0, pos) + token + ta.value.slice(ta.selectionEnd || pos);
+            ta.focus();
+            ta.selectionStart = ta.selectionEnd = pos + token.length;
+        }
+    </script>
+</section>
+</body>
+</html>

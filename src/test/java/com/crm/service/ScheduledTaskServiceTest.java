@@ -40,7 +40,7 @@ class ScheduledTaskServiceTest {
     private DomainSettingService domainSettings;
     private BroadcastRepository broadcastRepo;
     private SmsSettingService smsSettingService;
-    private com.crm.repository.DiffScheduleRepository diffScheduleRepo;
+    private com.crm.repository.DiffScheduleStepRepository diffScheduleStepRepo;
     private DiffScheduleService diffScheduleService;
     private ScheduledTaskService svc;
 
@@ -67,12 +67,12 @@ class ScheduledTaskServiceTest {
         smsSettingService = mock(SmsSettingService.class);
         when(smsSettingService.getRatePerMinute()).thenReturn(600); // fast in tests: 100ms/msg
         FolderAutoMoveService folderAutoMoveService = mock(FolderAutoMoveService.class);
-        diffScheduleRepo = mock(com.crm.repository.DiffScheduleRepository.class);
+        diffScheduleStepRepo = mock(com.crm.repository.DiffScheduleStepRepository.class);
         diffScheduleService = mock(DiffScheduleService.class);
         svc = new ScheduledTaskService(msgRepo, poolRepo, messageService,
                 settingRepo, bindingRepo, domainSettings, broadcastRepo,
                 folderSettings, folderRetention, inboundLogRepo, inboundMail, userAccessLogRepo,
-                smsSettingService, folderAutoMoveService, diffScheduleRepo, diffScheduleService);
+                smsSettingService, folderAutoMoveService, diffScheduleStepRepo, diffScheduleService);
     }
 
     private static Message scheduledBroadcastRow(Long id, Long userId, Long broadcastId,
@@ -212,29 +212,26 @@ class ScheduledTaskServiceTest {
 
     // ---- Diff-schedule dispatcher ----
 
-    private static com.crm.entity.DiffSchedule diffSchedule(Long id, String status) {
-        com.crm.entity.DiffSchedule s = new com.crm.entity.DiffSchedule();
+    private static com.crm.entity.DiffScheduleStep diffScheduleStep(Long id, String status) {
+        com.crm.entity.DiffScheduleStep s = new com.crm.entity.DiffScheduleStep();
         s.setId(id);
         s.setStatus(status);
-        s.setDiffDefinitionId(1L);
-        s.setDiffNameSnapshot("test-diff");
+        s.setDiffScheduleId(1L);
+        s.setStepOrder(0);
+        s.setStepType(com.crm.entity.DiffStep.STEP_HTML_SWITCH);
         s.setMemoSlotSnapshot(2);
-        s.setTargetType(com.crm.entity.DiffSchedule.TARGET_FOLDER);
-        s.setTargetValue("F");
-        s.setTargetUserIds("1,2,3");
-        s.setOffsetMode(com.crm.entity.DiffSchedule.OFFSET_MINUTES);
+        s.setOffsetMode(com.crm.entity.DiffStep.OFFSET_MINUTES);
         s.setOffsetMinutes(1);
-        s.setSetAt(LocalDateTime.now().minusMinutes(2));
         s.setScheduledFor(LocalDateTime.now().minusMinutes(1));
         return s;
     }
 
     @Test
     void dispatchDueDiffSchedules_executesDueRow() {
-        com.crm.entity.DiffSchedule s = diffSchedule(10L, com.crm.entity.DiffSchedule.STATUS_PENDING);
-        when(diffScheduleRepo.findDueForExecution(eq(com.crm.entity.DiffSchedule.STATUS_PENDING), any()))
+        com.crm.entity.DiffScheduleStep s = diffScheduleStep(10L, com.crm.entity.DiffScheduleStep.STATUS_PENDING);
+        when(diffScheduleStepRepo.findDueForExecution(eq(com.crm.entity.DiffScheduleStep.STATUS_PENDING), any()))
                 .thenReturn(Collections.singletonList(s));
-        when(diffScheduleRepo.findById(10L)).thenReturn(Optional.of(s));
+        when(diffScheduleStepRepo.findById(10L)).thenReturn(Optional.of(s));
 
         svc.dispatchDueDiffSchedules();
 
@@ -246,11 +243,11 @@ class ScheduledTaskServiceTest {
         // The initial findDueForExecution() snapshot says PENDING, but by the time this tick
         // re-fetches the row (immediately before executing) an operator has cancelled it —
         // execute() must never be called on an already-CANCELLED row.
-        com.crm.entity.DiffSchedule stale = diffSchedule(11L, com.crm.entity.DiffSchedule.STATUS_PENDING);
-        com.crm.entity.DiffSchedule fresh = diffSchedule(11L, com.crm.entity.DiffSchedule.STATUS_CANCELLED);
-        when(diffScheduleRepo.findDueForExecution(eq(com.crm.entity.DiffSchedule.STATUS_PENDING), any()))
+        com.crm.entity.DiffScheduleStep stale = diffScheduleStep(11L, com.crm.entity.DiffScheduleStep.STATUS_PENDING);
+        com.crm.entity.DiffScheduleStep fresh = diffScheduleStep(11L, com.crm.entity.DiffScheduleStep.STATUS_CANCELLED);
+        when(diffScheduleStepRepo.findDueForExecution(eq(com.crm.entity.DiffScheduleStep.STATUS_PENDING), any()))
                 .thenReturn(Collections.singletonList(stale));
-        when(diffScheduleRepo.findById(11L)).thenReturn(Optional.of(fresh));
+        when(diffScheduleStepRepo.findById(11L)).thenReturn(Optional.of(fresh));
 
         svc.dispatchDueDiffSchedules();
 
@@ -259,12 +256,12 @@ class ScheduledTaskServiceTest {
 
     @Test
     void dispatchDueDiffSchedules_continuesAfterOneRowThrows() {
-        com.crm.entity.DiffSchedule s1 = diffSchedule(12L, com.crm.entity.DiffSchedule.STATUS_PENDING);
-        com.crm.entity.DiffSchedule s2 = diffSchedule(13L, com.crm.entity.DiffSchedule.STATUS_PENDING);
-        when(diffScheduleRepo.findDueForExecution(eq(com.crm.entity.DiffSchedule.STATUS_PENDING), any()))
+        com.crm.entity.DiffScheduleStep s1 = diffScheduleStep(12L, com.crm.entity.DiffScheduleStep.STATUS_PENDING);
+        com.crm.entity.DiffScheduleStep s2 = diffScheduleStep(13L, com.crm.entity.DiffScheduleStep.STATUS_PENDING);
+        when(diffScheduleStepRepo.findDueForExecution(eq(com.crm.entity.DiffScheduleStep.STATUS_PENDING), any()))
                 .thenReturn(java.util.Arrays.asList(s1, s2));
-        when(diffScheduleRepo.findById(12L)).thenReturn(Optional.of(s1));
-        when(diffScheduleRepo.findById(13L)).thenReturn(Optional.of(s2));
+        when(diffScheduleStepRepo.findById(12L)).thenReturn(Optional.of(s1));
+        when(diffScheduleStepRepo.findById(13L)).thenReturn(Optional.of(s2));
         org.mockito.Mockito.doThrow(new RuntimeException("boom")).when(diffScheduleService).execute(s1);
 
         svc.dispatchDueDiffSchedules();

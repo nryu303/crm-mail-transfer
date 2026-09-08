@@ -5,8 +5,6 @@
 <head>
     <title>差分スケジュール設定</title>
     <style>
-        .mode-panel { display: none; }
-        .mode-panel.active { display: block; }
         .target-panel { display: none; }
         .target-panel.active { display: block; }
     </style>
@@ -20,22 +18,25 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings}">設定に戻る</a>
     </div>
 
+    <div th:if="${flashSuccess}" class="bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4 text-sm text-emerald-800" th:text="${flashSuccess}"></div>
+    <div th:if="${flashError}" class="bg-rose-50 border border-rose-300 rounded-lg p-3 mb-4 text-sm text-rose-800" th:text="${flashError}"></div>
+
     <div th:if="${definitions == null or definitions.empty}" class="bg-amber-50 border border-amber-300 rounded-lg p-4 mb-4 text-sm text-amber-800">
-        まだ差分定義が登録されていません。先に<a class="underline font-semibold" th:href="@{/manager/settings/diff-schedule/definitions}">差分定義を管理</a>から登録してください。
+        まだ差分定義が登録されていません。先に<a class="underline font-semibold" th:href="@{/manager/settings/diff-schedule/definitions}">差分定義を管理</a>から差分名とステップを登録してください。
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <!-- 左: 登録フォーム -->
         <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6">
             <h2 class="text-base font-semibold text-slate-800 mb-4">差分スケジュールをセット</h2>
+            <p class="text-xs text-slate-500 mb-4">差分名を選ぶと、その差分に登録済みの全ステップ（複数のタイミング・送信・HTML切替）が対象ユーザーに一括セットされます。</p>
             <form method="post" th:action="@{/manager/settings/diff-schedule/register}">
                 <input type="hidden" name="_csrf" th:value="${_csrf}"/>
 
                 <div class="mb-4">
                     <label class="block text-sm font-medium text-slate-700 mb-1">差分名</label>
                     <select name="diffDefinitionId" class="tw-input" required>
-                        <option th:each="d : ${definitions}" th:value="${d.id}"
-                                th:text="${d.name} + ' (スロット' + ${d.memoSlot} + ')'"></option>
+                        <option th:each="d : ${definitions}" th:value="${d.id}" th:text="${d.name}"></option>
                     </select>
                 </div>
 
@@ -63,32 +64,6 @@
                     <input type="hidden" name="targetRaw" id="targetRawField"/>
                 </div>
 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-slate-700 mb-2">配信スケジュール</label>
-                    <div class="flex gap-4 mb-2 text-sm">
-                        <label><input type="radio" name="offsetModeRadio" value="MINUTES" onchange="switchModePanel('MINUTES')" checked/> 当日 (分後)</label>
-                        <label><input type="radio" name="offsetModeRadio" value="DAYS" onchange="switchModePanel('DAYS')"/> 翌日以降 (日数+時刻)</label>
-                    </div>
-                    <input type="hidden" name="offsetMode" id="offsetModeField" value="MINUTES"/>
-
-                    <div class="mode-panel active" data-panel="MINUTES">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-slate-500">セットから</span>
-                            <input type="number" name="offsetMinutes" min="1" value="1" class="tw-input" style="width:80px;"/>
-                            <span class="text-xs text-slate-500">分後に配信</span>
-                        </div>
-                    </div>
-                    <div class="mode-panel" data-panel="DAYS">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs text-slate-500">セットから</span>
-                            <input type="number" name="offsetDays" min="1" value="1" class="tw-input" style="width:80px;"/>
-                            <span class="text-xs text-slate-500">日後の</span>
-                            <input type="time" name="offsetClockTime" value="09:00" class="tw-input" style="width:120px;"/>
-                            <span class="text-xs text-slate-500">に配信</span>
-                        </div>
-                    </div>
-                </div>
-
                 <button type="submit" class="inline-flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-md"
                         onclick="return prepareSubmit();">セット</button>
             </form>
@@ -96,7 +71,7 @@
 
         <!-- 右: 保留中一覧 -->
         <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-6">
-            <h2 class="text-base font-semibold text-slate-800 mb-4">保留中の差分スケジュール</h2>
+            <h2 class="text-base font-semibold text-slate-800 mb-4">保留中の差分ステップ</h2>
 
             <div th:if="${pending == null or pending.empty}" class="text-sm text-slate-400 text-center py-6">
                 保留中のスケジュールはありません
@@ -109,24 +84,28 @@
                             <th class="px-2 py-2 text-left">差分名</th>
                             <th class="px-2 py-2 text-left">対象</th>
                             <th class="px-2 py-2 text-right">件数</th>
+                            <th class="px-2 py-2 text-left">ステップ</th>
                             <th class="px-2 py-2 text-left">実行予定</th>
                             <th class="px-2 py-2 text-right">取消</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        <tr th:each="s : ${pending}">
-                            <td class="px-2 py-1.5" th:text="${s.diffNameSnapshot}"></td>
-                            <td class="px-2 py-1.5 text-xs">
-                                <span th:if="${s.targetType == 'PHONE'}">番号</span>
-                                <span th:if="${s.targetType == 'EMAIL'}">アドレス</span>
-                                <span th:if="${s.targetType == 'FOLDER'}">フォルダ:</span>
-                                <span th:if="${s.targetType == 'FOLDER'}" th:text="${s.targetValue}"></span>
+                        <tr th:each="s : ${pending}" th:with="sched=${schedulesById.get(s.diffScheduleId)}">
+                            <td class="px-2 py-1.5" th:text="${sched != null ? sched.diffNameSnapshot : '-'}"></td>
+                            <td class="px-2 py-1.5 text-xs" th:if="${sched != null}">
+                                <span th:if="${sched.targetType == 'PHONE'}">番号</span>
+                                <span th:if="${sched.targetType == 'EMAIL'}">アドレス</span>
+                                <span th:if="${sched.targetType == 'FOLDER'}" th:text="'フォルダ:' + ${sched.targetValue}"></span>
                             </td>
-                            <td class="px-2 py-1.5 text-right font-mono" th:text="${#strings.arraySplit(s.targetUserIds, ',').length}"></td>
+                            <td class="px-2 py-1.5 text-right font-mono" th:text="${sched != null ? #strings.arraySplit(sched.targetUserIds, ',').length : '-'}"></td>
+                            <td class="px-2 py-1.5 text-xs">
+                                <span th:if="${s.stepType == 'MESSAGE'}" th:text="'送信(' + ${s.channel} + ')'"></span>
+                                <span th:if="${s.stepType == 'HTML_SWITCH'}" th:text="'HTML切替→スロット' + ${s.memoSlotSnapshot}"></span>
+                            </td>
                             <td class="px-2 py-1.5 text-xs" th:text="${#temporals.format(s.scheduledFor, 'MM-dd HH:mm')}"></td>
                             <td class="px-2 py-1.5 text-right">
-                                <form method="post" th:action="@{'/manager/settings/diff-schedule/' + ${s.id} + '/cancel'}"
-                                      onsubmit="return confirm('この差分スケジュールを取消します。よろしいですか?');">
+                                <form method="post" th:action="@{'/manager/settings/diff-schedule/steps/' + ${s.id} + '/cancel'}"
+                                      onsubmit="return confirm('このステップを取消します。よろしいですか?');">
                                     <input type="hidden" name="_csrf" th:value="${_csrf}"/>
                                     <button type="submit" class="px-2 py-1 text-xs bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 rounded">取消</button>
                                 </form>
@@ -138,10 +117,10 @@
 
             <!-- 条件で一括取消 -->
             <div class="mt-4 pt-4 border-t border-slate-100">
-                <h3 class="text-xs font-semibold text-slate-600 mb-2">条件で一括取消</h3>
+                <h3 class="text-xs font-semibold text-slate-600 mb-2">条件で一括取消（残りステップすべて）</h3>
                 <form method="post" th:action="@{/manager/settings/diff-schedule/cancel-by-target}"
                       class="flex items-end gap-2 flex-wrap"
-                      onsubmit="return confirm('条件に一致する保留中の差分スケジュールをすべて取消します。よろしいですか?');">
+                      onsubmit="return confirm('条件に一致する保留中のステップをすべて取消します。よろしいですか?');">
                     <input type="hidden" name="_csrf" th:value="${_csrf}"/>
                     <div>
                         <label class="block text-xs text-slate-500 mb-1">フォルダ</label>
@@ -155,7 +134,7 @@
                 </form>
                 <form method="post" th:action="@{/manager/settings/diff-schedule/cancel-by-target}"
                       class="flex items-end gap-2 flex-wrap mt-2"
-                      onsubmit="return confirm('条件に一致する保留中の差分スケジュールをすべて取消します。よろしいですか?');">
+                      onsubmit="return confirm('条件に一致する保留中のステップをすべて取消します。よろしいですか?');">
                     <input type="hidden" name="_csrf" th:value="${_csrf}"/>
                     <div>
                         <label class="block text-xs text-slate-500 mb-1">差分名</label>
@@ -175,12 +154,6 @@
             document.getElementById('targetTypeField').value = type;
             document.querySelectorAll('.target-panel').forEach(function (p) {
                 p.classList.toggle('active', p.getAttribute('data-panel') === type);
-            });
-        }
-        function switchModePanel(mode) {
-            document.getElementById('offsetModeField').value = mode;
-            document.querySelectorAll('.mode-panel').forEach(function (p) {
-                p.classList.toggle('active', p.getAttribute('data-panel') === mode);
             });
         }
         function prepareSubmit() {

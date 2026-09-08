@@ -1,12 +1,17 @@
 package com.crm.service;
 
+import com.crm.dto.BroadcastForm;
 import com.crm.dto.UserSearchForm;
 import com.crm.entity.CrmUser;
 import com.crm.entity.DiffDefinition;
 import com.crm.entity.DiffSchedule;
+import com.crm.entity.DiffScheduleStep;
+import com.crm.entity.DiffStep;
 import com.crm.repository.CrmUserRepository;
 import com.crm.repository.DiffDefinitionRepository;
 import com.crm.repository.DiffScheduleRepository;
+import com.crm.repository.DiffScheduleStepRepository;
+import com.crm.repository.DiffStepRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -22,8 +27,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Registers, dispatches, cancels, and reports on diff schedules — "apply DIFF_DEFINITION X
- * (a reply-page memo slot switch) to target Y (phone/email list or folder) at time Z".
+ * Registers, dispatches, cancels, and reports on diff schedules. Registering a schedule
+ * materialises one {@link DiffScheduleStep} per {@link DiffStep} in the chosen
+ * {@link DiffDefinition}'s timeline, each independently scheduled/executed/cancellable —
+ * "apply diff X's whole timeline to target Y, set at time Z".
  */
 @Service
 public class DiffScheduleService {
@@ -31,56 +38,81 @@ public class DiffScheduleService {
     private static final Logger log = LoggerFactory.getLogger(DiffScheduleService.class);
 
     private final DiffScheduleRepository scheduleRepository;
+    private final DiffScheduleStepRepository scheduleStepRepository;
     private final DiffDefinitionRepository definitionRepository;
+    private final DiffStepRepository stepRepository;
     private final CrmUserService crmUserService;
     private final CrmUserRepository userRepository;
+    private final BroadcastService broadcastService;
     private final AuditLogService auditLog;
 
     public DiffScheduleService(DiffScheduleRepository scheduleRepository,
+                                DiffScheduleStepRepository scheduleStepRepository,
                                 DiffDefinitionRepository definitionRepository,
+                                DiffStepRepository stepRepository,
                                 CrmUserService crmUserService,
                                 CrmUserRepository userRepository,
+                                BroadcastService broadcastService,
                                 AuditLogService auditLog) {
         this.scheduleRepository = scheduleRepository;
+        this.scheduleStepRepository = scheduleStepRepository;
         this.definitionRepository = definitionRepository;
+        this.stepRepository = stepRepository;
         this.crmUserService = crmUserService;
         this.userRepository = userRepository;
+        this.broadcastService = broadcastService;
         this.auditLog = auditLog;
     }
 
-    /** Register a new pending schedule. Resolves + freezes the target user-ID list now. */
+    /** Register a new schedule: resolves + freezes the target list, then materialises one
+     *  DiffScheduleStep per DiffStep in the definition's timeline. */
     @Transactional
     public DiffSchedule register(Long diffDefinitionId, String targetType, String targetRaw,
-                                  String offsetMode, Integer offsetMinutes,
-                                  Integer offsetDays, String offsetClockTime,
-                                  String setByAdminName) {
+                                  Long setByAdminId, String setByAdminName) {
         DiffDefinition def = definitionRepository.findById(diffDefinitionId)
                 .orElseThrow(() -> new NotFoundException("diff definition not found: " + diffDefinitionId));
+        List<DiffStep> steps = stepRepository.findByDiffDefinitionIdOrderByStepOrderAsc(diffDefinitionId);
+        if (steps.isEmpty()) {
+            throw new IllegalArgumentException("この差分にはステップが登録されていません。先に差分定義編集画面でステップを追加してください。");
+        }
 
         List<Long> ids = resolveTargetIds(targetType, targetRaw);
 
         LocalDateTime setAt = LocalDateTime.now();
-        LocalDateTime scheduledFor = computeScheduledFor(setAt, offsetMode, offsetMinutes, offsetDays, offsetClockTime);
 
         DiffSchedule s = new DiffSchedule();
         s.setDiffDefinitionId(def.getId());
         s.setDiffNameSnapshot(def.getName());
-        s.setMemoSlotSnapshot(def.getMemoSlot());
         s.setTargetType(targetType);
         s.setTargetValue(targetRaw);
         s.setTargetUserIds(ids.stream().map(String::valueOf).collect(Collectors.joining(",")));
-        s.setOffsetMode(offsetMode);
-        s.setOffsetMinutes(offsetMinutes);
-        s.setOffsetDays(offsetDays);
-        s.setOffsetClockTime(offsetClockTime);
         s.setSetAt(setAt);
-        s.setScheduledFor(scheduledFor);
-        s.setStatus(DiffSchedule.STATUS_PENDING);
+        s.setSetByAdminId(setByAdminId);
         s.setSetByAdminName(setByAdminName);
         DiffSchedule saved = scheduleRepository.save(s);
+
+        for (DiffStep step : steps) {
+            DiffScheduleStep ss = new DiffScheduleStep();
+            ss.setDiffScheduleId(saved.getId());
+            ss.setStepOrder(step.getStepOrder());
+            ss.setOffsetMode(step.getOffsetMode());
+            ss.setOffsetMinutes(step.getOffsetMinutes());
+            ss.setOffsetDays(step.getOffsetDays());
+            ss.setOffsetClockTime(step.getOffsetClockTime());
+            ss.setScheduledFor(computeScheduledFor(setAt, step.getOffsetMode(),
+                    step.getOffsetMinutes(), step.getOffsetDays(), step.getOffsetClockTime()));
+            ss.setStepType(step.getStepType());
+            ss.setChannel(step.getChannel());
+            ss.setSubjectSnapshot(step.getSubject());
+            ss.setBodySnapshot(step.getBody());
+            ss.setMemoSlotSnapshot(step.getMemoSlot());
+            ss.setStatus(DiffScheduleStep.STATUS_PENDING);
+            scheduleStepRepository.save(ss);
+        }
+
         auditLog.record(AuditLogService.ACTION_DIFF_SCHEDULE_CREATE, "DiffSchedule", saved.getId(),
                 "diff=" + def.getName() + " target=" + targetType + ":" + targetRaw
-                        + " targets=" + ids.size() + " scheduledFor=" + scheduledFor);
+                        + " targets=" + ids.size() + " steps=" + steps.size());
         return saved;
     }
 
@@ -100,85 +132,144 @@ public class DiffScheduleService {
 
     /**
      * 当日(分後): setAt + N minutes. 翌日以降(日数+時刻): setAt's calendar date + N days, at
-     * the operator-specified clock time (HH:mm). Both are relative to SET_AT.
+     * the operator-specified clock time (HH:mm). Both relative to SET_AT, never chained off
+     * a previous step, so re-ordering steps never shifts other steps' fire times.
      */
     static LocalDateTime computeScheduledFor(LocalDateTime setAt, String mode,
                                               Integer minutes, Integer days, String clockTime) {
-        if (DiffSchedule.OFFSET_MINUTES.equals(mode)) {
+        if (DiffStep.OFFSET_MINUTES.equals(mode)) {
             if (minutes == null || minutes < 1) throw new IllegalArgumentException("分後の値は1以上で指定してください");
             return setAt.plusMinutes(minutes);
         }
-        if (DiffSchedule.OFFSET_DAYS.equals(mode)) {
+        if (DiffStep.OFFSET_DAYS.equals(mode)) {
             if (days == null || days < 1) throw new IllegalArgumentException("日数は1以上で指定してください");
-            if (clockTime == null || clockTime.trim().isEmpty()) throw new IllegalArgumentException("送信時刻を指定してください");
             LocalTime t = LocalTime.parse(clockTime);
             return setAt.toLocalDate().plusDays(days).atTime(t);
         }
         throw new IllegalArgumentException("unknown offset mode: " + mode);
     }
 
-    public List<DiffSchedule> listPending() {
-        return scheduleRepository.findByStatusOrderByScheduledForAsc(DiffSchedule.STATUS_PENDING);
+    public List<DiffScheduleStep> listPendingSteps() {
+        return scheduleStepRepository.findAllPending();
     }
 
-    public Page<DiffSchedule> searchHistory(String status, String targetType, Long definitionId, Pageable pageable) {
-        return scheduleRepository.search(status, targetType, definitionId, pageable);
+    public java.util.Optional<DiffSchedule> findScheduleById(Long id) {
+        return scheduleRepository.findById(id);
     }
 
-    /** Cancel a single pending schedule. Re-fetches immediately before mutating so a schedule
-     *  that fired between the pending-list render and this click is correctly left alone. */
+    public Page<DiffScheduleStep> searchHistory(String status, String targetType, Long definitionId, Pageable pageable) {
+        return scheduleStepRepository.search(status, targetType, definitionId, pageable);
+    }
+
+    /** Cancel a single pending step. Re-fetches immediately before mutating so a step that
+     *  fired between the pending-list render and this click is correctly left alone. */
     @Transactional
-    public boolean cancel(Long scheduleId, String cancelledByAdminName) {
-        DiffSchedule s = scheduleRepository.findById(scheduleId).orElse(null);
-        if (s == null || !DiffSchedule.STATUS_PENDING.equals(s.getStatus())) return false;
-        s.setStatus(DiffSchedule.STATUS_CANCELLED);
+    public boolean cancelStep(Long stepId, String cancelledByAdminName) {
+        DiffScheduleStep s = scheduleStepRepository.findById(stepId).orElse(null);
+        if (s == null || !DiffScheduleStep.STATUS_PENDING.equals(s.getStatus())) return false;
+        s.setStatus(DiffScheduleStep.STATUS_CANCELLED);
         s.setCancelledAt(LocalDateTime.now());
         s.setCancelledByAdminName(cancelledByAdminName);
-        scheduleRepository.save(s);
-        auditLog.record(AuditLogService.ACTION_DIFF_SCHEDULE_CANCEL, "DiffSchedule", s.getId(),
+        scheduleStepRepository.save(s);
+        auditLog.record(AuditLogService.ACTION_DIFF_SCHEDULE_CANCEL, "DiffScheduleStep", s.getId(),
                 "cancelled by " + cancelledByAdminName);
         return true;
     }
 
-    /** Bulk-cancel every PENDING schedule matching one dimension (target type+value, or diff
-     *  definition). Loops calling {@link #cancel} (re-checking each row) rather than a blind
-     *  bulk UPDATE, so any schedule that fires mid-operation is correctly skipped. */
+    /** Cancel every still-pending step under one schedule (a whole registered "campaign run"). */
     @Transactional
-    public int cancelByTarget(String targetType, String targetValue, Long diffDefinitionId, String cancelledByAdminName) {
-        List<DiffSchedule> candidates = (diffDefinitionId != null)
-                ? scheduleRepository.findByStatusAndDiffDefinitionId(DiffSchedule.STATUS_PENDING, diffDefinitionId)
-                : scheduleRepository.findByStatusAndTargetTypeAndTargetValue(DiffSchedule.STATUS_PENDING, targetType, targetValue);
+    public int cancelSchedule(Long scheduleId, String cancelledByAdminName) {
+        List<DiffScheduleStep> pending = scheduleStepRepository.findByStatusAndDiffScheduleId(
+                DiffScheduleStep.STATUS_PENDING, scheduleId);
         int n = 0;
-        for (DiffSchedule c : candidates) {
-            if (cancel(c.getId(), cancelledByAdminName)) n++;
+        for (DiffScheduleStep s : pending) {
+            if (cancelStep(s.getId(), cancelledByAdminName)) n++;
         }
         return n;
     }
 
-    /** Execute one due schedule: activate MEMO_SLOT_SNAPSHOT for every target user, chunked
-     *  500-at-a-time (mirrors ReplyHtmlSlotService.bulkApply's chunking). Only flips
-     *  activeMemoSlot — never touches the slot's HTML content. */
+    /** Bulk-cancel every PENDING step whose parent schedule matches one dimension (target
+     *  type+value, or diff definition). Loops calling {@link #cancelStep} (re-checking each
+     *  row) rather than a blind bulk UPDATE, so a step that fires mid-operation is skipped. */
     @Transactional
-    public void execute(DiffSchedule s) {
-        List<Long> ids = parseIds(s.getTargetUserIds());
+    public int cancelByTarget(String targetType, String targetValue, Long diffDefinitionId, String cancelledByAdminName) {
+        List<DiffScheduleStep> candidates = (diffDefinitionId != null)
+                ? scheduleStepRepository.findPendingByDiffDefinition(diffDefinitionId)
+                : scheduleStepRepository.findPendingByTarget(targetType, targetValue);
+        int n = 0;
+        for (DiffScheduleStep c : candidates) {
+            if (cancelStep(c.getId(), cancelledByAdminName)) n++;
+        }
+        return n;
+    }
+
+    /** Execute one due step: MESSAGE steps queue a real send via the same pipeline as 一斉送信
+     *  (placeholders/%reply_url% resolved per-recipient, delivered by the existing message
+     *  dispatcher); HTML_SWITCH steps flip activeMemoSlot for every target user, chunked
+     *  500-at-a-time like ReplyHtmlSlotService.bulkApply. */
+    @Transactional
+    public void execute(DiffScheduleStep step) {
+        DiffSchedule schedule = scheduleRepository.findById(step.getDiffScheduleId()).orElse(null);
+        if (schedule == null) {
+            step.setStatus(DiffScheduleStep.STATUS_FAILED);
+            step.setResultDetail("parent schedule not found");
+            scheduleStepRepository.save(step);
+            return;
+        }
+        List<Long> ids = parseIds(schedule.getTargetUserIds());
+
+        if (DiffStep.STEP_HTML_SWITCH.equals(step.getStepType())) {
+            executeHtmlSwitch(step, ids);
+        } else {
+            executeMessage(step, schedule, ids);
+        }
+    }
+
+    private void executeHtmlSwitch(DiffScheduleStep step, List<Long> ids) {
         int applied = 0;
         final int chunkSize = 500;
         for (int i = 0; i < ids.size(); i += chunkSize) {
             List<Long> chunk = ids.subList(i, Math.min(i + chunkSize, ids.size()));
             List<CrmUser> users = userRepository.findAllById(chunk);
             for (CrmUser u : users) {
-                u.setActiveMemoSlot(s.getMemoSlotSnapshot());
+                u.setActiveMemoSlot(step.getMemoSlotSnapshot());
                 userRepository.save(u);
                 applied++;
             }
         }
         int missing = ids.size() - applied;
-        s.setStatus(DiffSchedule.STATUS_EXECUTED);
-        s.setExecutedAt(LocalDateTime.now());
-        s.setResultDetail("applied=" + applied + " missing=" + missing + " total=" + ids.size());
-        scheduleRepository.save(s);
-        log.info("Diff-schedule executed: id={} {}", s.getId(), s.getResultDetail());
-        auditLog.record(AuditLogService.ACTION_DIFF_SCHEDULE_EXECUTE, "DiffSchedule", s.getId(), s.getResultDetail());
+        step.setStatus(DiffScheduleStep.STATUS_EXECUTED);
+        step.setExecutedAt(LocalDateTime.now());
+        step.setResultDetail("HTML切替 slot=" + step.getMemoSlotSnapshot()
+                + " applied=" + applied + " missing=" + missing + " total=" + ids.size());
+        scheduleStepRepository.save(step);
+        log.info("Diff-schedule-step executed (HTML switch): id={} {}", step.getId(), step.getResultDetail());
+        auditLog.record(AuditLogService.ACTION_DIFF_SCHEDULE_EXECUTE, "DiffScheduleStep", step.getId(), step.getResultDetail());
+    }
+
+    private void executeMessage(DiffScheduleStep step, DiffSchedule schedule, List<Long> ids) {
+        BroadcastForm form = new BroadcastForm();
+        form.setTargetUserIds(ids);
+        form.setChannel(step.getChannel());
+        form.setTitle(schedule.getDiffNameSnapshot());
+        form.setSubject(DiffStep.CHANNEL_EMAIL.equals(step.getChannel()) ? step.getSubjectSnapshot() : null);
+        form.setBody(step.getBodySnapshot());
+        form.setRatePerMinute(60);
+        try {
+            com.crm.entity.Broadcast b = DiffStep.CHANNEL_SMS.equals(step.getChannel())
+                    ? broadcastService.createAndQueueSms(form, schedule.getSetByAdminId())
+                    : broadcastService.createAndQueue(form, schedule.getSetByAdminId());
+            step.setStatus(DiffScheduleStep.STATUS_EXECUTED);
+            step.setExecutedAt(LocalDateTime.now());
+            step.setResultDetail("メッセージ送信 channel=" + step.getChannel()
+                    + " broadcastId=" + b.getId() + " queued=" + b.getTotalCount());
+        } catch (BroadcastService.NoTargetsException e) {
+            step.setStatus(DiffScheduleStep.STATUS_FAILED);
+            step.setResultDetail("送信先なし: " + e.getMessage());
+        }
+        scheduleStepRepository.save(step);
+        log.info("Diff-schedule-step executed (message): id={} {}", step.getId(), step.getResultDetail());
+        auditLog.record(AuditLogService.ACTION_DIFF_SCHEDULE_EXECUTE, "DiffScheduleStep", step.getId(), step.getResultDetail());
     }
 
     private static List<Long> parseIds(String csv) {

@@ -376,7 +376,7 @@ public class SettingController {
         model.addAttribute("maxTemplates", MessageTemplateService.MAX_TEMPLATES);
         model.addAttribute("externalLinkDomainCount", externalLinkDomainService.listAll().size());
         model.addAttribute("htmlImageCount", htmlImageService.listAll().size());
-        model.addAttribute("pendingScheduleCount", diffScheduleService.listPending().size());
+        model.addAttribute("pendingScheduleCount", diffScheduleService.listPendingSteps().size());
         return "setting/index";
     }
 

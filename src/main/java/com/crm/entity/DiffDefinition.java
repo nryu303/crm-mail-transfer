@@ -10,9 +10,11 @@ import javax.persistence.PreUpdate;
 import javax.persistence.Table;
 import java.time.LocalDateTime;
 
-/** A reusable "diff" template — activating it on a user means flipping their reply-page
- *  memo slot (CRM_USER.ACTIVE_MEMO_SLOT) to {@link #memoSlot}. Up to
- *  {@code DiffDefinitionService.MAX_DEFINITIONS} (10) may exist at once. */
+/** A named diff "campaign" — a container for an ordered timeline of {@link DiffStep}s
+ *  (up to {@code DiffDefinitionService.MAX_DEFINITIONS}, each with up to
+ *  {@code DiffDefinitionService.MAX_STEPS_PER_DEFINITION} steps). Registering a schedule
+ *  against this definition (see {@link DiffSchedule}) applies every step's action to the
+ *  target users at that step's own relative time from the moment it was set. */
 @Entity
 @Table(name = "DIFF_DEFINITION")
 public class DiffDefinition {
@@ -23,10 +25,6 @@ public class DiffDefinition {
 
     @Column(name = "NAME", nullable = false, length = 100)
     private String name;
-
-    /** Which CRM_USER memo slot (1..10) this diff activates on target users. */
-    @Column(name = "MEMO_SLOT", nullable = false)
-    private Integer memoSlot;
 
     @Column(name = "DISPLAY_ORDER")
     private Integer displayOrder;
@@ -54,8 +52,6 @@ public class DiffDefinition {
     public void setId(Long id) { this.id = id; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
-    public Integer getMemoSlot() { return memoSlot; }
-    public void setMemoSlot(Integer memoSlot) { this.memoSlot = memoSlot; }
     public Integer getDisplayOrder() { return displayOrder; }
     public void setDisplayOrder(Integer displayOrder) { this.displayOrder = displayOrder; }
     public LocalDateTime getCreatedAt() { return createdAt; }

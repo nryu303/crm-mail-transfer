@@ -53,7 +53,7 @@ public class ScheduledTaskService {
     private final com.crm.repository.UserAccessLogRepository userAccessLogRepository;
     private final SmsSettingService smsSettingService;
     private final FolderAutoMoveService folderAutoMoveService;
-    private final com.crm.repository.DiffScheduleRepository diffScheduleRepository;
+    private final com.crm.repository.DiffScheduleStepRepository diffScheduleStepRepository;
     private final DiffScheduleService diffScheduleService;
 
     /** Wall-clock time (nanoTime) the SMS serial lane is next allowed to send. Guards against
@@ -74,7 +74,7 @@ public class ScheduledTaskService {
                                 com.crm.repository.UserAccessLogRepository userAccessLogRepository,
                                 SmsSettingService smsSettingService,
                                 FolderAutoMoveService folderAutoMoveService,
-                                com.crm.repository.DiffScheduleRepository diffScheduleRepository,
+                                com.crm.repository.DiffScheduleStepRepository diffScheduleStepRepository,
                                 DiffScheduleService diffScheduleService) {
         this.messageRepository = messageRepository;
         this.poolRepository = poolRepository;
@@ -90,7 +90,7 @@ public class ScheduledTaskService {
         this.userAccessLogRepository = userAccessLogRepository;
         this.smsSettingService = smsSettingService;
         this.folderAutoMoveService = folderAutoMoveService;
-        this.diffScheduleRepository = diffScheduleRepository;
+        this.diffScheduleStepRepository = diffScheduleStepRepository;
         this.diffScheduleService = diffScheduleService;
     }
 
@@ -212,38 +212,40 @@ public class ScheduledTaskService {
     }
 
     /**
-     * Every 60 seconds — execute PENDING DIFF_SCHEDULE rows whose SCHEDULED_FOR has arrived.
-     * 60s granularity is coarser than the 30s message dispatcher poll because the finest
-     * configurable unit here is whole minutes (当日 N分後) — sub-minute precision isn't
-     * meaningful to the operator.
+     * Every 60 seconds — execute PENDING DIFF_SCHEDULE_STEP rows whose SCHEDULED_FOR has
+     * arrived. 60s granularity is coarser than the 30s message dispatcher poll because the
+     * finest configurable unit here is whole minutes (当日 N分後) — sub-minute precision
+     * isn't meaningful to the operator. Each row is one step of one registered diff timeline
+     * (either a real message send or an HTML-slot switch); a multi-step diff simply produces
+     * multiple independently-due rows here, one per step's own SCHEDULED_FOR.
      */
     @Scheduled(fixedRateString = "${app.scheduler.diff-schedule-poll-ms:60000}",
                initialDelayString = "${app.scheduler.diff-schedule-poll-initial-ms:20000}")
     public void dispatchDueDiffSchedules() {
         if (!acquireOrRefreshLock()) return;
-        java.util.List<com.crm.entity.DiffSchedule> due =
-                diffScheduleRepository.findDueForExecution(com.crm.entity.DiffSchedule.STATUS_PENDING, LocalDateTime.now());
+        java.util.List<com.crm.entity.DiffScheduleStep> due =
+                diffScheduleStepRepository.findDueForExecution(com.crm.entity.DiffScheduleStep.STATUS_PENDING, LocalDateTime.now());
         if (due.isEmpty()) return;
-        log.info("Diff-schedule dispatcher: {} schedule(s) due", due.size());
-        for (com.crm.entity.DiffSchedule initial : due) {
+        log.info("Diff-schedule dispatcher: {} step(s) due", due.size());
+        for (com.crm.entity.DiffScheduleStep initial : due) {
             try {
                 // CRITICAL race-condition gate — same re-fetch-before-mutate pattern as
                 // dispatchOne(): an operator cancel that lands between findDueForExecution()'s
                 // snapshot and this loop iteration must not be silently overwritten to EXECUTED.
-                com.crm.entity.DiffSchedule fresh = diffScheduleRepository.findById(initial.getId()).orElse(null);
-                if (fresh == null || !com.crm.entity.DiffSchedule.STATUS_PENDING.equals(fresh.getStatus())) continue;
+                com.crm.entity.DiffScheduleStep fresh = diffScheduleStepRepository.findById(initial.getId()).orElse(null);
+                if (fresh == null || !com.crm.entity.DiffScheduleStep.STATUS_PENDING.equals(fresh.getStatus())) continue;
                 diffScheduleService.execute(fresh);
             } catch (Exception e) {
-                log.warn("Diff-schedule execution failed for id {}: {}", initial.getId(), e.toString());
+                log.warn("Diff-schedule-step execution failed for id {}: {}", initial.getId(), e.toString());
                 try {
-                    com.crm.entity.DiffSchedule failRow = diffScheduleRepository.findById(initial.getId()).orElse(null);
-                    if (failRow != null && com.crm.entity.DiffSchedule.STATUS_PENDING.equals(failRow.getStatus())) {
-                        failRow.setStatus(com.crm.entity.DiffSchedule.STATUS_FAILED);
+                    com.crm.entity.DiffScheduleStep failRow = diffScheduleStepRepository.findById(initial.getId()).orElse(null);
+                    if (failRow != null && com.crm.entity.DiffScheduleStep.STATUS_PENDING.equals(failRow.getStatus())) {
+                        failRow.setStatus(com.crm.entity.DiffScheduleStep.STATUS_FAILED);
                         failRow.setResultDetail("scheduler error: " + e);
-                        diffScheduleRepository.save(failRow);
+                        diffScheduleStepRepository.save(failRow);
                     }
                 } catch (Exception inner) {
-                    log.warn("Diff-schedule failure-record write failed: {}", inner.toString());
+                    log.warn("Diff-schedule-step failure-record write failed: {}", inner.toString());
                 }
             }
         }

@@ -12,10 +12,12 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings/diff-schedule}">差分スケジュール設定に戻る</a>
     </div>
 
+    <div th:if="${flashSuccess}" class="bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4 text-sm text-emerald-800" th:text="${flashSuccess}"></div>
+    <div th:if="${flashError}" class="bg-rose-50 border border-rose-300 rounded-lg p-3 mb-4 text-sm text-rose-800" th:text="${flashError}"></div>
+
     <p class="text-sm text-slate-500 mb-4">
-        差分定義は、対象ユーザーの専用返信画面HTMLスロット（1〜10）を切り替える「差分内容」のテンプレートです。
-        最大 <span th:text="${maxDefinitions}">10</span> 件まで登録できます。
-        スロットのHTML内容自体はユーザー詳細画面やフォルダ内一括編集画面で別途編集してください。
+        差分名ごとに、複数のタイミングで送信・HTML切替を行う「ステップ」のタイムラインを登録できます。
+        最大 <span th:text="${maxDefinitions}">20</span> 件まで登録できます。ステップの追加・編集は各差分名の「ステップを編集」から行います。
     </p>
 
     <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto mb-4">
@@ -24,8 +26,8 @@
                 <tr>
                     <th class="px-3 py-2 text-left" style="width:60px;">ID</th>
                     <th class="px-3 py-2 text-left">差分名</th>
-                    <th class="px-3 py-2 text-left" style="width:140px;">対象スロット</th>
-                    <th class="px-3 py-2 text-right" style="width:140px;">操作</th>
+                    <th class="px-3 py-2 text-left" style="width:100px;">ステップ数</th>
+                    <th class="px-3 py-2 text-right" style="width:220px;">操作</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -37,7 +39,7 @@
                      references it via form="id" (same pattern as folders.html's auto-move rows). -->
                 <tr th:each="d : ${definitions}">
                     <td class="px-3 py-2 text-slate-500 font-mono text-xs">
-                        <form th:id="'defForm' + ${d.id}" method="post" th:action="@{'/manager/settings/diff-schedule/definitions/' + ${d.id}}">
+                        <form th:id="'defForm' + ${d.id}" method="post" th:action="@{'/manager/settings/diff-schedule/definitions/' + ${d.id} + '/rename'}">
                             <input type="hidden" name="_csrf" th:value="${_csrf}"/>
                         </form>
                         <span th:text="${d.id}"></span>
@@ -47,15 +49,11 @@
                                th:attr="form='defForm' + ${d.id}"
                                class="tw-input" style="font-size:.85rem;"/>
                     </td>
-                    <td class="px-3 py-2">
-                        <select name="memoSlot" class="tw-input" style="font-size:.85rem;"
-                                th:attr="form='defForm' + ${d.id}">
-                            <option th:each="i : ${#numbers.sequence(1, 10)}" th:value="${i}"
-                                    th:text="'スロット' + ${i}" th:selected="${i == d.memoSlot}"></option>
-                        </select>
-                    </td>
+                    <td class="px-3 py-2 text-slate-500" th:text="${stepCounts.get(d.id)} + ' / ' + ${maxSteps}"></td>
                     <td class="px-3 py-2 text-right whitespace-nowrap">
-                        <button type="submit" th:attr="form='defForm' + ${d.id}" class="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded">保存</button>
+                        <a th:href="@{'/manager/settings/diff-schedule/definitions/' + ${d.id} + '/steps'}"
+                           class="px-2 py-1 text-xs bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 rounded">ステップを編集</a>
+                        <button type="submit" th:attr="form='defForm' + ${d.id}" class="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded">名称保存</button>
                         <button type="button" class="px-2 py-1 text-xs bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 rounded"
                                 th:attr="onclick=|deleteDefinition(${d.id})|">削除</button>
                     </td>
@@ -73,29 +71,23 @@
     <!-- New definition -->
     <div class="bg-white rounded-lg shadow-sm border border-slate-100 p-4"
          th:if="${definitions == null or definitions.size() < maxDefinitions}">
-        <h2 class="text-sm font-semibold text-slate-700 mb-2">新しい差分定義を追加</h2>
+        <h2 class="text-sm font-semibold text-slate-700 mb-2">新しい差分名を追加</h2>
         <form method="post" th:action="@{/manager/settings/diff-schedule/definitions}" class="flex items-end gap-2 flex-wrap">
             <input type="hidden" name="_csrf" th:value="${_csrf}"/>
             <div>
                 <label class="block text-xs text-slate-500 mb-1">差分名</label>
-                <input type="text" name="name" maxlength="100" required class="tw-input" placeholder="例: 冬キャンペーン用"/>
+                <input type="text" name="name" maxlength="100" required class="tw-input" placeholder="例: あいさつ"/>
             </div>
-            <div>
-                <label class="block text-xs text-slate-500 mb-1">対象スロット</label>
-                <select name="memoSlot" class="tw-input">
-                    <option th:each="i : ${#numbers.sequence(1, 10)}" th:value="${i}" th:text="'スロット' + ${i}"></option>
-                </select>
-            </div>
-            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded">追加</button>
+            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded">追加してステップを編集</button>
         </form>
     </div>
     <div th:if="${definitions != null and definitions.size() >= maxDefinitions}" class="text-xs text-amber-700">
-        既に最大件数まで登録されています。新しく追加するには、不要な差分定義を削除してください。
+        既に最大件数まで登録されています。新しく追加するには、不要な差分名を削除してください。
     </div>
 
     <script>
         function deleteDefinition(id) {
-            if (!confirm('この差分定義を削除します。よろしいですか?')) return;
+            if (!confirm('この差分名と、登録されている全ステップを削除します。よろしいですか?')) return;
             var f = document.getElementById('defDelForm' + id);
             if (f) f.submit();
         }
