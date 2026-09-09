@@ -88,7 +88,15 @@ public class BroadcastController {
         boolean diffView = "diff".equals(view);
         model.addAttribute("view", diffView ? "diff" : "broadcast");
         if (diffView) {
-            List<com.crm.entity.DiffScheduleStep> diffReservations = diffScheduleService.listPendingMessageSteps();
+            final int pageSize = 50;
+            List<com.crm.entity.DiffScheduleStep> allReservations = diffScheduleService.listPendingMessageSteps();
+            int totalElements = allReservations.size();
+            int totalPages = Math.max(1, (int) Math.ceil(totalElements / (double) pageSize));
+            int safePage = Math.max(0, Math.min(page, totalPages - 1));
+            int from = safePage * pageSize;
+            int to = Math.min(from + pageSize, totalElements);
+            List<com.crm.entity.DiffScheduleStep> diffReservations = from < to
+                    ? allReservations.subList(from, to) : java.util.Collections.emptyList();
             java.util.Map<Long, com.crm.entity.DiffSchedule> diffSchedulesById = new java.util.HashMap<>();
             for (com.crm.entity.DiffScheduleStep s : diffReservations) {
                 diffSchedulesById.computeIfAbsent(s.getDiffScheduleId(),
@@ -96,6 +104,11 @@ public class BroadcastController {
             }
             model.addAttribute("diffReservations", diffReservations);
             model.addAttribute("diffSchedulesById", diffSchedulesById);
+            model.addAttribute("diffUserInfoById", buildDiffUserInfoById(diffSchedulesById.values()));
+            model.addAttribute("diffIndexOffset", from);
+            model.addAttribute("diffPage", safePage);
+            model.addAttribute("diffTotalPages", totalPages);
+            model.addAttribute("diffTotalElements", totalElements);
             model.addAttribute("addr", "");
             model.addAttribute("channel", "");
             return "message/broadcast-list";
@@ -159,6 +172,53 @@ public class BroadcastController {
         model.addAttribute("addr", addrTrim == null ? "" : addrTrim);
         model.addAttribute("channel", channelFilter == null ? "" : channelFilter);
         return "message/broadcast-list";
+    }
+
+    /** 表示名 column support for the shared diff-step table fragment — see the identical
+     *  helper in DiffScheduleController for the full rationale (only resolved for
+     *  single-target schedules). */
+    private java.util.Map<Long, java.util.Map<String, String>> buildDiffUserInfoById(
+            java.util.Collection<com.crm.entity.DiffSchedule> schedules) {
+        java.util.Set<Long> singleTargetUserIds = new java.util.HashSet<>();
+        java.util.Map<Long, Long> singleTargetUserIdBySchedule = new java.util.HashMap<>();
+        for (com.crm.entity.DiffSchedule sched : schedules) {
+            if (sched == null || sched.getTargetUserIds() == null) continue;
+            String[] parts = sched.getTargetUserIds().split(",");
+            if (parts.length != 1) continue;
+            try {
+                Long uid = Long.parseLong(parts[0].trim());
+                singleTargetUserIds.add(uid);
+                singleTargetUserIdBySchedule.put(sched.getId(), uid);
+            } catch (NumberFormatException ignored) { /* skip malformed */ }
+        }
+        java.util.Map<Long, String> displayNameByUserId = new java.util.HashMap<>();
+        if (!singleTargetUserIds.isEmpty()) {
+            for (com.crm.entity.CrmUser u : userService.findAllByIds(singleTargetUserIds)) {
+                String name = (u.getDisplayName() == null || u.getDisplayName().isEmpty())
+                        ? u.getEmail() : u.getDisplayName();
+                displayNameByUserId.put(u.getId(), name);
+            }
+        }
+        java.util.Map<Long, java.util.Map<String, String>> out = new java.util.HashMap<>();
+        for (java.util.Map.Entry<Long, Long> e : singleTargetUserIdBySchedule.entrySet()) {
+            String name = displayNameByUserId.get(e.getValue());
+            if (name != null) {
+                java.util.Map<String, String> info = new java.util.HashMap<>();
+                info.put("displayName", name);
+                out.put(e.getKey(), info);
+            }
+        }
+        return out;
+    }
+
+    /** 差分予約 view's 選択削除 — hard-deletes the selected pending steps. */
+    @PostMapping("/diff-delete")
+    public String diffReservationsDelete(@RequestParam(name = "ids", required = false) List<Long> ids,
+                                          HttpSession session, RedirectAttributes ra) {
+        String adminName = (String) session.getAttribute(AuthInterceptor.SESSION_ADMIN_NAME);
+        int n = (ids == null || ids.isEmpty()) ? 0 : diffScheduleService.deleteSteps(ids, adminName);
+        ra.addFlashAttribute("flashSuccess", n + " 件削除しました");
+        return "redirect:/manager/messages/broadcast?view=diff";
     }
 
     /** Broadcast-level summary (totals, status, bulk-delete). Kept as a sub-page. */

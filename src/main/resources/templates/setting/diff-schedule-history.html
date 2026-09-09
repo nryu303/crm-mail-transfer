@@ -4,6 +4,13 @@
       layout:decorate="~{layout/default}">
 <head>
     <title>差分スケジュール履歴</title>
+    <style>
+        .diff-tbl-body { max-width:260px; }
+        .diff-tbl-body .diff-tbl-body-text {
+            display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+            overflow:hidden; line-height:1.35; font-size:.78rem; color:#475569; white-space:pre-wrap;
+        }
+    </style>
 </head>
 <body>
 <section layout:fragment="content">
@@ -54,64 +61,7 @@
     <form id="diffHistoryDeleteForm" method="post" th:action="@{/manager/settings/diff-schedule/history/delete}"></form>
 
     <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
-            <tr>
-                <th class="px-3 py-2 text-left" style="width:36px;"><input type="checkbox" id="diffHistoryCheckAll" title="全選択"/></th>
-                <th class="px-3 py-2 text-left" style="width:50px;">No</th>
-                <th class="px-3 py-2 text-left">対象</th>
-                <th class="px-3 py-2 text-left">条件</th>
-                <th class="px-3 py-2 text-left">差分名</th>
-                <th class="px-3 py-2 text-left">ステップ</th>
-                <th class="px-3 py-2 text-left">セット日時</th>
-                <th class="px-3 py-2 text-left">実行/取消日時</th>
-                <th class="px-3 py-2 text-left">結果</th>
-                <th class="px-3 py-2 text-left">詳細</th>
-            </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-            <tr th:if="${results.empty}">
-                <td colspan="10" class="px-3 py-6 text-center text-slate-400">該当する履歴がありません</td>
-            </tr>
-            <tr th:each="s, iter : ${results.content}" class="hover:bg-slate-50" th:with="sched=${schedulesById.get(s.diffScheduleId)}">
-                <td class="px-3 py-2">
-                    <input type="checkbox" class="diff-history-row-item" name="ids" th:value="${s.id}" form="diffHistoryDeleteForm"/>
-                </td>
-                <td class="px-3 py-2 text-xs font-mono text-slate-500" th:text="${results.number * results.size + iter.count}"></td>
-                <td class="px-3 py-2 text-xs" th:if="${sched != null}">
-                    <a class="font-mono text-blue-600 hover:underline"
-                       th:href="@{/manager/users(ids=${sched.targetUserIds})}"
-                       th:text="${#strings.arraySplit(sched.targetUserIds, ',').length} + ' 名'"></a>
-                </td>
-                <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched == null}">-</td>
-                <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched != null}">
-                    <span th:if="${sched.targetType == 'PHONE'}">番号縛り</span>
-                    <span th:if="${sched.targetType == 'EMAIL'}">アドレス縛り</span>
-                    <span th:if="${sched.targetType == 'FOLDER'}" th:text="'フォルダ: ' + ${sched.targetValue}"></span>
-                </td>
-                <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched == null}">-</td>
-                <td class="px-3 py-2 text-slate-700" th:text="${sched != null ? sched.diffNameSnapshot : '-'}"></td>
-                <td class="px-3 py-2 text-xs text-slate-600">
-                    <span th:if="${s.stepType == 'MESSAGE'}" th:text="'送信(' + ${s.channel} + ')'"
-                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                          th:classappend="${s.channel == 'SMS'} ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-700'"></span>
-                    <span th:if="${s.stepType == 'HTML_SWITCH'}" th:text="'HTML切替→スロット' + ${s.memoSlotSnapshot}"></span>
-                </td>
-                <td class="px-3 py-2 text-xs text-slate-500" th:text="${sched != null ? #temporals.format(sched.setAt, 'yyyy-MM-dd HH:mm') : '-'}"></td>
-                <td class="px-3 py-2 text-xs text-slate-500"
-                    th:text="${s.executedAt != null} ? ${#temporals.format(s.executedAt, 'yyyy-MM-dd HH:mm')} : (${s.cancelledAt != null} ? ${#temporals.format(s.cancelledAt, 'yyyy-MM-dd HH:mm')} : '-')"></td>
-                <td class="px-3 py-2">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
-                          th:classappend="${s.status == 'EXECUTED'} ? 'bg-emerald-100 text-emerald-700' :
-                                          (${s.status == 'PENDING'} ? 'bg-amber-100 text-amber-800' :
-                                          (${s.status == 'CANCELLED'} ? 'bg-slate-100 text-slate-700' : 'bg-red-100 text-red-700'))"
-                          th:text="${s.status == 'EXECUTED'} ? '実行済み' : (${s.status == 'PENDING'} ? '保留中' : (${s.status == 'CANCELLED'} ? '取消済み' : '失敗'))"></span>
-                </td>
-                <td class="px-3 py-2 text-xs text-slate-500 truncate" style="max-width: 260px;"
-                    th:text="${s.status == 'CANCELLED'} ? ('取消者: ' + (${s.cancelledByAdminName} ?: '-')) : ${s.resultDetail}"></td>
-            </tr>
-            </tbody>
-        </table>
+        <table th:replace="~{fragment/diff-step-table :: table(${results.content}, ${schedulesById}, ${userInfoById}, ${results.number * results.size}, 'diffHistoryDeleteForm')}"></table>
     </div>
 
     <nav class="mt-4" th:if="${results.totalPages > 1}">
@@ -142,8 +92,8 @@
 
     <script>
         (function () {
-            var checkAll = document.getElementById('diffHistoryCheckAll');
-            var items = document.querySelectorAll('.diff-history-row-item');
+            var checkAll = document.querySelector('.diff-tbl-check-all');
+            var items = document.querySelectorAll('.diff-tbl-row-item');
             var deleteBtn = document.getElementById('diffHistoryDeleteBtn');
             function refresh() {
                 var n = 0;

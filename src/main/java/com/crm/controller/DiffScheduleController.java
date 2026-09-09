@@ -32,13 +32,54 @@ public class DiffScheduleController {
     private final DiffScheduleService scheduleService;
     private final DiffDefinitionService definitionService;
     private final FolderSettingService folderSettingService;
+    private final com.crm.service.CrmUserService crmUserService;
 
     public DiffScheduleController(DiffScheduleService scheduleService,
                                    DiffDefinitionService definitionService,
-                                   FolderSettingService folderSettingService) {
+                                   FolderSettingService folderSettingService,
+                                   com.crm.service.CrmUserService crmUserService) {
         this.scheduleService = scheduleService;
         this.definitionService = definitionService;
         this.folderSettingService = folderSettingService;
+        this.crmUserService = crmUserService;
+    }
+
+    /** 表示名 column support for the shared diff-step table fragment: resolves the single
+     *  target user's display name for every schedule that targeted exactly one user (multi-
+     *  target schedules show '-' there instead — there's no single name to show). Keyed by
+     *  DiffSchedule.id so the fragment can look it up per row via schedulesById. */
+    private java.util.Map<Long, java.util.Map<String, String>> buildUserInfoById(
+            java.util.Collection<DiffSchedule> schedules) {
+        java.util.Set<Long> singleTargetUserIds = new java.util.HashSet<>();
+        java.util.Map<Long, Long> singleTargetUserIdBySchedule = new java.util.HashMap<>();
+        for (DiffSchedule sched : schedules) {
+            if (sched == null || sched.getTargetUserIds() == null) continue;
+            String[] parts = sched.getTargetUserIds().split(",");
+            if (parts.length != 1) continue;
+            try {
+                Long uid = Long.parseLong(parts[0].trim());
+                singleTargetUserIds.add(uid);
+                singleTargetUserIdBySchedule.put(sched.getId(), uid);
+            } catch (NumberFormatException ignored) { /* skip malformed */ }
+        }
+        java.util.Map<Long, String> displayNameByUserId = new java.util.HashMap<>();
+        if (!singleTargetUserIds.isEmpty()) {
+            for (com.crm.entity.CrmUser u : crmUserService.findAllByIds(singleTargetUserIds)) {
+                String name = (u.getDisplayName() == null || u.getDisplayName().isEmpty())
+                        ? u.getEmail() : u.getDisplayName();
+                displayNameByUserId.put(u.getId(), name);
+            }
+        }
+        java.util.Map<Long, java.util.Map<String, String>> out = new java.util.HashMap<>();
+        for (java.util.Map.Entry<Long, Long> e : singleTargetUserIdBySchedule.entrySet()) {
+            String name = displayNameByUserId.get(e.getValue());
+            if (name != null) {
+                java.util.Map<String, String> info = new java.util.HashMap<>();
+                info.put("displayName", name);
+                out.put(e.getKey(), info);
+            }
+        }
+        return out;
     }
 
     private static Long adminId(HttpSession session) {
@@ -254,6 +295,7 @@ public class DiffScheduleController {
         }
         model.addAttribute("results", results);
         model.addAttribute("schedulesById", schedulesById);
+        model.addAttribute("userInfoById", buildUserInfoById(schedulesById.values()));
         model.addAttribute("status", status);
         model.addAttribute("targetType", targetType);
         model.addAttribute("diffDefinitionId", diffDefinitionId);

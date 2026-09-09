@@ -659,23 +659,75 @@ public class UserController {
      *  schedule can target multiple users at once, so deleting a row here removes it for every
      *  target it was originally set for, not just this user (the confirm dialogs on the page
      *  say so explicitly). */
+    private static final int DIFF_SCHEDULES_PAGE_SIZE = 50;
+
     @GetMapping("/{id}/diff-schedules")
-    public String diffSchedules(@PathVariable Long id, Model model, RedirectAttributes ra) {
+    public String diffSchedules(@PathVariable Long id,
+                                 @RequestParam(name = "page", defaultValue = "0") int page,
+                                 Model model, RedirectAttributes ra) {
         Optional<CrmUser> user = service.findById(id);
         if (!user.isPresent()) {
             ra.addFlashAttribute("flashError", "ユーザーが見つかりません");
             return "redirect:/manager/users";
         }
         model.addAttribute("user", user.get());
-        List<com.crm.entity.DiffScheduleStep> steps = diffScheduleService.listStepsForUser(id);
+        List<com.crm.entity.DiffScheduleStep> allSteps = diffScheduleService.listStepsForUser(id);
+        int totalElements = allSteps.size();
+        int totalPages = Math.max(1, (int) Math.ceil(totalElements / (double) DIFF_SCHEDULES_PAGE_SIZE));
+        int safePage = Math.max(0, Math.min(page, totalPages - 1));
+        int from = safePage * DIFF_SCHEDULES_PAGE_SIZE;
+        int to = Math.min(from + DIFF_SCHEDULES_PAGE_SIZE, totalElements);
+        List<com.crm.entity.DiffScheduleStep> steps = from < to ? allSteps.subList(from, to) : java.util.Collections.emptyList();
         model.addAttribute("steps", steps);
+        model.addAttribute("page", safePage);
+        model.addAttribute("totalPages", totalPages);
+        model.addAttribute("totalElements", totalElements);
+        model.addAttribute("indexOffset", from);
         java.util.Map<Long, com.crm.entity.DiffSchedule> schedulesById = new java.util.HashMap<>();
         for (com.crm.entity.DiffScheduleStep s : steps) {
             schedulesById.computeIfAbsent(s.getDiffScheduleId(),
                     sid -> diffScheduleService.findScheduleById(sid).orElse(null));
         }
         model.addAttribute("schedulesById", schedulesById);
+        model.addAttribute("userInfoById", buildUserInfoById(schedulesById.values()));
         return "user/diff-schedules";
+    }
+
+    /** 表示名 column support for the shared diff-step table fragment — see the identical
+     *  helper in DiffScheduleController for the full rationale (only resolved for
+     *  single-target schedules). */
+    private java.util.Map<Long, java.util.Map<String, String>> buildUserInfoById(
+            java.util.Collection<com.crm.entity.DiffSchedule> schedules) {
+        java.util.Set<Long> singleTargetUserIds = new java.util.HashSet<>();
+        java.util.Map<Long, Long> singleTargetUserIdBySchedule = new java.util.HashMap<>();
+        for (com.crm.entity.DiffSchedule sched : schedules) {
+            if (sched == null || sched.getTargetUserIds() == null) continue;
+            String[] parts = sched.getTargetUserIds().split(",");
+            if (parts.length != 1) continue;
+            try {
+                Long uid = Long.parseLong(parts[0].trim());
+                singleTargetUserIds.add(uid);
+                singleTargetUserIdBySchedule.put(sched.getId(), uid);
+            } catch (NumberFormatException ignored) { /* skip malformed */ }
+        }
+        java.util.Map<Long, String> displayNameByUserId = new java.util.HashMap<>();
+        if (!singleTargetUserIds.isEmpty()) {
+            for (CrmUser u : service.findAllByIds(singleTargetUserIds)) {
+                String name = (u.getDisplayName() == null || u.getDisplayName().isEmpty())
+                        ? u.getEmail() : u.getDisplayName();
+                displayNameByUserId.put(u.getId(), name);
+            }
+        }
+        java.util.Map<Long, java.util.Map<String, String>> out = new java.util.HashMap<>();
+        for (java.util.Map.Entry<Long, Long> e : singleTargetUserIdBySchedule.entrySet()) {
+            String name = displayNameByUserId.get(e.getValue());
+            if (name != null) {
+                java.util.Map<String, String> info = new java.util.HashMap<>();
+                info.put("displayName", name);
+                out.put(e.getKey(), info);
+            }
+        }
+        return out;
     }
 
     @PostMapping("/{id}/diff-schedules/delete")

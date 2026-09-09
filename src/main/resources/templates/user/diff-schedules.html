@@ -4,6 +4,13 @@
       layout:decorate="~{layout/default}">
 <head>
     <title>差分スケジュール確認/削除</title>
+    <style>
+        .diff-tbl-body { max-width:260px; }
+        .diff-tbl-body .diff-tbl-body-text {
+            display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+            overflow:hidden; line-height:1.35; font-size:.78rem; color:#475569; white-space:pre-wrap;
+        }
+    </style>
 </head>
 <body>
 <section layout:fragment="content">
@@ -13,6 +20,8 @@
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
            th:href="@{'/manager/users/' + ${user.id}}">ユーザー詳細に戻る</a>
     </div>
+
+    <div th:if="${flashSuccess}" class="bg-emerald-50 border border-emerald-300 rounded-lg p-3 mb-4 text-sm text-emerald-800" th:text="${flashSuccess}"></div>
 
     <div class="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4 text-xs text-amber-900 max-w-3xl">
         ⚠ 差分スケジュールは複数のユーザーへ同時にセットされている場合があります。ここで削除すると、
@@ -27,59 +36,48 @@
     </div>
 
     <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto" th:if="${steps != null and !steps.empty}">
-        <table class="min-w-full divide-y divide-slate-200 text-sm">
-            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
-            <tr>
-                <th class="px-3 py-2 text-left" style="width:36px;"><input type="checkbox" id="diffCheckAll" title="全選択"/></th>
-                <th class="px-3 py-2 text-left">差分名</th>
-                <th class="px-3 py-2 text-left">ステップ</th>
-                <th class="px-3 py-2 text-left">セット日時</th>
-                <th class="px-3 py-2 text-left">実行/取消日時</th>
-                <th class="px-3 py-2 text-left">結果</th>
-            </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-            <tr th:each="s : ${steps}" class="hover:bg-slate-50" th:with="sched=${schedulesById.get(s.diffScheduleId)}">
-                <td class="px-3 py-2">
-                    <input type="checkbox" class="diff-row-item" name="ids" th:value="${s.id}" form="diffDelForm"/>
-                </td>
-                <td class="px-3 py-2 text-slate-700" th:text="${sched != null ? sched.diffNameSnapshot : '-'}"></td>
-                <td class="px-3 py-2 text-xs">
-                    <span th:if="${s.stepType == 'MESSAGE'}"
-                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                          th:classappend="${s.channel == 'SMS'} ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-700'"
-                          th:text="'送信(' + ${s.channel} + ')'"></span>
-                    <span th:if="${s.stepType == 'HTML_SWITCH'}" th:text="'HTML切替→スロット' + ${s.memoSlotSnapshot}"></span>
-                </td>
-                <td class="px-3 py-2 text-xs text-slate-500" th:text="${sched != null ? #temporals.format(sched.setAt, 'yyyy-MM-dd HH:mm') : '-'}"></td>
-                <td class="px-3 py-2 text-xs text-slate-500"
-                    th:text="${s.executedAt != null ? #temporals.format(s.executedAt, 'yyyy-MM-dd HH:mm') : (s.cancelledAt != null ? #temporals.format(s.cancelledAt, 'yyyy-MM-dd HH:mm') : (s.status == 'PENDING' ? ('予定: ' + #temporals.format(s.scheduledFor, 'yyyy-MM-dd HH:mm')) : '-'))}"></td>
-                <td class="px-3 py-2">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
-                          th:classappend="${s.status == 'EXECUTED'} ? 'bg-emerald-100 text-emerald-700' :
-                                          (${s.status == 'PENDING'} ? 'bg-amber-100 text-amber-800' :
-                                          (${s.status == 'CANCELLED'} ? 'bg-slate-100 text-slate-700' : 'bg-red-100 text-red-700'))"
-                          th:text="${s.status == 'EXECUTED'} ? '実行済み' : (${s.status == 'PENDING'} ? '保留中' : (${s.status == 'CANCELLED'} ? '取消済み' : '失敗'))"></span>
-                </td>
-            </tr>
-            </tbody>
-        </table>
+        <table th:replace="~{fragment/diff-step-table :: table(${steps}, ${schedulesById}, ${userInfoById}, ${indexOffset}, 'diffDelForm')}"></table>
     </div>
 
-    <div class="flex items-center gap-2 mt-4" th:if="${steps != null and !steps.empty}">
-        <span class="text-xs text-slate-500 selected-count" id="diffSelectedCount">0 件選択中</span>
-        <button type="submit" form="diffDelForm" id="diffDeleteBtn" disabled
-                class="px-4 py-2 text-sm font-bold rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
-                onclick="return confirm('選択した差分スケジュールを削除します。他の対象ユーザーからも削除されます。よろしいですか?');">選択削除</button>
-        <button type="submit" form="diffDelAllForm"
-                class="px-4 py-2 text-sm font-bold rounded-md text-white bg-rose-800 hover:bg-rose-900"
-                onclick="return confirm('このユーザーに関連する差分スケジュールを全件削除します。他の対象ユーザーからも削除されます。よろしいですか?');">全件削除</button>
+    <nav class="mt-4" th:if="${totalPages > 1}">
+        <ul class="flex items-center gap-1 text-sm">
+            <li>
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${page == 0} ? 'opacity-50 pointer-events-none'"
+                   th:href="@{'/manager/users/' + ${user.id} + '/diff-schedules'(page=${page - 1})}">前へ</a>
+            </li>
+            <li th:each="i : ${#numbers.sequence(0, totalPages - 1)}">
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${i == page} ? 'bg-blue-600 text-white border-blue-600'"
+                   th:href="@{'/manager/users/' + ${user.id} + '/diff-schedules'(page=${i})}" th:text="${i + 1}"></a>
+            </li>
+            <li>
+                <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
+                   th:classappend="${page >= totalPages - 1} ? 'opacity-50 pointer-events-none'"
+                   th:href="@{'/manager/users/' + ${user.id} + '/diff-schedules'(page=${page + 1})}">次へ</a>
+            </li>
+        </ul>
+    </nav>
+
+    <div class="flex items-center justify-between mt-4" th:if="${steps != null and !steps.empty}">
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-500 selected-count" id="diffSelectedCount">0 件選択中</span>
+            <span class="text-xs text-slate-400" th:if="${totalElements != null}">全<span th:text="${totalElements}">0</span>件</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button type="submit" form="diffDelForm" id="diffDeleteBtn" disabled
+                    class="px-4 py-2 text-sm font-bold rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                    onclick="return confirm('選択した差分スケジュールを削除します。他の対象ユーザーからも削除されます。よろしいですか?');">選択削除</button>
+            <button type="submit" form="diffDelAllForm"
+                    class="px-4 py-2 text-sm font-bold rounded-md text-white bg-rose-800 hover:bg-rose-900"
+                    onclick="return confirm('このユーザーに関連する差分スケジュールを全件削除します。他の対象ユーザーからも削除されます。よろしいですか?');">全件削除</button>
+        </div>
     </div>
 
     <script>
         (function () {
-            var checkAll = document.getElementById('diffCheckAll');
-            var items = document.querySelectorAll('.diff-row-item');
+            var checkAll = document.querySelector('.diff-tbl-check-all');
+            var items = document.querySelectorAll('.diff-tbl-row-item');
             var countEl = document.getElementById('diffSelectedCount');
             var deleteBtn = document.getElementById('diffDeleteBtn');
             function refresh() {
