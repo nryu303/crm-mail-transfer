@@ -9,6 +9,7 @@
 <section layout:fragment="content">
     <div class="flex items-center mb-4">
         <h1 class="text-2xl font-semibold text-slate-800 flex-1">差分スケジュール履歴</h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2" th:href="@{/manager/messages}">← 個別メッセージ管理へ</a>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md" th:href="@{/manager/settings/diff-schedule}">差分スケジュール設定に戻る</a>
     </div>
 
@@ -50,10 +51,14 @@
            th:href="@{/manager/settings/diff-schedule/history}">クリア</a>
     </form>
 
+    <form id="diffHistoryDeleteForm" method="post" th:action="@{/manager/settings/diff-schedule/history/delete}"></form>
+
     <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
         <table class="min-w-full divide-y divide-slate-200 text-sm">
             <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
             <tr>
+                <th class="px-3 py-2 text-left" style="width:36px;"><input type="checkbox" id="diffHistoryCheckAll" title="全選択"/></th>
+                <th class="px-3 py-2 text-left" style="width:50px;">No</th>
                 <th class="px-3 py-2 text-left">対象</th>
                 <th class="px-3 py-2 text-left">条件</th>
                 <th class="px-3 py-2 text-left">差分名</th>
@@ -66,9 +71,13 @@
             </thead>
             <tbody class="divide-y divide-slate-100">
             <tr th:if="${results.empty}">
-                <td colspan="8" class="px-3 py-6 text-center text-slate-400">該当する履歴がありません</td>
+                <td colspan="10" class="px-3 py-6 text-center text-slate-400">該当する履歴がありません</td>
             </tr>
-            <tr th:each="s : ${results.content}" class="hover:bg-slate-50" th:with="sched=${schedulesById.get(s.diffScheduleId)}">
+            <tr th:each="s, iter : ${results.content}" class="hover:bg-slate-50" th:with="sched=${schedulesById.get(s.diffScheduleId)}">
+                <td class="px-3 py-2">
+                    <input type="checkbox" class="diff-history-row-item" name="ids" th:value="${s.id}" form="diffHistoryDeleteForm"/>
+                </td>
+                <td class="px-3 py-2 text-xs font-mono text-slate-500" th:text="${results.number * results.size + iter.count}"></td>
                 <td class="px-3 py-2 text-xs" th:if="${sched != null}">
                     <a class="font-mono text-blue-600 hover:underline"
                        th:href="@{/manager/users(ids=${sched.targetUserIds})}"
@@ -124,7 +133,31 @@
             </li>
         </ul>
     </nav>
-    <p class="mt-3 text-sm text-slate-500">全<span th:text="${results.totalElements}">0</span>件</p>
+    <div class="flex items-center justify-between mt-3">
+        <p class="text-sm text-slate-500">全<span th:text="${results.totalElements}">0</span>件</p>
+        <button type="submit" form="diffHistoryDeleteForm" id="diffHistoryDeleteBtn" disabled
+                class="px-4 py-2 text-sm font-bold rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                onclick="return confirm('選択した履歴を削除します。よろしいですか?');">選択削除</button>
+    </div>
+
+    <script>
+        (function () {
+            var checkAll = document.getElementById('diffHistoryCheckAll');
+            var items = document.querySelectorAll('.diff-history-row-item');
+            var deleteBtn = document.getElementById('diffHistoryDeleteBtn');
+            function refresh() {
+                var n = 0;
+                items.forEach(function (c) { if (c.checked) n++; });
+                if (deleteBtn) deleteBtn.disabled = (n === 0);
+            }
+            if (checkAll) checkAll.addEventListener('change', function () {
+                items.forEach(function (c) { c.checked = checkAll.checked; });
+                refresh();
+            });
+            items.forEach(function (c) { c.addEventListener('change', refresh); });
+            refresh();
+        })();
+    </script>
 </section>
 </body>
 </html>

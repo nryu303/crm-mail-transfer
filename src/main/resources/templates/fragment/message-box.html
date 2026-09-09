@@ -9,28 +9,30 @@
       選択削除 checkbox/button (soft-delete, admin-only) and per-item reply forms that post
       through the existing admin compose endpoints so a real reply is sent to the user.
 
-  Split into two tabs 2026-09-09 (受信履歴 default / 送信履歴): previously this fragment only
-  ever showed direction=OUT history (what the CRM sent), so a user with no prior OUT message
-  had no visible way to send anything at all — the per-item reply forms below only render
-  inside the OUT-history loop. 受信履歴 now also carries a standalone compose box that isn't
-  tied to replying to a specific historical item.
+  Two tabs, from the END USER's point of view (this page is what they see):
+    受信履歴 (default) — messages the USER received, i.e. direction=OUT rows (what the CRM
+      sent them). Keeps the per-item reply form on each entry, plus a standalone compose box
+      that isn't tied to any specific past item (so a user with zero OUT history yet still has
+      a way to send something — the per-item forms alone can't cover that case).
+    送信履歴 — messages the USER sent, i.e. direction=IN rows (their own past replies/
+      submissions). Pure read-only log; no forms here per operator request (2026-09-09) —
+      an initial cut had these two tabs' data sources swapped, which is what this fixes.
 
   Params:
-    box         — org.springframework.data.domain.Page<com.crm.dto.MessageBoxItem>, 送信履歴 (OUT)
-    inboundBox  — org.springframework.data.domain.Page<com.crm.dto.MessageBoxItem>, 受信履歴 (IN)
+    box         — Page<MessageBoxItem>, 受信履歴 (direction=OUT — what the user received)
+    inboundBox  — Page<MessageBoxItem>, 送信履歴 (direction=IN — what the user sent)
     token       — reply-page token (public context only; null when isAdmin)
     isAdmin     — boolean, gates the delete UI and switches the reply-form target
     userId      — user id (admin context only; used to build the reply POST / pager URLs)
-    userPhoneNumber — admin context only; gates the standalone compose box's SMS-send button
 -->
-<div th:fragment="messageBox(box, inboundBox, token, isAdmin, userId, userPhoneNumber)" class="message-box-shell">
+<div th:fragment="messageBox(box, inboundBox, token, isAdmin, userId)" class="message-box-shell">
     <div class="message-box-head">
         <h2 class="message-box-title">メッセージボックス</h2>
     </div>
 
     <div class="message-box-tabs">
-        <button type="button" class="message-box-tab active" data-mbtab="inbound">受信履歴</button>
-        <button type="button" class="message-box-tab" data-mbtab="outbound">送信履歴</button>
+        <button type="button" class="message-box-tab active" data-mbtab="received">受信履歴</button>
+        <button type="button" class="message-box-tab" data-mbtab="sent">送信履歴</button>
     </div>
 
     <form th:if="${isAdmin}" id="messageBoxDeleteForm" method="post"
@@ -40,10 +42,12 @@
     <form th:if="${isAdmin}" id="messageBoxDeleteAllInboundForm" method="post"
           th:action="@{'/manager/users/' + ${userId} + '/message-box/delete-all-inbound'}"></form>
 
-    <!-- ===== 受信履歴 (default tab) ===== -->
-    <div class="message-box-pane" data-mbpane="inbound">
+    <!-- ===== 受信履歴 (default tab): what the user received — direction=OUT ===== -->
+    <div class="message-box-pane" data-mbpane="received">
         <!-- Standalone compose — not tied to any specific past message, so it's always
-             available even when this user has never sent anything in before. -->
+             available even when this user has never received anything yet. SMS removed
+             2026-09-09: SMS replies from users don't actually arrive, so offering to send
+             one from here was misleading. -->
         <div class="message-box-compose">
             <form th:if="${!isAdmin}" class="reply-form message-box-reply-form"
                   th:action="@{'/reply/' + ${token} + '/send'}" method="post">
@@ -58,14 +62,11 @@
                   th:action="@{'/manager/users/' + ${userId} + '/messages'}" method="post">
                 <input type="hidden" name="returnTo" value="message-box"/>
                 <div class="field">
-                    <input type="text" name="subject" placeholder="件名（メールのみ）" style="margin-bottom:4px;"/>
+                    <input type="text" name="subject" placeholder="件名" style="margin-bottom:4px;"/>
                     <textarea name="body" rows="4" placeholder="メッセージを送信..."></textarea>
                 </div>
                 <div class="actions">
-                    <button type="submit" th:if="${userPhoneNumber != null and !userPhoneNumber.isEmpty()}"
-                            th:formaction="@{'/manager/users/' + ${userId} + '/messages/sms'}"
-                            style="background:#ca8a04;">SMS送信</button>
-                    <button type="submit">メール送信</button>
+                    <button type="submit">送信</button>
                 </div>
             </form>
         </div>
@@ -74,51 +75,12 @@
             <button type="submit" form="messageBoxDeleteForm"
                     class="message-box-delete-btn"
                     onclick="return confirm('選択したメッセージを削除しますか？');">選択削除</button>
-            <button type="submit" form="messageBoxDeleteAllInboundForm"
+            <button type="submit" form="messageBoxDeleteAllForm"
                     class="message-box-delete-btn message-box-delete-all-btn"
                     onclick="return confirm('この受信履歴を全件削除します。よろしいですか？');">全件削除</button>
         </span>
 
-        <div th:if="${inboundBox == null or inboundBox.content.empty}" class="message-box-empty">受信履歴はありません</div>
-
-        <div th:each="item : ${inboundBox != null ? inboundBox.content : {}}" class="message-box-item">
-            <div class="message-box-item-head">
-                <input th:if="${isAdmin}" type="checkbox" name="ids" th:value="${item.id}"
-                       form="messageBoxDeleteForm" class="message-box-checkbox"/>
-                <span class="message-box-date"
-                      th:text="'受信時間 : ' + ${#temporals.format(item.sentAt, 'yyyy/MM/dd HH:mm')}"></span>
-            </div>
-            <div class="message-box-reply-label" th:text="${item.replyLabel}"></div>
-            <div class="message-box-subject" th:if="${item.subject != null and !item.subject.isEmpty()}"
-                 th:text="${item.subject}"></div>
-            <div class="message-box-body" th:text="${item.bodyText}"></div>
-        </div>
-
-        <div class="message-box-pager" th:if="${inboundBox != null and inboundBox.totalPages > 1}">
-            <span th:each="p : ${#numbers.sequence(0, inboundBox.totalPages - 1)}">
-                <a th:if="${p != inboundBox.number and isAdmin}"
-                   th:href="@{'/manager/users/' + ${userId} + '/message-box'(inboundPage=${p})}"
-                   th:text="${p + 1}"></a>
-                <a th:if="${p != inboundBox.number and !isAdmin}"
-                   th:href="@{'/reply/' + ${token}(inbound_page=${p})}"
-                   th:text="${p + 1}"></a>
-                <strong th:if="${p == inboundBox.number}" th:text="${p + 1}"></strong>
-            </span>
-        </div>
-    </div>
-
-    <!-- ===== 送信履歴 ===== -->
-    <div class="message-box-pane" data-mbpane="outbound" style="display:none;">
-        <span th:if="${isAdmin}" class="message-box-head-actions" style="margin:8px 0;">
-            <button type="submit" form="messageBoxDeleteForm"
-                    class="message-box-delete-btn"
-                    onclick="return confirm('選択したメッセージを削除しますか？');">選択削除</button>
-            <button type="submit" form="messageBoxDeleteAllForm"
-                    class="message-box-delete-btn message-box-delete-all-btn"
-                    onclick="return confirm('この送信履歴を全件削除します。よろしいですか？');">全件削除</button>
-        </span>
-
-        <div th:if="${box.content.empty}" class="message-box-empty">送信履歴はありません</div>
+        <div th:if="${box.content.empty}" class="message-box-empty">受信履歴はありません</div>
 
         <div th:each="item : ${box.content}" class="message-box-item">
             <div class="message-box-item-head">
@@ -154,21 +116,9 @@
                 </div>
             </form>
 
-            <!-- Admin reply form: posts through the existing per-user compose endpoints
-                 (EMAIL/BROADCAST channel → /messages, SMS channel → /messages/sms) so it reuses
-                 the same send pipeline, error handling, and audit trail as the thread page. -->
-            <form th:if="${isAdmin and item.channel == 'SMS'}" class="reply-form message-box-reply-form"
-                  th:action="@{'/manager/users/' + ${userId} + '/messages/sms'}" method="post">
-                <input type="hidden" name="returnTo" value="message-box"/>
-                <input type="hidden" name="replyToMessageId" th:value="${item.id}"/>
-                <div class="field">
-                    <textarea name="body" rows="4" placeholder="返信を入力..."></textarea>
-                </div>
-                <div class="actions">
-                    <button type="submit">返信</button>
-                </div>
-            </form>
-            <form th:if="${isAdmin and item.channel != 'SMS'}" class="reply-form message-box-reply-form"
+            <!-- Admin reply form: EMAIL/BROADCAST only — SMS reply removed 2026-09-09 (see
+                 compose box note above; SMS replies don't reach the user). -->
+            <form th:if="${isAdmin}" class="reply-form message-box-reply-form"
                   th:action="@{'/manager/users/' + ${userId} + '/messages'}" method="post">
                 <input type="hidden" name="returnTo" value="message-box"/>
                 <input type="hidden" name="replyToMessageId" th:value="${item.id}"/>
@@ -192,6 +142,45 @@
                    th:href="@{'/reply/' + ${token}(box_page=${p})}"
                    th:text="${p + 1}"></a>
                 <strong th:if="${p == box.number}" th:text="${p + 1}"></strong>
+            </span>
+        </div>
+    </div>
+
+    <!-- ===== 送信履歴: what the user sent — direction=IN, read-only ===== -->
+    <div class="message-box-pane" data-mbpane="sent" style="display:none;">
+        <span th:if="${isAdmin}" class="message-box-head-actions" style="margin:8px 0;">
+            <button type="submit" form="messageBoxDeleteForm"
+                    class="message-box-delete-btn"
+                    onclick="return confirm('選択したメッセージを削除しますか？');">選択削除</button>
+            <button type="submit" form="messageBoxDeleteAllInboundForm"
+                    class="message-box-delete-btn message-box-delete-all-btn"
+                    onclick="return confirm('この送信履歴を全件削除します。よろしいですか？');">全件削除</button>
+        </span>
+
+        <div th:if="${inboundBox == null or inboundBox.content.empty}" class="message-box-empty">送信履歴はありません</div>
+
+        <div th:each="item : ${inboundBox != null ? inboundBox.content : {}}" class="message-box-item">
+            <div class="message-box-item-head">
+                <input th:if="${isAdmin}" type="checkbox" name="ids" th:value="${item.id}"
+                       form="messageBoxDeleteForm" class="message-box-checkbox"/>
+                <span class="message-box-date"
+                      th:text="'送信時間 : ' + ${#temporals.format(item.sentAt, 'yyyy/MM/dd HH:mm')}"></span>
+            </div>
+            <div class="message-box-reply-label" th:text="${item.replyLabel}"></div>
+            <div class="message-box-subject" th:if="${item.subject != null and !item.subject.isEmpty()}"
+                 th:text="${item.subject}"></div>
+            <div class="message-box-body" th:text="${item.bodyText}"></div>
+        </div>
+
+        <div class="message-box-pager" th:if="${inboundBox != null and inboundBox.totalPages > 1}">
+            <span th:each="p : ${#numbers.sequence(0, inboundBox.totalPages - 1)}">
+                <a th:if="${p != inboundBox.number and isAdmin}"
+                   th:href="@{'/manager/users/' + ${userId} + '/message-box'(inboundPage=${p})}"
+                   th:text="${p + 1}"></a>
+                <a th:if="${p != inboundBox.number and !isAdmin}"
+                   th:href="@{'/reply/' + ${token}(inbound_page=${p})}"
+                   th:text="${p + 1}"></a>
+                <strong th:if="${p == inboundBox.number}" th:text="${p + 1}"></strong>
             </span>
         </div>
     </div>

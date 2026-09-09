@@ -260,4 +260,15 @@ public class DiffScheduleController {
         model.addAttribute("definitions", definitionService.listAll());
         return "setting/diff-schedule-history";
     }
+
+    /** 選択削除 on the history page — hard-deletes the selected step rows (and their parent
+     *  schedule if it ends up empty). Note the same shared-target caveat as the per-user
+     *  delete: a step's parent schedule may have targeted multiple users at once. */
+    @PostMapping("/history/delete")
+    public String historyDelete(@RequestParam(name = "ids", required = false) List<Long> ids,
+                                 HttpSession session, RedirectAttributes ra) {
+        int n = (ids == null || ids.isEmpty()) ? 0 : scheduleService.deleteSteps(ids, adminName(session));
+        ra.addFlashAttribute("flashSuccess", n + " 件削除しました");
+        return "redirect:/manager/settings/diff-schedule/history";
+    }
 }
