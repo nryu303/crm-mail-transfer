@@ -610,6 +610,7 @@ public class UserController {
     @GetMapping("/{id}/message-box")
     public String messageBox(@PathVariable Long id,
                              @RequestParam(name = "page", defaultValue = "0") int page,
+                             @RequestParam(name = "inboundPage", defaultValue = "0") int inboundPage,
                              Model model, RedirectAttributes ra) {
         Optional<CrmUser> user = service.findById(id);
         if (!user.isPresent()) {
@@ -618,6 +619,7 @@ public class UserController {
         }
         model.addAttribute("user", user.get());
         model.addAttribute("messageBox", messageBoxService.listFor(id, page));
+        model.addAttribute("inboundBox", messageBoxService.listInboundFor(id, inboundPage));
         model.addAttribute("messageBoxPage", page);
         return "user/message-box";
     }
@@ -638,6 +640,17 @@ public class UserController {
         int n = messageBoxService.dismissAll(id);
         auditLog.record(com.crm.service.AuditLogService.ACTION_MESSAGE_BOX_DELETE, "Message",
                 "ALL", n + " 件全件削除 (user=" + id + ")");
+        ra.addFlashAttribute("flashSuccess", n + " 件全件削除しました");
+        return "redirect:/manager/users/" + id + "/message-box";
+    }
+
+    /** 受信履歴 tab's 全件削除 — separate from the 送信履歴 one above since they touch
+     *  different directions (see MessageBoxService.dismissAllInbound). */
+    @PostMapping("/{id}/message-box/delete-all-inbound")
+    public String messageBoxDeleteAllInbound(@PathVariable Long id, RedirectAttributes ra) {
+        int n = messageBoxService.dismissAllInbound(id);
+        auditLog.record(com.crm.service.AuditLogService.ACTION_MESSAGE_BOX_DELETE, "Message",
+                "ALL_INBOUND", n + " 件全件削除 (user=" + id + ")");
         ra.addFlashAttribute("flashSuccess", n + " 件全件削除しました");
         return "redirect:/manager/users/" + id + "/message-box";
     }

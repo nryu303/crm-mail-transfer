@@ -313,6 +313,18 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
     Page<Message> findMessageBoxPage(@org.springframework.data.repository.query.Param("userId") Long userId,
                                       Pageable pageable);
 
+    /** 受信履歴 tab counterpart to {@link #findMessageBoxPage} — this user's own past inbound
+     *  submissions (web-form replies, direct email/SMS replies), newest first. Added
+     *  2026-09-09 alongside the メッセージボックス→受信履歴/送信履歴 tab split; previously the
+     *  message box only ever showed what the CRM sent, never what the user themselves sent in. */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT m FROM Message m WHERE m.userId = :userId " +
+            "AND m.direction = 'IN' " +
+            "AND m.boxDismissedAt IS NULL " +
+            "ORDER BY m.sentAt DESC")
+    Page<Message> findInboundBoxPage(@org.springframework.data.repository.query.Param("userId") Long userId,
+                                      Pageable pageable);
+
     /**
      * Admin-only per-user メッセージボックス soft-delete (選択削除 button). Distinct from
      * dismissInboxByUserId — that dismisses IN rows globally for /manager/inbox; this
@@ -343,4 +355,13 @@ public interface MessageRepository extends JpaRepository<Message, Long>, JpaSpec
             "AND m.boxDismissedAt IS NULL")
     int dismissAllBoxByUserId(@org.springframework.data.repository.query.Param("userId") Long userId,
                                @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
+
+    /** 受信履歴 tab's 全件削除 — mirrors {@link #dismissAllBoxByUserId} but for direction=IN. */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Query(
+            "UPDATE Message m SET m.boxDismissedAt = :now " +
+            "WHERE m.userId = :userId AND m.direction = 'IN' AND m.boxDismissedAt IS NULL")
+    int dismissAllInboundBoxByUserId(@org.springframework.data.repository.query.Param("userId") Long userId,
+                                      @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 }

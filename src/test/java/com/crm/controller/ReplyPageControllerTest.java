@@ -110,7 +110,7 @@ class ReplyPageControllerTest {
         req.setServerName("ii5gh9ge.jp");
         Model model = new ExtendedModelMap();
 
-        String view = controller.show("tok123", 0, req, model);
+        String view = controller.show("tok123", 0, 0, req, model);
 
         assertThat(view).isEqualTo("redirect:https://www.yahoo.co.jp");
         verify(userActivityService).touchLastLogin(any(CrmUser.class), anyString(), any(), any(), anyString());
@@ -129,7 +129,7 @@ class ReplyPageControllerTest {
         req.setServerName("ii5gh9ge.jp");
         Model model = new ExtendedModelMap();
 
-        String view = controller.show("tok123", 0, req, model);
+        String view = controller.show("tok123", 0, 0, req, model);
 
         assertThat(view).isEqualTo("reply/landing");
         assertThat(model.getAttribute("landingHtml")).isEqualTo("<html>fake landing</html>");
@@ -148,7 +148,7 @@ class ReplyPageControllerTest {
         req.setServerName("ii5gh9ge.jp");
         Model model = new ExtendedModelMap();
 
-        String view = controller.show("tok123", 0, req, model);
+        String view = controller.show("tok123", 0, 0, req, model);
 
         assertThat(view).isEqualTo("reply/page");
     }
@@ -164,7 +164,7 @@ class ReplyPageControllerTest {
         req.setServerName("nbbv7g.jp"); // legacy base-URL domain, no ExternalLinkDomain row
         Model model = new ExtendedModelMap();
 
-        String view = controller.show("tok123", 0, req, model);
+        String view = controller.show("tok123", 0, 0, req, model);
 
         assertThat(view).isEqualTo("reply/page");
     }
@@ -181,7 +181,7 @@ class ReplyPageControllerTest {
         req.setServerName("ii5gh9ge.jp");
         Model model = new ExtendedModelMap();
 
-        String view = controller.show("tok123", 0, req, model);
+        String view = controller.show("tok123", 0, 0, req, model);
 
         assertThat(view).isEqualTo("reply/page");
     }

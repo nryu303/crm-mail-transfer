@@ -78,6 +78,12 @@ public class MessageBoxService {
         return "Re: " + snippet;
     }
 
+    /** 受信履歴 tab — this user's own past inbound submissions. */
+    public Page<MessageBoxItem> listInboundFor(Long userId, int page) {
+        Pageable pageable = PageRequest.of(Math.max(page, 0), PAGE_SIZE, Sort.unsorted());
+        return messageRepository.findInboundBoxPage(userId, pageable).map(MessageBoxService::toItem);
+    }
+
     @Transactional
     public int dismissSelected(Long userId, List<Long> messageIds) {
         if (messageIds == null || messageIds.isEmpty()) return 0;
@@ -87,5 +93,13 @@ public class MessageBoxService {
     @Transactional
     public int dismissAll(Long userId) {
         return messageRepository.dismissAllBoxByUserId(userId, LocalDateTime.now());
+    }
+
+    /** 受信履歴 tab's 全件削除 — separate from {@link #dismissAll} since that one only ever
+     *  touched direction=OUT rows (送信履歴). Selective delete reuses {@link #dismissSelected}
+     *  unchanged — it already matches by id+userId regardless of direction. */
+    @Transactional
+    public int dismissAllInbound(Long userId) {
+        return messageRepository.dismissAllInboundBoxByUserId(userId, LocalDateTime.now());
     }
 }

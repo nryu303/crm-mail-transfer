@@ -108,6 +108,7 @@ public class ReplyPageController {
     @GetMapping("/reply/{token}")
     public String show(@PathVariable String token,
                        @RequestParam(name = "box_page", defaultValue = "0") int boxPage,
+                       @RequestParam(name = "inbound_page", defaultValue = "0") int inboundPage,
                        HttpServletRequest request, Model model) {
         Optional<ReplyPage> rpOpt = replyPageService.findByToken(token);
         if (!rpOpt.isPresent() || !replyPageService.isUsable(rpOpt.get())) {
@@ -195,9 +196,11 @@ public class ReplyPageController {
         model.addAttribute("maxAttachmentSizeMB",
                 com.crm.service.ReplyAttachmentService.MAX_SIZE_BYTES / 1024 / 1024);
 
-        // メッセージボックス: this user's past OUT/SENT history (SMS/WEB/BROADCAST), newest first.
+        // メッセージボックス: 送信履歴 tab (past OUT/SENT history) + 受信履歴 tab (this user's own
+        // past inbound submissions) — split 2026-09-09, 受信履歴 is the default tab.
         if (user.isPresent()) {
             model.addAttribute("messageBox", messageBoxService.listFor(user.get().getId(), boxPage));
+            model.addAttribute("inboundBox", messageBoxService.listInboundFor(user.get().getId(), inboundPage));
         }
         return "reply/page";
     }
