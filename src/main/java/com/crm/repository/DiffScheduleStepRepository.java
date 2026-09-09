@@ -47,4 +47,15 @@ public interface DiffScheduleStepRepository extends JpaRepository<DiffScheduleSt
     /** Daily auto-purge support: drop finished (non-PENDING) step rows older than a cutoff,
      *  keyed off updatedAt since that's set on every status transition (executed/cancelled/failed). */
     long deleteByStatusNotAndUpdatedAtBefore(String notStatus, LocalDateTime cutoff);
+
+    /** Dashboard 予約 (reservation) graph support — mirrors
+     *  MessageRepository.countQueuedByDirectionAndChannelBetweenEffective's bucket shape so a
+     *  pending diff MESSAGE step's send counts toward the same hourly reservation bar as a
+     *  normal scheduled broadcast, even though it won't materialise a real Message row until
+     *  it actually fires. HTML_SWITCH steps never count here — they don't send anything. */
+    @Query("SELECT COUNT(s) FROM DiffScheduleStep s WHERE s.status = 'PENDING' AND s.stepType = 'MESSAGE' " +
+           "AND s.channel = :channel AND s.scheduledFor >= :from AND s.scheduledFor < :to")
+    long countPendingMessageStepsByChannelBetween(@Param("channel") String channel,
+                                                   @Param("from") LocalDateTime from,
+                                                   @Param("to") LocalDateTime to);
 }

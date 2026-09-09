@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 class DashboardServiceTest {
 
     private MessageRepository msgRepo;
+    private com.crm.repository.DiffScheduleStepRepository diffStepRepo;
     private DashboardService svc;
 
     @BeforeEach
@@ -37,12 +38,14 @@ class DashboardServiceTest {
         PaymentRepository payRepo = mock(PaymentRepository.class);
         CarrierUserBindingRepository bindingRepo = mock(CarrierUserBindingRepository.class);
         CrmUserRepository userRepo = mock(CrmUserRepository.class);
-        svc = new DashboardService(msgRepo, payRepo, bindingRepo, userRepo);
+        diffStepRepo = mock(com.crm.repository.DiffScheduleStepRepository.class);
+        svc = new DashboardService(msgRepo, payRepo, bindingRepo, userRepo, diffStepRepo);
         // Defaults so every range returns 0 unless we override per-test.
         when(msgRepo.countByDirectionBetweenEffective(any(), any(), any())).thenReturn(0L);
         when(msgRepo.countByDirectionAndStatusBetweenEffective(any(), any(), any(), any())).thenReturn(0L);
         when(msgRepo.countByDirectionAndChannelBetweenEffective(any(), any(), any(), any())).thenReturn(0L);
         when(msgRepo.countQueuedByDirectionAndChannelBetweenEffective(any(), any(), any(), any())).thenReturn(0L);
+        when(diffStepRepo.countPendingMessageStepsByChannelBetween(any(), any(), any())).thenReturn(0L);
     }
 
     @Test

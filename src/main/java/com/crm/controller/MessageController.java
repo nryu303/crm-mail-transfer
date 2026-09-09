@@ -38,6 +38,7 @@ public class MessageController {
     private final com.crm.service.PaymentService paymentService;
     private final com.crm.repository.ReplyPageAttachmentRepository attachmentRepo;
     private final com.crm.service.ReplyPageSettingService replyPageSettingService;
+    private final com.crm.service.DiffScheduleService diffScheduleService;
 
     public MessageController(MessageService messageService,
                              CrmUserService userService,
@@ -47,7 +48,8 @@ public class MessageController {
                              com.crm.service.AdminAuthService adminAuthService,
                              com.crm.service.PaymentService paymentService,
                              com.crm.repository.ReplyPageAttachmentRepository attachmentRepo,
-                             com.crm.service.ReplyPageSettingService replyPageSettingService) {
+                             com.crm.service.ReplyPageSettingService replyPageSettingService,
+                             com.crm.service.DiffScheduleService diffScheduleService) {
         this.messageService = messageService;
         this.userService = userService;
         this.placeholderService = placeholderService;
@@ -57,6 +59,7 @@ public class MessageController {
         this.paymentService = paymentService;
         this.attachmentRepo = attachmentRepo;
         this.replyPageSettingService = replyPageSettingService;
+        this.diffScheduleService = diffScheduleService;
     }
 
     /** Global recent-messages list with tab filtering. */
@@ -152,6 +155,17 @@ public class MessageController {
         model.addAttribute("templatePageTitles", templateService.listPageTitles());
         model.addAttribute("templateActivePages", templateService.listActivePageNumbers());
         model.addAttribute("boundAddresses", bindingService.listBoundFor(userId));
+        // 差分予約 panel: pending (not-yet-fired) diff-schedule sends for this user, shown
+        // separately from normal 予約送信 (2026-09-09 operator request).
+        List<com.crm.entity.DiffScheduleStep> diffReservations =
+                diffScheduleService.listPendingMessageStepsForUser(userId);
+        java.util.Map<Long, com.crm.entity.DiffSchedule> diffSchedulesById = new java.util.HashMap<>();
+        for (com.crm.entity.DiffScheduleStep s : diffReservations) {
+            diffSchedulesById.computeIfAbsent(s.getDiffScheduleId(),
+                    sid -> diffScheduleService.findScheduleById(sid).orElse(null));
+        }
+        model.addAttribute("diffReservations", diffReservations);
+        model.addAttribute("diffSchedulesById", diffSchedulesById);
         // Inbound attachment thumbnails — fetch every attachment linked to any IN-message
         // in this thread, group by message_id so the template can render the badge + grid.
         java.util.Map<Long, java.util.List<com.crm.entity.ReplyPageAttachment>> attsByMsg

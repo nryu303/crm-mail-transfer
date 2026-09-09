@@ -38,6 +38,7 @@ public class BroadcastController {
     private final com.crm.service.MessageService messageService;
     private final com.crm.service.AuditLogService auditLog;
     private final com.crm.service.ReplyPageSettingService replyPageSettingService;
+    private final com.crm.service.DiffScheduleService diffScheduleService;
 
     public BroadcastController(BroadcastService broadcastService,
                                MessageTemplateService templateService,
@@ -48,7 +49,8 @@ public class BroadcastController {
                                com.crm.service.SmsSettingService smsSettingService,
                                com.crm.service.MessageService messageService,
                                com.crm.service.AuditLogService auditLog,
-                               com.crm.service.ReplyPageSettingService replyPageSettingService) {
+                               com.crm.service.ReplyPageSettingService replyPageSettingService,
+                               com.crm.service.DiffScheduleService diffScheduleService) {
         this.broadcastService = broadcastService;
         this.templateService = templateService;
         this.userService = userService;
@@ -59,6 +61,7 @@ public class BroadcastController {
         this.messageService = messageService;
         this.auditLog = auditLog;
         this.replyPageSettingService = replyPageSettingService;
+        this.diffScheduleService = diffScheduleService;
     }
 
     /** Email-domain choices for the broadcast filter (replaces old carrierCode dropdown). */
@@ -80,7 +83,23 @@ public class BroadcastController {
     public String list(@RequestParam(name = "page", defaultValue = "0") int page,
                        @RequestParam(name = "addr", required = false) String addr,
                        @RequestParam(name = "channel", required = false) String channel,
+                       @RequestParam(name = "view", required = false) String view,
                        Model model) {
+        boolean diffView = "diff".equals(view);
+        model.addAttribute("view", diffView ? "diff" : "broadcast");
+        if (diffView) {
+            List<com.crm.entity.DiffScheduleStep> diffReservations = diffScheduleService.listPendingMessageSteps();
+            java.util.Map<Long, com.crm.entity.DiffSchedule> diffSchedulesById = new java.util.HashMap<>();
+            for (com.crm.entity.DiffScheduleStep s : diffReservations) {
+                diffSchedulesById.computeIfAbsent(s.getDiffScheduleId(),
+                        sid -> diffScheduleService.findScheduleById(sid).orElse(null));
+            }
+            model.addAttribute("diffReservations", diffReservations);
+            model.addAttribute("diffSchedulesById", diffSchedulesById);
+            model.addAttribute("addr", "");
+            model.addAttribute("channel", "");
+            return "message/broadcast-list";
+        }
         String addrTrim = (addr == null) ? null : addr.trim();
         String addrLike = (addrTrim == null || addrTrim.isEmpty())
                 ? null : "%" + addrTrim.toLowerCase() + "%";

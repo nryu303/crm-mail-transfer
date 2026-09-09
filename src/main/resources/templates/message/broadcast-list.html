@@ -41,11 +41,61 @@
     <div class="flex items-center mb-4 flex-wrap gap-2">
         <h1 class="text-2xl font-semibold text-slate-800 flex-1"
             th:text="${channel == 'SMS'} ? 'SMS配信履歴' : '一斉送信返信履歴'">一斉送信返信履歴</h1>
+        <select id="bcastViewSelect" class="tw-input" style="width:auto;"
+                onchange="location.href = this.value === 'diff' ? '/manager/messages/broadcast?view=diff' : '/manager/messages/broadcast';">
+            <option value="broadcast" th:selected="${view != 'diff'}">一斉送信/返信履歴</option>
+            <option value="diff" th:selected="${view == 'diff'}">差分予約</option>
+        </select>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
            th:href="@{/manager/messages}">← 個別メッセージ管理へ</a>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
            th:href="@{/manager/messages/broadcast/summary}">一斉送信サマリー</a>
     </div>
+
+    <!-- ===== 差分予約 view ===== -->
+    <div th:if="${view == 'diff'}" class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-3 py-2 text-left">対象</th>
+                    <th class="px-3 py-2 text-left">差分名</th>
+                    <th class="px-3 py-2 text-left">チャネル</th>
+                    <th class="px-3 py-2 text-left">予約日時</th>
+                    <th class="px-3 py-2 text-right">削除</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                <tr th:if="${diffReservations == null or diffReservations.empty}">
+                    <td colspan="5" class="px-3 py-6 text-center text-slate-400">差分予約はありません</td>
+                </tr>
+                <tr th:each="s : ${diffReservations}" class="hover:bg-slate-50" th:with="sched=${diffSchedulesById.get(s.diffScheduleId)}">
+                    <td class="px-3 py-2 text-xs" th:if="${sched != null}">
+                        <a class="font-mono text-blue-600 hover:underline"
+                           th:href="@{/manager/users(ids=${sched.targetUserIds})}"
+                           th:text="${#strings.arraySplit(sched.targetUserIds, ',').length} + ' 名'"></a>
+                    </td>
+                    <td class="px-3 py-2 text-xs text-slate-600" th:if="${sched == null}">-</td>
+                    <td class="px-3 py-2 text-slate-700" th:text="${sched != null ? sched.diffNameSnapshot : '-'}"></td>
+                    <td class="px-3 py-2">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                              th:classappend="${s.channel == 'SMS'} ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-700'"
+                              th:text="${s.channel}"></span>
+                    </td>
+                    <td class="px-3 py-2 text-xs text-slate-500" th:text="${#temporals.format(s.scheduledFor, 'yyyy-MM-dd HH:mm')}"></td>
+                    <td class="px-3 py-2 text-right">
+                        <form method="post" th:action="@{'/manager/settings/diff-schedule/steps/' + ${s.id} + '/cancel'}"
+                              onsubmit="return confirm('この差分予約を取消します。よろしいですか?');">
+                            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                            <button type="submit" class="px-2 py-1 text-xs bg-rose-50 border border-rose-300 text-rose-700 hover:bg-rose-100 rounded">削除</button>
+                        </form>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ===== 一斉送信/返信履歴 view (default) ===== -->
+    <div th:if="${view != 'diff'}">
 
     <!-- Address search bar -->
     <form method="get" th:action="@{/manager/messages/broadcast}" class="bg-white rounded-lg shadow-sm border border-slate-100 p-3 mb-4">
@@ -219,6 +269,7 @@
     };
 })();
 </script>
+    </div>
 </section>
 </body>
 </html>

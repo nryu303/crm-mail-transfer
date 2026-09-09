@@ -153,6 +153,16 @@ public class DiffScheduleService {
         return scheduleStepRepository.findAllPending();
     }
 
+    /** Pending MESSAGE-type steps only (excludes HTML_SWITCH, which sends nothing) — powers
+     *  the 一斉送信/返信履歴 page's 差分予約 view (2026-09-09 operator request). */
+    public List<DiffScheduleStep> listPendingMessageSteps() {
+        List<DiffScheduleStep> out = new ArrayList<>();
+        for (DiffScheduleStep s : scheduleStepRepository.findAllPending()) {
+            if (DiffStep.STEP_MESSAGE.equals(s.getStepType())) out.add(s);
+        }
+        return out;
+    }
+
     public java.util.Optional<DiffSchedule> findScheduleById(Long id) {
         return scheduleRepository.findById(id);
     }
@@ -165,6 +175,21 @@ public class DiffScheduleService {
      *  powers the user-detail page's 差分スケジュール確認/削除 view. The repository LIKE is only
      *  a coarse candidate filter (a substring match can false-hit, e.g. id 5 against "51,52"),
      *  so each candidate's CSV is re-checked for exact membership before its steps are included. */
+    /** Pending (not-yet-fired) MESSAGE-type steps for this user only — powers the 返信画面
+     *  (thread.html) 差分予約 panel: a real send hasn't happened yet, so there's no Message row
+     *  to show, but the operator still wants to see/cancel it as a "reservation". HTML_SWITCH
+     *  steps are excluded — they don't send anything, so they're not a "reservation" here. */
+    public List<DiffScheduleStep> listPendingMessageStepsForUser(Long userId) {
+        List<DiffScheduleStep> out = new ArrayList<>();
+        for (DiffScheduleStep s : listStepsForUser(userId)) {
+            if (DiffScheduleStep.STATUS_PENDING.equals(s.getStatus())
+                    && DiffStep.STEP_MESSAGE.equals(s.getStepType())) {
+                out.add(s);
+            }
+        }
+        return out;
+    }
+
     public List<DiffScheduleStep> listStepsForUser(Long userId) {
         List<DiffSchedule> candidates = scheduleRepository.findByTargetUserIdsContaining(String.valueOf(userId));
         List<DiffScheduleStep> out = new ArrayList<>();

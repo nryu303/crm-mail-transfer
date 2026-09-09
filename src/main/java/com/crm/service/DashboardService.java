@@ -28,15 +28,18 @@ public class DashboardService {
     private final PaymentRepository paymentRepository;
     private final CarrierUserBindingRepository bindingRepository;
     private final CrmUserRepository userRepository;
+    private final com.crm.repository.DiffScheduleStepRepository diffScheduleStepRepository;
 
     public DashboardService(MessageRepository messageRepository,
                             PaymentRepository paymentRepository,
                             CarrierUserBindingRepository bindingRepository,
-                            CrmUserRepository userRepository) {
+                            CrmUserRepository userRepository,
+                            com.crm.repository.DiffScheduleStepRepository diffScheduleStepRepository) {
         this.messageRepository = messageRepository;
         this.paymentRepository = paymentRepository;
         this.bindingRepository = bindingRepository;
         this.userRepository = userRepository;
+        this.diffScheduleStepRepository = diffScheduleStepRepository;
     }
 
     /**
@@ -123,12 +126,17 @@ public class DashboardService {
                     Message.DIR_OUT, Message.STATUS_FAILED, from, to);
             long smsSent = messageRepository.countByDirectionAndChannelBetweenEffective(
                     Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
+            // 差分スケジュール pending MESSAGE steps count toward the same 予約 bucket (2026-09-09
+            // operator request) — they won't have a real Message row until they actually fire,
+            // so the reservation graph would otherwise miss them entirely.
             long smsQueued = messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
-                    Message.DIR_OUT, Message.CHANNEL_SMS, from, to);
+                    Message.DIR_OUT, Message.CHANNEL_SMS, from, to)
+                    + diffScheduleStepRepository.countPendingMessageStepsByChannelBetween("SMS", from, to);
             long emailQueued = messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
                     Message.DIR_OUT, Message.CHANNEL_EMAIL, from, to)
                     + messageRepository.countQueuedByDirectionAndChannelBetweenEffective(
-                    Message.DIR_OUT, Message.CHANNEL_BROADCAST, from, to);
+                    Message.DIR_OUT, Message.CHANNEL_BROADCAST, from, to)
+                    + diffScheduleStepRepository.countPendingMessageStepsByChannelBetween("EMAIL", from, to);
             HourlySend hb = new HourlySend();
             hb.label = String.format("%02d:00", h);
             hb.sent = sent;

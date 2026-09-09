@@ -243,6 +243,27 @@
                   th:text="'送 ' + ${threadOut}" title="送信数"></span>
         </header>
         <div class="body" id="historyBody">
+            <!-- 差分予約 panel — pending (not-yet-fired) diff-schedule sends for this user,
+                 shown separately from normal 予約送信 with distinct coloring + a delete button
+                 (2026-09-09 operator request). -->
+            <div th:if="${diffReservations != null and !diffReservations.empty}"
+                 style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:6px;padding:8px 10px;margin-bottom:10px;">
+                <div style="font-size:.72rem;font-weight:700;color:#5b21b6;margin-bottom:4px;">差分予約</div>
+                <form th:id="'diffResDelForm'" method="post"
+                      th:action="@{'/manager/users/' + ${user.id} + '/diff-schedules/delete'}">
+                    <input type="hidden" name="_csrf" th:value="${_csrf}"/>
+                </form>
+                <div th:each="s : ${diffReservations}" th:with="sched=${diffSchedulesById.get(s.diffScheduleId)}"
+                     style="display:flex;align-items:center;gap:8px;font-size:.75rem;color:#5b21b6;padding:2px 0;">
+                    <span style="font-weight:600;" th:text="${sched != null ? sched.diffNameSnapshot : '差分'}"></span>
+                    <span th:text="'(' + ${s.channel} + ')'"></span>
+                    <span th:text="'予約: ' + ${#temporals.format(s.scheduledFor, 'yyyy-MM-dd HH:mm')}"></span>
+                    <button type="submit" th:form="'diffResDelForm'" name="ids" th:value="${s.id}"
+                            style="margin-left:auto;background:#7c3aed;color:#fff;border:none;border-radius:4px;padding:2px 8px;font-size:.7rem;cursor:pointer;"
+                            onclick="return confirm('この差分予約を削除します。よろしいですか?');">削除</button>
+                </div>
+            </div>
+
             <div th:if="${thread.empty}" class="text-center text-xs text-slate-400 py-6">まだメッセージはありません</div>
             <div th:each="m : ${thread}" class="hist-item"
                  th:classappend="${m.channel == 'SMS'} ? (${m.direction == 'OUT'} ? 'out sms' : 'in sms') : (${m.direction == 'OUT'} ? 'out' : (${m.channel == 'WEB_REPLY'} ? 'in web' : 'in'))">
