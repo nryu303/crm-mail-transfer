@@ -69,6 +69,16 @@ class PlaceholderServiceTest {
     }
 
     @Test
+    void replyUrlAndExternalUrlTags_surviveSubstitution() {
+        // Regression (2026-09-09): these two are resolved AFTER substitute() returns, by
+        // MessageService.applyUrlPlaceholders(). The unresolved-tag blanking pass must never
+        // touch them, or a broadcast/reply body built around %reply_url% comes out empty.
+        CrmUser u = user("a", "b@c");
+        assertThat(svc.substitute("ご返信は %reply_url% から", u)).isEqualTo("ご返信は %reply_url% から");
+        assertThat(svc.substitute("%external_url%", u)).isEqualTo("%external_url%");
+    }
+
+    @Test
     void customTagFromUser_isSubstituted() {
         CrmUser u = user("a", "b@c");
         u.setTag1Key("amount");

@@ -40,8 +40,15 @@ public class PlaceholderService {
     /** Matches any remaining %token% shape after known substitutions — i.e. a custom tag
      *  (%amount%, %product%, %full_address%, or any admin-typed key) whose user has no
      *  key/value configured for it. Operator requirement (2026-09-09): show blank, not the
-     *  literal placeholder text, whether in the message box or a received email. */
-    private static final java.util.regex.Pattern UNRESOLVED_TAG = java.util.regex.Pattern.compile("%[A-Za-z0-9_]+%");
+     *  literal placeholder text, whether in the message box or a received email.
+     *
+     *  <p>Deliberately excludes %reply_url% / %external_url% — those are resolved downstream
+     *  by {@link MessageService#applyUrlPlaceholders} AFTER this method returns, so blanking
+     *  them here would delete the tag before it ever gets expanded, leaving the sent body
+     *  missing its URL (or entirely empty for a body that was just the tag — the exact
+     *  regression reported 2026-09-09: "一斉送信で置換をいれると本文が空欄になる"). */
+    private static final java.util.regex.Pattern UNRESOLVED_TAG = java.util.regex.Pattern.compile(
+            "%(?!reply_url%|external_url%)[A-Za-z0-9_]+%");
 
     /** Replace all known placeholders in template with values from this user. Null template -> null. */
     public String substitute(String template, CrmUser user) {
