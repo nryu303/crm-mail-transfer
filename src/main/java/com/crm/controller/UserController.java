@@ -93,7 +93,7 @@ public class UserController {
     /** Active ad-code choices for autocomplete on the user-detail form. */
     @ModelAttribute("adCodeChoices")
     public List<com.crm.entity.AdCode> adCodeChoices() {
-        return adCodeService.listAll();
+        return adCodeService.listAllAlphabetical();
     }
 
     @ModelAttribute("builtinTags")

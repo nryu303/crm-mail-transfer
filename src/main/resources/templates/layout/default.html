@@ -17,15 +17,15 @@
         <div class="text-xl font-bold tracking-wide mb-1">CRM</div>
         <div class="text-xs text-slate-400 mb-6" th:if="${session.adminUserName}" th:text="${session.adminUserName}"></div>
         <nav class="flex flex-col gap-1 text-sm">
-            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/dashboard}">ダッシュボード</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/dashboard}">管理トップ</a>
             <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/users}">ユーザー管理</a>
             <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/inbox}">受信/返信管理</a>
             <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/messages}">個別メッセージ管理</a>
-            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/settings/diff-schedule/history}">差分スケジュール履歴</a>
             <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/messages/broadcast}">一斉送信/返信履歴</a>
-            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/carrier-pool}">キャリア登録割り当て</a>
-            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/settings/html-images}">HTML画像管理</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/settings/diff-schedule/history}">差分スケジュール履歴</a>
             <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/settings/diff-schedule}">差分スケジュール設定</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/carrier-pool}">キャリア登録設定</a>
+            <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/settings/html-images}">HTML画像管理</a>
             <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/ad-codes}">広告設定</a>
             <a class="px-3 py-2 rounded hover:bg-slate-800 text-slate-300 hover:text-white" th:href="@{/manager/settings}">設定</a>
         </nav>

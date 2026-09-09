@@ -51,6 +51,10 @@ public class AdCodeService {
 
     public List<AdCode> listAll() { return repository.findAllByOrderByCreatedAtDesc(); }
 
+    /** Alphabetical listing for the user-list filter dropdown (2026-09-09 operator request —
+     *  creation-order made the dropdown hard to scan). */
+    public List<AdCode> listAllAlphabetical() { return repository.findAllByOrderByNameAsc(); }
+
     /** Filtered list. {@code q} matches against name / code / memo (case-insensitive contains). */
     public List<AdCode> search(String q) {
         List<AdCode> all = listAll();

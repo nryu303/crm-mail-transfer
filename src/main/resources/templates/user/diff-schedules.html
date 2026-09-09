@@ -53,7 +53,7 @@
                 </td>
                 <td class="px-3 py-2 text-xs text-slate-500" th:text="${sched != null ? #temporals.format(sched.setAt, 'yyyy-MM-dd HH:mm') : '-'}"></td>
                 <td class="px-3 py-2 text-xs text-slate-500"
-                    th:text="${s.executedAt != null} ? ${#temporals.format(s.executedAt, 'yyyy-MM-dd HH:mm')} : (${s.cancelledAt != null} ? ${#temporals.format(s.cancelledAt, 'yyyy-MM-dd HH:mm')} : (${s.status == 'PENDING'} ? ('予定: ' + #temporals.format(s.scheduledFor, 'yyyy-MM-dd HH:mm')) : '-'))"></td>
+                    th:text="${s.executedAt != null ? #temporals.format(s.executedAt, 'yyyy-MM-dd HH:mm') : (s.cancelledAt != null ? #temporals.format(s.cancelledAt, 'yyyy-MM-dd HH:mm') : (s.status == 'PENDING' ? ('予定: ' + #temporals.format(s.scheduledFor, 'yyyy-MM-dd HH:mm')) : '-'))}"></td>
                 <td class="px-3 py-2">
                     <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
                           th:classappend="${s.status == 'EXECUTED'} ? 'bg-emerald-100 text-emerald-700' :

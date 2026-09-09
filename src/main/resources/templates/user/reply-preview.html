@@ -6,12 +6,12 @@
     <title>返信画面プレビュー</title>
     <link rel="stylesheet" th:href="@{/css/reply.css}"/>
     <style>
-        /* Mirror the user-facing reply page (templates/reply/page.html): the iframe is
-           fixed at 500px, with internal scroll for tall header HTML; the reply form sits
-           directly underneath. The only addition for admins is the slim banner at the top
-           and the tag-resolution table at the bottom. */
+        /* Mirror the user-facing reply page (templates/reply/page.html) structurally, but
+           per operator request (2026-09-09) the preview's HTML fills the full remaining
+           viewport height — the 入力欄 compose form is fine sitting below the fold, since
+           this is a read-only preview (the send button is disabled here anyway). */
         .reply-header-frame {
-            display: block; width: 100%; height: 500px;
+            display: block; width: 100%; height: calc(100vh - 52px);
             border: 0; background: #fff;
         }
         .preview-banner { position: sticky; top: 0; z-index: 30; }

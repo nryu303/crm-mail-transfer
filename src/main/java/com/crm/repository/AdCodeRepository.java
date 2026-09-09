@@ -12,5 +12,9 @@ public interface AdCodeRepository extends JpaRepository<AdCode, Long> {
 
     List<AdCode> findAllByOrderByCreatedAtDesc();
 
+    /** Alphabetical (by display name) — used for the user-list filter dropdown so operators
+     *  can find a code without scanning creation-order chaos. */
+    List<AdCode> findAllByOrderByNameAsc();
+
     boolean existsByCode(String code);
 }
