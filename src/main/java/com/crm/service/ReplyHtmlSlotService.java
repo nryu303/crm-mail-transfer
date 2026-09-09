@@ -125,4 +125,51 @@ public class ReplyHtmlSlotService {
         }
         return total;
     }
+
+    // ---- Bulk-edit page draft storage ----
+    // 2026-09-10 operator request: the bulk-edit page's 10 slots had no way to persist
+    // content except "適用" (which immediately overwrites every user in a chosen folder) —
+    // there was no lightweight "just save what I typed" for staging/reusing HTML. This is a
+    // separate CrmSetting-backed store, decoupled from any folder/user, that the bulk-edit
+    // page loads into its textareas by default and can save back to independently of applying.
+
+    private static String draftKey(int slotNo) { return "memo.bulk.draft." + slotNo; }
+
+    /** The 10 draft slots, in order (index 0 = slot 1). Null entries mean "never saved". */
+    public String[] listDraftSlots() {
+        String[] out = new String[SLOT_COUNT];
+        for (int i = 1; i <= SLOT_COUNT; i++) {
+            out[i - 1] = settingRepository.findBySettingKey(draftKey(i))
+                    .map(CrmSetting::getSettingValue).orElse(null);
+        }
+        return out;
+    }
+
+    @Transactional
+    public void saveDraftSlots(String[] htmls) {
+        if (htmls == null || htmls.length != SLOT_COUNT) {
+            throw new IllegalArgumentException("htmls must have exactly " + SLOT_COUNT + " entries");
+        }
+        for (int i = 1; i <= SLOT_COUNT; i++) {
+            String key = draftKey(i);
+            String value = htmls[i - 1];
+            CrmSetting s = settingRepository.findBySettingKey(key).orElseGet(() -> {
+                CrmSetting ns = new CrmSetting();
+                ns.setSettingKey(key);
+                ns.setDescription("専用返信画面HTML 一括編集ページの下書き保存 (スロット " + key.substring(key.lastIndexOf('.') + 1) + ")");
+                ns.setUpdatedAt(LocalDateTime.now());
+                return ns;
+            });
+            s.setSettingValue(value);
+            s.setUpdatedAt(LocalDateTime.now());
+            settingRepository.save(s);
+        }
+    }
+
+    /** One draft slot's HTML (1..SLOT_COUNT), or null if never saved. */
+    public String getDraftSlot(int slotNo) {
+        if (slotNo < 1 || slotNo > SLOT_COUNT) return null;
+        return settingRepository.findBySettingKey(draftKey(slotNo))
+                .map(CrmSetting::getSettingValue).orElse(null);
+    }
 }

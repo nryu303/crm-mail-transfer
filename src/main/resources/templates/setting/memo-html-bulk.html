@@ -123,11 +123,25 @@
                     th:attr="onclick=|return confirm('対象フォルダ内の全ユーザーに${slotCount}スロット分のHTMLと使用中設定を上書きします。よろしいですか?');|">
                 フォルダ内ユーザーへ一括適用
             </button>
+            <button type="submit" th:formaction="@{/manager/settings/memo-html-bulk/draft}"
+                    class="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-md"
+                    title="どのユーザーにも適用せず、ここに入力したHTMLだけを保存します">
+                下書き保存
+            </button>
+        </div>
+        <div class="flex items-center gap-2 pt-3 flex-wrap">
             <span class="text-xs text-slate-500">プレビュー →</span>
             <a class="inline-flex items-center px-2 py-1.5 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
                th:href="@{/manager/settings/reply-page}" target="_blank">使用中 (site default)</a>
-            <span class="text-xs text-slate-400">← 返信画面HTMLが未設定の場合デフォルト表示します</span>
-            <span class="text-xs text-slate-400 ml-2">※ 個別で設定する場合はユーザー詳細ページから設定してください</span>
+            <span class="text-xs text-slate-700">← 返信画面HTMLが未設定の場合デフォルト表示します</span>
+            <span class="text-xs text-slate-700 ml-2">※ 個別で設定する場合はユーザー詳細ページから設定してください</span>
+        </div>
+        <div class="flex items-center gap-2 pt-2 flex-wrap">
+            <span class="text-xs text-slate-500">各スロット表示プレビュー（下書き保存した内容）→</span>
+            <a th:each="i : ${#numbers.sequence(1, slotCount)}"
+               class="inline-flex items-center px-2 py-1.5 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
+               th:href="@{/manager/settings/memo-html-bulk/preview(slot=${i})}" target="_blank"
+               th:text="${circledNumbers.get(i - 1)}">①</a>
         </div>
     </form>
 

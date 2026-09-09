@@ -52,6 +52,7 @@ public class SettingController {
     private final com.crm.service.HtmlImageService htmlImageService;
     private final com.crm.service.DiffScheduleService diffScheduleService;
     private final com.crm.service.BackupService backupService;
+    private final com.crm.service.PlaceholderService placeholderService;
 
     public SettingController(RelayServerService relayServerService,
                              com.crm.service.ExternalLinkDomainService externalLinkDomainService,
@@ -71,7 +72,8 @@ public class SettingController {
                              com.crm.service.FolderAutoMoveService folderAutoMoveService,
                              com.crm.service.HtmlImageService htmlImageService,
                              com.crm.service.DiffScheduleService diffScheduleService,
-                             com.crm.service.BackupService backupService) {
+                             com.crm.service.BackupService backupService,
+                             com.crm.service.PlaceholderService placeholderService) {
         this.relayServerService = relayServerService;
         this.externalLinkDomainService = externalLinkDomainService;
         this.templateService = templateService;
@@ -91,6 +93,7 @@ public class SettingController {
         this.htmlImageService = htmlImageService;
         this.diffScheduleService = diffScheduleService;
         this.backupService = backupService;
+        this.placeholderService = placeholderService;
     }
 
     @GetMapping("/backup")
@@ -985,19 +988,65 @@ public class SettingController {
         model.addAttribute("selectedFolder", folder == null ? "" : folder);
         // Optional bootstrap: copy all slot HTMLs from an existing user (so the operator can
         // start from "the current state of user X" rather than from scratch).
-        String[] htmls = new String[com.crm.service.ReplyHtmlSlotService.SLOT_COUNT];
+        String[] htmls;
         Integer activeSlot = 1;
         if (loadFromUserId != null) {
+            htmls = new String[com.crm.service.ReplyHtmlSlotService.SLOT_COUNT];
             java.util.Optional<com.crm.entity.CrmUser> uOpt = crmUserService.findById(loadFromUserId);
             if (uOpt.isPresent()) {
                 com.crm.entity.CrmUser u = uOpt.get();
                 for (int s = 1; s <= htmls.length; s++) htmls[s - 1] = u.getMemoSlot(s);
                 activeSlot = u.getActiveMemoSlot();
             }
+        } else {
+            // No specific user requested — load whatever was last saved as a draft here, so
+            // the operator's work-in-progress HTML isn't lost between visits (2026-09-10
+            // request: this area is meant to double as a staging/storage spot, not just a
+            // one-shot apply form).
+            htmls = replyHtmlSlotService.listDraftSlots();
         }
         model.addAttribute("htmls", htmls);
         model.addAttribute("activeSlot", activeSlot);
         return "setting/memo-html-bulk";
+    }
+
+    /** Saves the 10 textareas as a draft — decoupled from applying to any folder/user.
+     *  2026-09-10 operator request: there was no way to just persist HTML being drafted here
+     *  without immediately overwriting real users via 一括適用. */
+    @PostMapping("/memo-html-bulk/draft")
+    public String memoHtmlSaveDraft(@RequestParam java.util.Map<String, String> params,
+                                     RedirectAttributes ra) {
+        String[] htmls = new String[com.crm.service.ReplyHtmlSlotService.SLOT_COUNT];
+        for (int s = 1; s <= htmls.length; s++) htmls[s - 1] = params.get("html" + s);
+        replyHtmlSlotService.saveDraftSlots(htmls);
+        ra.addFlashAttribute("flashSuccess", "下書きを保存しました");
+        return "redirect:/manager/settings/memo-html-bulk";
+    }
+
+    /** Preview one draft slot — same rendering as the per-user reply-preview, but against a
+     *  transient (unsaved) synthetic user so tag placeholders resolve to blanks instead of
+     *  erroring, since there's no real CrmUser backing a draft. */
+    @GetMapping("/memo-html-bulk/preview")
+    public String memoHtmlPreviewDraft(@RequestParam(name = "slot", defaultValue = "1") int slot,
+                                        Model model) {
+        int effSlot = (slot >= 1 && slot <= com.crm.service.ReplyHtmlSlotService.SLOT_COUNT) ? slot : 1;
+        String rawMemo = replyHtmlSlotService.getDraftSlot(effSlot);
+        boolean usingDefault = rawMemo == null || rawMemo.trim().isEmpty();
+        if (usingDefault) {
+            rawMemo = replyPageSettingService.getOrCreate().getDefaultHeaderHtml();
+        }
+        com.crm.entity.CrmUser draftUser = new com.crm.entity.CrmUser();
+        draftUser.setDisplayName("下書きプレビュー");
+        String substituted = placeholderService.substitute(rawMemo, draftUser);
+        String repaired = UserController.repairHtml(substituted);
+        model.addAttribute("user", draftUser);
+        model.addAttribute("memoText", repaired);
+        model.addAttribute("repaired", substituted != null && !substituted.equals(repaired));
+        model.addAttribute("usingDefaultHtml", usingDefault);
+        model.addAttribute("previewSlot", effSlot);
+        model.addAttribute("activeSlot", 1);
+        model.addAttribute("bindings", placeholderService.buildBindings(draftUser));
+        return "user/reply-preview";
     }
 
     @PostMapping("/memo-html-bulk/titles")
