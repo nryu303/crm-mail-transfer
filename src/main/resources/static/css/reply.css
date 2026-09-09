@@ -185,25 +185,6 @@ body {
     border-bottom-color: #2563eb;
 }
 
-.message-box-compose {
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    padding: 12px 14px;
-    margin-bottom: 16px;
-}
-
-.message-box-compose textarea,
-.message-box-compose input[type="text"] {
-    width: 100%;
-    box-sizing: border-box;
-    font-family: inherit;
-    font-size: 14px;
-    padding: 6px 8px;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-}
-
 .message-box-delete-btn {
     padding: 6px 14px;
     background: #b91c1c;

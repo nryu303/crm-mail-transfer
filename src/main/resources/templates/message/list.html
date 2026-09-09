@@ -58,16 +58,6 @@
             </li>
             <li>
                 <a class="inline-block px-4 py-2 border-b-2 font-medium"
-                   th:classappend="${tab == 'reply'} ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'"
-                   th:href="@{/manager/messages(tab='reply')}">返信履歴</a>
-            </li>
-            <li>
-                <a class="inline-block px-4 py-2 border-b-2 font-medium"
-                   th:classappend="${tab == 'scheduled-reply'} ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'"
-                   th:href="@{/manager/messages(tab='scheduled-reply')}">予約返信履歴</a>
-            </li>
-            <li>
-                <a class="inline-block px-4 py-2 border-b-2 font-medium"
                    th:classappend="${tab == 'inbound'} ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'"
                    th:href="@{/manager/messages(tab='inbound')}">ユーザーからの受信</a>
             </li>

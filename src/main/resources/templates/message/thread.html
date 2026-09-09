@@ -262,6 +262,9 @@
                     <span th:text="${sched != null ? sched.diffNameSnapshot : '差分'}"></span>
                     <span class="text-xs" style="opacity:.75;" th:text="'(' + ${s.channel} + ')'"></span>
                 </div>
+                <div class="font-medium" th:if="${s.subjectSnapshot != null and !s.subjectSnapshot.isEmpty()}"
+                     th:text="${s.subjectSnapshot}"></div>
+                <div class="whitespace-pre-wrap" th:text="${s.bodySnapshot}"></div>
                 <div class="meta">
                     <span>差分予約</span>
                     ·

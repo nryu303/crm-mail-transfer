@@ -44,25 +44,10 @@
 
     <!-- ===== 受信履歴 (default tab): what the user received — direction=OUT ===== -->
     <div class="message-box-pane" data-mbpane="received">
-        <!-- Standalone compose (admin only) — not tied to any specific past message, so it's
-             always available even when this user has never received anything yet. Public side
-             removed 2026-09-09: reply/page.html already has its own top-level compose form
-             above this fragment, so a second one here was a redundant duplicate. SMS removed
-             the same day — SMS replies from users don't actually arrive, so offering to send
-             one from here was misleading. -->
-        <div class="message-box-compose" th:if="${isAdmin}">
-            <form class="reply-form message-box-reply-form"
-                  th:action="@{'/manager/users/' + ${userId} + '/messages'}" method="post">
-                <input type="hidden" name="returnTo" value="message-box"/>
-                <div class="field">
-                    <input type="text" name="subject" placeholder="件名" style="margin-bottom:4px;"/>
-                    <textarea name="body" rows="4" placeholder="メッセージを送信..."></textarea>
-                </div>
-                <div class="actions">
-                    <button type="submit">送信</button>
-                </div>
-            </form>
-        </div>
+        <!-- Standalone compose (admin only) removed 2026-09-10 — redundant with the richer
+             compose panel already on /manager/users/{id}/thread (operator request: 受信履歴の
+             直下の送信フォームは不要). Per-item reply forms below still cover replying to a
+             specific past message; use the thread view for a fresh send with no history yet. -->
 
         <span th:if="${isAdmin}" class="message-box-head-actions" style="margin:8px 0;">
             <button type="submit" form="messageBoxDeleteForm"

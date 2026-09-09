@@ -408,16 +408,6 @@ public class MessageService {
                 preds.add(cb.isNull(root.get("replyToMessageId")));
                 preds.add(root.get("status").in(
                         Message.STATUS_QUEUED, Message.STATUS_CANCELLED));
-            } else if ("reply".equals(tab)) {
-                preds.add(cb.equal(root.get("direction"), Message.DIR_OUT));
-                preds.add(cb.isNotNull(root.get("replyToMessageId")));
-                preds.add(root.get("status").in(
-                        Message.STATUS_SENT, Message.STATUS_DELIVERED, Message.STATUS_FAILED));
-            } else if ("scheduled-reply".equals(tab)) {
-                preds.add(cb.equal(root.get("direction"), Message.DIR_OUT));
-                preds.add(cb.isNotNull(root.get("replyToMessageId")));
-                preds.add(root.get("status").in(
-                        Message.STATUS_QUEUED, Message.STATUS_CANCELLED));
             } else if ("inbound".equals(tab)) {
                 preds.add(cb.equal(root.get("direction"), Message.DIR_IN));
             }
