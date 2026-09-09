@@ -74,6 +74,10 @@ public class Broadcast {
     @Column(name = "UNSENDABLE_USER_IDS", columnDefinition = "TEXT")
     private String unsendableUserIds;
 
+    /** True when this broadcast was created by DiffScheduleService.executeMessage(), not by an admin directly. */
+    @Column(name = "DIFF_ORIGIN", nullable = false)
+    private boolean diffOrigin;
+
     @Column(name = "CREATED_AT", nullable = false)
     private LocalDateTime createdAt;
 
@@ -119,6 +123,8 @@ public class Broadcast {
     public void setScheduledAt(LocalDateTime scheduledAt) { this.scheduledAt = scheduledAt; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public boolean isDiffOrigin() { return diffOrigin; }
+    public void setDiffOrigin(boolean diffOrigin) { this.diffOrigin = diffOrigin; }
     public Integer getRatePerMinute() { return ratePerMinute; }
     public void setRatePerMinute(Integer ratePerMinute) { this.ratePerMinute = ratePerMinute; }
     public Integer getTotalCount() { return totalCount; }

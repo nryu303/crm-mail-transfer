@@ -180,6 +180,8 @@ CREATE TABLE IF NOT EXISTS BROADCAST (
     COMMENT 'users in filter who were skipped at queue time because CRM_USER.ADDRESS_INVALID_REASON was set (RFC-invalid local-part, etc.)',
   UNSENDABLE_USER_IDS TEXT      DEFAULT NULL
     COMMENT 'comma-separated CRM_USER.ID list of skipped users; surfaced on the broadcast progress page エラー詳細',
+  DIFF_ORIGIN     TINYINT(1)    NOT NULL DEFAULT 0
+    COMMENT '差分スケジュールから実行された一斉送信かどうか',
   CREATED_AT      DATETIME      NOT NULL,
   UPDATED_AT      DATETIME      NOT NULL,
   KEY IDX_BROADCAST_STATUS_SCHED (STATUS, SCHEDULED_AT)

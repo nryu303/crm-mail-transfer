@@ -21,11 +21,6 @@
             display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
             overflow:hidden; line-height:1.35; font-size:.78rem; color:#475569; white-space:pre-wrap;
         }
-        .diff-tbl-body { max-width:260px; }
-        .diff-tbl-body .diff-tbl-body-text {
-            display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
-            overflow:hidden; line-height:1.35; font-size:.78rem; color:#475569; white-space:pre-wrap;
-        }
         .list-page-footer {
             flex-shrink:0; background:#fff; border-top:1px solid #e2e8f0;
             padding:9px 20px; display:flex; align-items:center; justify-content:flex-end; gap:12px;
@@ -46,75 +41,11 @@
     <div class="flex items-center mb-4 flex-wrap gap-2">
         <h1 class="text-2xl font-semibold text-slate-800 flex-1"
             th:text="${channel == 'SMS'} ? 'SMS配信履歴' : '一斉送信/返信履歴'">一斉送信/返信履歴</h1>
-        <select id="bcastViewSelect" class="tw-input" style="width:auto;"
-                onchange="location.href = this.value === 'diff' ? '/manager/messages/broadcast?view=diff' : '/manager/messages/broadcast';">
-            <option value="broadcast" th:selected="${view != 'diff'}">一斉送信/返信履歴</option>
-            <option value="diff" th:selected="${view == 'diff'}">差分予約</option>
-        </select>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
            th:href="@{/manager/messages}">← 個別メッセージ管理へ</a>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
            th:href="@{/manager/messages/broadcast/summary}">一斉送信サマリー</a>
     </div>
-
-    <!-- ===== 差分予約 view ===== -->
-    <div th:if="${view == 'diff'}">
-        <form id="diffResvDeleteForm" method="post" th:action="@{/manager/messages/broadcast/diff-delete}">
-            <input type="hidden" name="_csrf" th:value="${_csrf}"/>
-        </form>
-        <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto">
-            <table th:replace="~{fragment/diff-step-table :: table(${diffReservations}, ${diffSchedulesById}, ${diffUserInfoById}, ${diffIndexOffset}, 'diffResvDeleteForm')}"></table>
-        </div>
-
-        <nav class="mt-4" th:if="${diffTotalPages != null and diffTotalPages > 1}">
-            <ul class="flex items-center gap-1 text-sm">
-                <li>
-                    <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
-                       th:classappend="${diffPage == 0} ? 'opacity-50 pointer-events-none'"
-                       th:href="@{/manager/messages/broadcast(view='diff',page=${diffPage - 1})}">前へ</a>
-                </li>
-                <li th:each="i : ${#numbers.sequence(0, diffTotalPages - 1)}">
-                    <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
-                       th:classappend="${i == diffPage} ? 'bg-blue-600 text-white border-blue-600'"
-                       th:href="@{/manager/messages/broadcast(view='diff',page=${i})}" th:text="${i + 1}"></a>
-                </li>
-                <li>
-                    <a class="px-3 py-1 border border-slate-300 rounded hover:bg-slate-50"
-                       th:classappend="${diffPage >= diffTotalPages - 1} ? 'opacity-50 pointer-events-none'"
-                       th:href="@{/manager/messages/broadcast(view='diff',page=${diffPage + 1})}">次へ</a>
-                </li>
-            </ul>
-        </nav>
-
-        <div class="flex items-center justify-between mt-3" th:if="${diffReservations != null and !diffReservations.empty}">
-            <p class="text-xs text-slate-500">全<span th:text="${diffTotalElements}">0</span>件</p>
-            <button type="submit" form="diffResvDeleteForm" id="diffResvDeleteBtn" disabled
-                    class="px-4 py-2 text-sm font-bold rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
-                    onclick="return confirm('選択した差分予約を削除します。よろしいですか?');">選択削除</button>
-        </div>
-
-        <script>
-            (function () {
-                var checkAll = document.querySelector('.diff-tbl-check-all');
-                var items = document.querySelectorAll('.diff-tbl-row-item');
-                var deleteBtn = document.getElementById('diffResvDeleteBtn');
-                function refresh() {
-                    var n = 0;
-                    items.forEach(function (c) { if (c.checked) n++; });
-                    if (deleteBtn) deleteBtn.disabled = (n === 0);
-                }
-                if (checkAll) checkAll.addEventListener('change', function () {
-                    items.forEach(function (c) { c.checked = checkAll.checked; });
-                    refresh();
-                });
-                items.forEach(function (c) { c.addEventListener('change', refresh); });
-                refresh();
-            })();
-        </script>
-    </div>
-
-    <!-- ===== 一斉送信/返信履歴 view (default) ===== -->
-    <div th:if="${view != 'diff'}">
 
     <!-- Address search bar -->
     <form method="get" th:action="@{/manager/messages/broadcast}" class="bg-white rounded-lg shadow-sm border border-slate-100 p-3 mb-4">
@@ -162,10 +93,13 @@
                 <td class="px-3 py-2"><input type="checkbox" class="bcast-msg-row-item" name="ids" th:value="${m.id}"/></td>
                 <td class="px-3 py-2"><code class="text-xs text-slate-600" th:text="${messages.number * messages.size + it.count}"></code></td>
                 <td class="px-3 py-2">
-                    <span th:if="${m.direction == 'OUT' and m.channel == 'SMS'}"
+                    <span th:if="${m.direction == 'OUT' and m.broadcastId != null and diffOriginByBroadcastId != null and diffOriginByBroadcastId.get(m.broadcastId) == true}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700"
+                          title="差分スケジュールから実行された送信">差分予約</span>
+                    <span th:if="${m.direction == 'OUT' and m.channel == 'SMS' and !(m.broadcastId != null and diffOriginByBroadcastId != null and diffOriginByBroadcastId.get(m.broadcastId) == true)}"
                           class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800"
                           title="SMS配信">SMS配信</span>
-                    <span th:if="${m.direction == 'OUT' and m.channel != 'SMS'}"
+                    <span th:if="${m.direction == 'OUT' and m.channel != 'SMS' and !(m.broadcastId != null and diffOriginByBroadcastId != null and diffOriginByBroadcastId.get(m.broadcastId) == true)}"
                           class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700"
                           title="管理者送信">一斉送信</span>
                     <span th:if="${m.direction == 'IN' and m.channel == 'WEB_REPLY'}"
@@ -288,7 +222,6 @@
     };
 })();
 </script>
-    </div>
 </section>
 </body>
 </html>

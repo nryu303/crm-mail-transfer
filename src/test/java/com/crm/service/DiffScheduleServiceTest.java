@@ -8,6 +8,7 @@ import com.crm.entity.DiffDefinition;
 import com.crm.entity.DiffSchedule;
 import com.crm.entity.DiffScheduleStep;
 import com.crm.entity.DiffStep;
+import com.crm.repository.BroadcastRepository;
 import com.crm.repository.CrmUserRepository;
 import com.crm.repository.DiffDefinitionRepository;
 import com.crm.repository.DiffScheduleRepository;
@@ -41,6 +42,7 @@ class DiffScheduleServiceTest {
     private CrmUserService crmUserService;
     private CrmUserRepository userRepository;
     private BroadcastService broadcastService;
+    private BroadcastRepository broadcastRepository;
     private AuditLogService auditLog;
     private DiffScheduleService svc;
 
@@ -53,9 +55,11 @@ class DiffScheduleServiceTest {
         crmUserService = mock(CrmUserService.class);
         userRepository = mock(CrmUserRepository.class);
         broadcastService = mock(BroadcastService.class);
+        broadcastRepository = mock(BroadcastRepository.class);
         auditLog = mock(AuditLogService.class);
         svc = new DiffScheduleService(scheduleRepo, scheduleStepRepo, definitionRepo, stepRepo,
-                crmUserService, userRepository, broadcastService, auditLog);
+                crmUserService, userRepository, broadcastService, broadcastRepository, auditLog);
+        when(broadcastRepository.save(any(Broadcast.class))).thenAnswer(inv -> inv.getArgument(0));
         when(scheduleRepo.save(any(DiffSchedule.class))).thenAnswer(inv -> {
             DiffSchedule s = inv.getArgument(0);
             if (s.getId() == null) s.setId(1L);

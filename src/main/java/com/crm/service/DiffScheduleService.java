@@ -7,6 +7,7 @@ import com.crm.entity.DiffDefinition;
 import com.crm.entity.DiffSchedule;
 import com.crm.entity.DiffScheduleStep;
 import com.crm.entity.DiffStep;
+import com.crm.repository.BroadcastRepository;
 import com.crm.repository.CrmUserRepository;
 import com.crm.repository.DiffDefinitionRepository;
 import com.crm.repository.DiffScheduleRepository;
@@ -44,6 +45,7 @@ public class DiffScheduleService {
     private final CrmUserService crmUserService;
     private final CrmUserRepository userRepository;
     private final BroadcastService broadcastService;
+    private final BroadcastRepository broadcastRepository;
     private final AuditLogService auditLog;
 
     public DiffScheduleService(DiffScheduleRepository scheduleRepository,
@@ -53,6 +55,7 @@ public class DiffScheduleService {
                                 CrmUserService crmUserService,
                                 CrmUserRepository userRepository,
                                 BroadcastService broadcastService,
+                                BroadcastRepository broadcastRepository,
                                 AuditLogService auditLog) {
         this.scheduleRepository = scheduleRepository;
         this.scheduleStepRepository = scheduleStepRepository;
@@ -61,6 +64,7 @@ public class DiffScheduleService {
         this.crmUserService = crmUserService;
         this.userRepository = userRepository;
         this.broadcastService = broadcastService;
+        this.broadcastRepository = broadcastRepository;
         this.auditLog = auditLog;
     }
 
@@ -153,16 +157,6 @@ public class DiffScheduleService {
         return scheduleStepRepository.findAllPending();
     }
 
-    /** Pending MESSAGE-type steps only (excludes HTML_SWITCH, which sends nothing) — powers
-     *  the 一斉送信/返信履歴 page's 差分予約 view (2026-09-09 operator request). */
-    public List<DiffScheduleStep> listPendingMessageSteps() {
-        List<DiffScheduleStep> out = new ArrayList<>();
-        for (DiffScheduleStep s : scheduleStepRepository.findAllPending()) {
-            if (DiffStep.STEP_MESSAGE.equals(s.getStepType())) out.add(s);
-        }
-        return out;
-    }
-
     public java.util.Optional<DiffSchedule> findScheduleById(Long id) {
         return scheduleRepository.findById(id);
     }
@@ -197,7 +191,7 @@ public class DiffScheduleService {
             if (!parseIds(s.getTargetUserIds()).contains(userId)) continue;
             out.addAll(scheduleStepRepository.findByDiffScheduleIdOrderByStepOrderAsc(s.getId()));
         }
-        out.sort((a, b) -> b.getScheduledFor().compareTo(a.getScheduledFor()));
+        out.sort((a, b) -> b.getId().compareTo(a.getId()));
         return out;
     }
 
@@ -360,6 +354,8 @@ public class DiffScheduleService {
             com.crm.entity.Broadcast b = DiffStep.CHANNEL_SMS.equals(step.getChannel())
                     ? broadcastService.createAndQueueSms(form, schedule.getSetByAdminId())
                     : broadcastService.createAndQueue(form, schedule.getSetByAdminId());
+            b.setDiffOrigin(true);
+            broadcastRepository.save(b);
             step.setStatus(DiffScheduleStep.STATUS_EXECUTED);
             step.setExecutedAt(LocalDateTime.now());
             step.setResultDetail("メッセージ送信 channel=" + step.getChannel()

@@ -70,6 +70,10 @@ public class BroadcastService {
         return broadcastRepository.findById(id);
     }
 
+    public List<Broadcast> findAllByIds(java.util.Collection<Long> ids) {
+        return broadcastRepository.findAllById(ids);
+    }
+
     /**
      * Create a broadcast and pre-materialise per-user MESSAGE rows with staggered SCHEDULED_AT
      * so the existing scheduler naturally throttles by rate-per-minute.
