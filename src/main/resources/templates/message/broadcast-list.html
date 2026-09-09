@@ -3,7 +3,7 @@
       xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout/default}">
 <head>
-    <title>一斉送信返信履歴</title>
+    <title>一斉送信/返信履歴</title>
     <style>
         .search-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
         .search-bar input[type="text"] {
@@ -40,7 +40,7 @@
 <section layout:fragment="content">
     <div class="flex items-center mb-4 flex-wrap gap-2">
         <h1 class="text-2xl font-semibold text-slate-800 flex-1"
-            th:text="${channel == 'SMS'} ? 'SMS配信履歴' : '一斉送信返信履歴'">一斉送信返信履歴</h1>
+            th:text="${channel == 'SMS'} ? 'SMS配信履歴' : '一斉送信/返信履歴'">一斉送信/返信履歴</h1>
         <select id="bcastViewSelect" class="tw-input" style="width:auto;"
                 onchange="location.href = this.value === 'diff' ? '/manager/messages/broadcast?view=diff' : '/manager/messages/broadcast';">
             <option value="broadcast" th:selected="${view != 'diff'}">一斉送信/返信履歴</option>

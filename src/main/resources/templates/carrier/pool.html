@@ -3,7 +3,7 @@
       xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
       layout:decorate="~{layout/default}">
 <head>
-    <title>キャリア登録割り当て</title>
+    <title>キャリア登録設定</title>
     <style>
         .list-page-footer {
             flex-shrink:0; background:#fff; border-top:1px solid #e2e8f0;
@@ -23,7 +23,7 @@
 <body>
 <section layout:fragment="content">
     <div class="flex items-center mb-4">
-        <h1 class="text-2xl font-semibold text-slate-800 flex-1">キャリア登録割り当て</h1>
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1">キャリア登録設定</h1>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2" th:href="@{/manager/carrier-pool/import}">CSVインポート</a>
         <a class="inline-flex items-center px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm" th:href="@{/manager/carrier-pool/new}">新規追加</a>
     </div>
