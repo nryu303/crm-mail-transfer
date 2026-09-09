@@ -981,6 +981,7 @@ public class SettingController {
         model.addAttribute("folders", folderSettingService.listFolders());
         model.addAttribute("slotCount", com.crm.service.ReplyHtmlSlotService.SLOT_COUNT);
         model.addAttribute("slotTitles", replyHtmlSlotService.listSlotTitles());
+        model.addAttribute("circledNumbers", com.crm.service.ReplyHtmlSlotService.CIRCLED_NUMBERS);
         model.addAttribute("selectedFolder", folder == null ? "" : folder);
         // Optional bootstrap: copy all slot HTMLs from an existing user (so the operator can
         // start from "the current state of user X" rather than from scratch).

@@ -49,6 +49,7 @@ public class AuditLogService {
     public static final String ACTION_DIFF_SCHEDULE_CREATE = "DIFF_SCHEDULE_CREATE";
     public static final String ACTION_DIFF_SCHEDULE_CANCEL = "DIFF_SCHEDULE_CANCEL";
     public static final String ACTION_DIFF_SCHEDULE_EXECUTE = "DIFF_SCHEDULE_EXECUTE";
+    public static final String ACTION_DIFF_SCHEDULE_DELETE = "DIFF_SCHEDULE_DELETE";
 
     private final AuditLogRepository repository;
 

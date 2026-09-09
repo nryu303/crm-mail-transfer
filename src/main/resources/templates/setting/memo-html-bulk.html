@@ -6,18 +6,23 @@
     <title>専用返信画面HTML 一括編集</title>
     <style>
         .slot-tab {
-            padding: 8px 12px;
+            padding: 6px 10px;
             border-right: 1px solid #e2e8f0;
             background: #f8fafc;
             cursor: pointer;
             display: flex;
-            align-items: center;
-            gap: 6px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 1px;
             min-width: 0;
             flex: 1 1 0;
             font-size: 0.78rem;
             border-bottom: 2px solid transparent;
         }
+        .slot-tab .slot-tab-top { display: flex; align-items: center; gap: 4px; }
+        .slot-tab .slot-tab-num { font-weight: 700; }
+        .slot-tab .slot-char-count { margin-left: auto; font-size: .66rem; color: #94a3b8; }
+        .slot-tab .slot-char-count.over-limit { color: #dc2626; font-weight: 600; }
         .slot-tab.active {
             background: #fff;
             color: #1d4ed8;
@@ -92,12 +97,15 @@
                      class="slot-tab"
                      th:classappend="${activeSlot == i ? 'active' : ''}"
                      th:attr="data-slot=${i}">
-                    <input type="radio" name="activeSlot" th:value="${i}"
-                           th:checked="${activeSlot == i}"
-                           title="このスロットを使用中にする"/>
-                    <span class="text-slate-400" th:text="${i}">1</span>
+                    <span class="slot-tab-top">
+                        <input type="radio" name="activeSlot" th:value="${i}"
+                               th:checked="${activeSlot == i}"
+                               title="このスロットを使用中にする"/>
+                        <span class="slot-tab-num" th:text="${circledNumbers.get(i - 1)}">①</span>
+                        <span class="slot-char-count" th:attr="data-for='html' + ${i}">0 文字</span>
+                    </span>
                     <!-- Inline editable title — saved via the "スロット名を保存" form below -->
-                    <span class="title-inline-wrap" th:text="${slotTitles[i - 1]}">タイトル</span>
+                    <span class="title-inline-wrap text-slate-500" style="font-size:.7rem;" th:text="${slotTitles[i - 1]}">タイトル</span>
                 </div>
             </div>
             <textarea th:each="i : ${#numbers.sequence(1, slotCount)}"
@@ -140,6 +148,23 @@
     // The radio itself also triggers a switch when changed.
     (function () {
         var tabs = document.querySelectorAll('#slotTabs .slot-tab');
+        var MAX_CHARS = 20000;
+        function refreshCounts() {
+            for (var i = 1; i <= tabs.length; i++) {
+                var ta = document.getElementById('html' + i);
+                var lbl = document.querySelector('.slot-char-count[data-for="html' + i + '"]');
+                if (!ta || !lbl) continue;
+                var n = (ta.value || '').length;
+                lbl.textContent = n.toLocaleString() + ' 文字';
+                lbl.classList.toggle('over-limit', n > MAX_CHARS);
+                lbl.title = n > MAX_CHARS ? MAX_CHARS.toLocaleString() + '文字を超えています' : '';
+            }
+        }
+        for (var i = 1; i <= tabs.length; i++) {
+            var ta = document.getElementById('html' + i);
+            if (ta) ta.addEventListener('input', refreshCounts);
+        }
+        refreshCounts();
         function show(slot) {
             tabs.forEach(function (t) {
                 t.classList.toggle('active', String(t.getAttribute('data-slot')) === String(slot));

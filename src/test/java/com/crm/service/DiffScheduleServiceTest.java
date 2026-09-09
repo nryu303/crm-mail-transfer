@@ -414,4 +414,59 @@ class DiffScheduleServiceTest {
         u.setId(id);
         return u;
     }
+
+    // ---- listStepsForUser / delete (user-detail page) ----
+
+    @Test
+    void listStepsForUser_excludesSubstringFalseMatch() {
+        // id 5 must not match a schedule whose CSV is "51,52" (LIKE-only would false-hit this).
+        DiffSchedule falseMatch = new DiffSchedule();
+        falseMatch.setId(100L);
+        falseMatch.setTargetUserIds("51,52");
+        DiffSchedule realMatch = new DiffSchedule();
+        realMatch.setId(101L);
+        realMatch.setTargetUserIds("3,5,9");
+        when(scheduleRepo.findByTargetUserIdsContaining("5")).thenReturn(Arrays.asList(falseMatch, realMatch));
+
+        DiffScheduleStep step = new DiffScheduleStep();
+        step.setId(1L);
+        step.setDiffScheduleId(101L);
+        step.setScheduledFor(LocalDateTime.now());
+        when(scheduleStepRepo.findByDiffScheduleIdOrderByStepOrderAsc(101L)).thenReturn(Arrays.asList(step));
+
+        List<DiffScheduleStep> result = svc.listStepsForUser(5L);
+
+        assertThat(result).containsExactly(step);
+        verify(scheduleStepRepo, never()).findByDiffScheduleIdOrderByStepOrderAsc(100L);
+    }
+
+    @Test
+    void deleteStep_removesEmptyParentSchedule() {
+        DiffScheduleStep step = new DiffScheduleStep();
+        step.setId(1L);
+        step.setDiffScheduleId(50L);
+        when(scheduleStepRepo.findById(1L)).thenReturn(Optional.of(step));
+        when(scheduleStepRepo.findByDiffScheduleIdOrderByStepOrderAsc(50L)).thenReturn(Collections.emptyList());
+
+        boolean ok = svc.deleteStep(1L, "admin");
+
+        assertThat(ok).isTrue();
+        verify(scheduleStepRepo).deleteById(1L);
+        verify(scheduleRepo).deleteById(50L);
+    }
+
+    @Test
+    void deleteStep_keepsParentScheduleWhenStepsRemain() {
+        DiffScheduleStep step = new DiffScheduleStep();
+        step.setId(1L);
+        step.setDiffScheduleId(50L);
+        DiffScheduleStep remaining = new DiffScheduleStep();
+        remaining.setId(2L);
+        when(scheduleStepRepo.findById(1L)).thenReturn(Optional.of(step));
+        when(scheduleStepRepo.findByDiffScheduleIdOrderByStepOrderAsc(50L)).thenReturn(Arrays.asList(remaining));
+
+        svc.deleteStep(1L, "admin");
+
+        verify(scheduleRepo, never()).deleteById(any());
+    }
 }

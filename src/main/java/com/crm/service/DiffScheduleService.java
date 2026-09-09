@@ -161,6 +161,58 @@ public class DiffScheduleService {
         return scheduleStepRepository.search(status, targetType, definitionId, pageable);
     }
 
+    /** Every DiffScheduleStep (pending + history) whose parent schedule targeted this user —
+     *  powers the user-detail page's 差分スケジュール確認/削除 view. The repository LIKE is only
+     *  a coarse candidate filter (a substring match can false-hit, e.g. id 5 against "51,52"),
+     *  so each candidate's CSV is re-checked for exact membership before its steps are included. */
+    public List<DiffScheduleStep> listStepsForUser(Long userId) {
+        List<DiffSchedule> candidates = scheduleRepository.findByTargetUserIdsContaining(String.valueOf(userId));
+        List<DiffScheduleStep> out = new ArrayList<>();
+        for (DiffSchedule s : candidates) {
+            if (!parseIds(s.getTargetUserIds()).contains(userId)) continue;
+            out.addAll(scheduleStepRepository.findByDiffScheduleIdOrderByStepOrderAsc(s.getId()));
+        }
+        out.sort((a, b) -> b.getScheduledFor().compareTo(a.getScheduledFor()));
+        return out;
+    }
+
+    /** Hard-deletes one step. Note: since a schedule's target list is shared across every
+     *  user it was set for, this removes the record for ALL of that schedule's targets, not
+     *  just the one being viewed — callers must make that clear to the operator before calling
+     *  this. If the parent schedule ends up with no steps left, it is deleted too so it doesn't
+     *  linger as an empty shell. */
+    @Transactional
+    public boolean deleteStep(Long stepId, String deletedByAdminName) {
+        DiffScheduleStep step = scheduleStepRepository.findById(stepId).orElse(null);
+        if (step == null) return false;
+        Long scheduleId = step.getDiffScheduleId();
+        scheduleStepRepository.deleteById(stepId);
+        auditLog.record(AuditLogService.ACTION_DIFF_SCHEDULE_DELETE, "DiffScheduleStep", stepId,
+                "deleted by " + deletedByAdminName);
+        if (scheduleStepRepository.findByDiffScheduleIdOrderByStepOrderAsc(scheduleId).isEmpty()) {
+            scheduleRepository.deleteById(scheduleId);
+        }
+        return true;
+    }
+
+    @Transactional
+    public int deleteSteps(List<Long> stepIds, String deletedByAdminName) {
+        int n = 0;
+        for (Long id : stepIds) {
+            if (deleteStep(id, deletedByAdminName)) n++;
+        }
+        return n;
+    }
+
+    /** Delete every step (pending + history) associated with this user in one action —
+     *  backs the user-detail page's 全件削除 button. */
+    @Transactional
+    public int deleteAllStepsForUser(Long userId, String deletedByAdminName) {
+        List<Long> ids = new ArrayList<>();
+        for (DiffScheduleStep s : listStepsForUser(userId)) ids.add(s.getId());
+        return deleteSteps(ids, deletedByAdminName);
+    }
+
     /** Cancel a single pending step. Re-fetches immediately before mutating so a step that
      *  fired between the pending-list render and this click is correctly left alone. */
     @Transactional

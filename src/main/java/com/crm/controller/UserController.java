@@ -54,6 +54,7 @@ public class UserController {
     private final com.crm.service.ReplyHtmlSlotService replyHtmlSlotService;
     private final com.crm.service.ReplyAttachmentService attachmentService;
     private final com.crm.service.MessageBoxService messageBoxService;
+    private final com.crm.service.DiffScheduleService diffScheduleService;
 
     public UserController(CrmUserService service,
                           CarrierBindingService bindingService,
@@ -69,7 +70,8 @@ public class UserController {
                           com.crm.service.AuditLogService auditLog,
                           com.crm.service.ReplyHtmlSlotService replyHtmlSlotService,
                           com.crm.service.ReplyAttachmentService attachmentService,
-                          com.crm.service.MessageBoxService messageBoxService) {
+                          com.crm.service.MessageBoxService messageBoxService,
+                          com.crm.service.DiffScheduleService diffScheduleService) {
         this.service = service;
         this.bindingService = bindingService;
         this.placeholderService = placeholderService;
@@ -85,6 +87,7 @@ public class UserController {
         this.replyHtmlSlotService = replyHtmlSlotService;
         this.attachmentService = attachmentService;
         this.messageBoxService = messageBoxService;
+        this.diffScheduleService = diffScheduleService;
     }
 
     /** Active ad-code choices for autocomplete on the user-detail form. */
@@ -557,6 +560,7 @@ public class UserController {
             attachmentsBySlot.add(attachmentService.listForUserSlot(id, s));
         }
         model.addAttribute("attachmentsBySlot", attachmentsBySlot);
+        model.addAttribute("circledNumbers", com.crm.service.ReplyHtmlSlotService.CIRCLED_NUMBERS);
         return "user/detail";
     }
 
@@ -636,6 +640,47 @@ public class UserController {
                 "ALL", n + " 件全件削除 (user=" + id + ")");
         ra.addFlashAttribute("flashSuccess", n + " 件全件削除しました");
         return "redirect:/manager/users/" + id + "/message-box";
+    }
+
+    /** This user's 差分スケジュール — pending + history, with select/all delete. Note that a
+     *  schedule can target multiple users at once, so deleting a row here removes it for every
+     *  target it was originally set for, not just this user (the confirm dialogs on the page
+     *  say so explicitly). */
+    @GetMapping("/{id}/diff-schedules")
+    public String diffSchedules(@PathVariable Long id, Model model, RedirectAttributes ra) {
+        Optional<CrmUser> user = service.findById(id);
+        if (!user.isPresent()) {
+            ra.addFlashAttribute("flashError", "ユーザーが見つかりません");
+            return "redirect:/manager/users";
+        }
+        model.addAttribute("user", user.get());
+        List<com.crm.entity.DiffScheduleStep> steps = diffScheduleService.listStepsForUser(id);
+        model.addAttribute("steps", steps);
+        java.util.Map<Long, com.crm.entity.DiffSchedule> schedulesById = new java.util.HashMap<>();
+        for (com.crm.entity.DiffScheduleStep s : steps) {
+            schedulesById.computeIfAbsent(s.getDiffScheduleId(),
+                    sid -> diffScheduleService.findScheduleById(sid).orElse(null));
+        }
+        model.addAttribute("schedulesById", schedulesById);
+        return "user/diff-schedules";
+    }
+
+    @PostMapping("/{id}/diff-schedules/delete")
+    public String diffSchedulesDelete(@PathVariable Long id,
+                                       @RequestParam(name = "ids", required = false) List<Long> ids,
+                                       HttpSession session, RedirectAttributes ra) {
+        String adminName = (String) session.getAttribute(com.crm.interceptor.AuthInterceptor.SESSION_ADMIN_NAME);
+        int n = (ids == null || ids.isEmpty()) ? 0 : diffScheduleService.deleteSteps(ids, adminName);
+        ra.addFlashAttribute("flashSuccess", n + " 件削除しました");
+        return "redirect:/manager/users/" + id + "/diff-schedules";
+    }
+
+    @PostMapping("/{id}/diff-schedules/delete-all")
+    public String diffSchedulesDeleteAll(@PathVariable Long id, HttpSession session, RedirectAttributes ra) {
+        String adminName = (String) session.getAttribute(com.crm.interceptor.AuthInterceptor.SESSION_ADMIN_NAME);
+        int n = diffScheduleService.deleteAllStepsForUser(id, adminName);
+        ra.addFlashAttribute("flashSuccess", n + " 件全件削除しました");
+        return "redirect:/manager/users/" + id + "/diff-schedules";
     }
 
     private static final List<String> PAYMENT_METHODS = Arrays.asList(

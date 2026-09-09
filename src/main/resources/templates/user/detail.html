@@ -10,11 +10,13 @@
 
     <div class="flex items-center mb-4">
         <h1 class="text-2xl font-semibold text-slate-800 flex-1">ユーザー詳細</h1>
-        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md mr-2" th:href="@{/manager/users}">一覧に戻る</a>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-violet-500 text-violet-600 hover:bg-violet-50 rounded-md mr-2"
+           th:href="@{'/manager/users/' + ${user.id} + '/diff-schedules'}" target="_blank">差分スケジュール確認/削除</a>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-blue-500 text-blue-600 hover:bg-blue-50 rounded-md"
            th:href="@{'/manager/users/' + ${user.id} + '/thread'}" target="_blank">メッセージスレッド</a>
         <a class="inline-flex items-center px-3 py-1.5 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 rounded-md ml-2"
            th:href="@{'/manager/users/' + ${user.id} + '/message-box'}" target="_blank">メッセージボックス</a>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md ml-2" th:href="@{/manager/users}">一覧に戻る</a>
     </div>
 
     <div th:if="${issuedCredentials}" class="mb-4 rounded-md border border-amber-300 bg-amber-50 overflow-hidden">
@@ -114,13 +116,16 @@
                     <!-- 5x2 grid: slots 1-5 on row 1, slots 6-10 on row 2. -->
                     <div class="memo-tab-grid" style="display:grid; grid-template-columns:repeat(5, 1fr); border-bottom:1px solid #e2e8f0; background:#f8fafc;">
                         <button type="button" th:each="i : ${#numbers.sequence(1, 10)}"
-                                class="memo-tab px-2 py-2 text-left flex items-center gap-1 border-r border-b border-slate-200 text-xs"
-                                style="min-width:0;"
+                                class="memo-tab px-2 py-1.5 text-left border-r border-b border-slate-200 text-xs"
+                                style="min-width:0; display:flex; flex-direction:column; align-items:stretch; gap:1px;"
                                 th:attr="data-slot=${i}">
-                            <input type="radio" name="activeMemoSlot" th:value="${i}"
-                                   th:checked="${form.activeMemoSlot == i}" title="このスロットを使用中にする"/>
-                            <span class="text-slate-700 truncate" th:text="${memoSlotTitles[i - 1]}">タイトル</span>
-                            <span class="ml-auto text-slate-400 memo-char" style="font-size:.68rem;" th:attr="data-for='memo' + ${i}">0</span>
+                            <span class="flex items-center gap-1">
+                                <input type="radio" name="activeMemoSlot" th:value="${i}"
+                                       th:checked="${form.activeMemoSlot == i}" title="このスロットを使用中にする"/>
+                                <span class="font-bold text-slate-700" th:text="${circledNumbers.get(i - 1)}">①</span>
+                                <span class="ml-auto text-slate-400 memo-char" style="font-size:.68rem;" th:attr="data-for='memo' + ${i}">0</span>
+                            </span>
+                            <span class="text-slate-500 truncate" style="font-size:.7rem; padding-left:18px;" th:text="${memoSlotTitles[i - 1]}">タイトル</span>
                         </button>
                     </div>
                     <textarea class="tw-input font-mono memo-pane border-0 rounded-none" id="memo1" name="memo"
@@ -302,13 +307,22 @@
             </div>
             <script>
                 (function(){
-                    var panes = ['memo1','memo2','memo3','memo4','memo5','memo6'];
-                    var nameFor = { 'memo1':'memo','memo2':'memo2','memo3':'memo3','memo4':'memo4','memo5':'memo5','memo6':'memo6' };
+                    // 2026-09-09 fix: this list previously stopped at memo6, so slots 7-10
+                    // (added 2026-09-02) never got a live character count and clicking their
+                    // tab did nothing — none of the 6 known panes matched, so no pane ever
+                    // showed for those tabs.
+                    var panes = ['memo1','memo2','memo3','memo4','memo5','memo6','memo7','memo8','memo9','memo10'];
+                    var MAX_CHARS = 20000;
                     function refreshCounts() {
                         panes.forEach(function (p) {
                             var ta = document.getElementById(p);
                             var lbl = document.querySelector('.memo-char[data-for="' + p + '"]');
-                            if (ta && lbl) lbl.textContent = (ta.value || '').length.toLocaleString() + ' 文字';
+                            if (!ta || !lbl) return;
+                            var n = (ta.value || '').length;
+                            lbl.textContent = n.toLocaleString() + ' 文字';
+                            lbl.classList.toggle('text-rose-600', n > MAX_CHARS);
+                            lbl.classList.toggle('text-slate-400', n <= MAX_CHARS);
+                            lbl.title = n > MAX_CHARS ? MAX_CHARS.toLocaleString() + '文字を超えています' : '';
                         });
                     }
                     panes.forEach(function (p) {
@@ -344,19 +358,12 @@
             <div class="flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap">
                 <button type="submit" class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md">保存</button>
                 <a class="inline-flex items-center px-3 py-2 text-sm border border-sky-500 text-sky-700 hover:bg-sky-50 rounded-md"
-                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'}" target="_blank">プレビュー (使用中)</a>
-                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
-                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=1)}" target="_blank">①</a>
-                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
-                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=2)}" target="_blank">②</a>
-                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
-                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=3)}" target="_blank">③</a>
-                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
-                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=4)}" target="_blank">④</a>
-                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
-                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=5)}" target="_blank">⑤</a>
-                <a class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
-                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=6)}" target="_blank">⑥</a>
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'}" target="_blank">返信画面HTMLプレビュー (現在設定中)</a>
+                <a th:each="i : ${#numbers.sequence(1, 10)}"
+                   class="inline-flex items-center px-2 py-2 text-xs border border-slate-300 text-slate-600 hover:bg-slate-50 rounded-md"
+                   th:classappend="${form.activeMemoSlot == i} ? 'border-emerald-500 bg-emerald-50 text-emerald-700 font-bold'"
+                   th:href="@{'/manager/users/' + ${user.id} + '/reply-preview'(slot=${i})}" target="_blank"
+                   th:text="${circledNumbers.get(i - 1)}"></a>
                 <span class="ml-auto text-xs text-slate-500">ID: <code th:text="${user.id}"></code></span>
             </div>
         </form>

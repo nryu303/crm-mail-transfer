@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja" xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{layout/default}">
+<head>
+    <title>差分スケジュール確認/削除</title>
+</head>
+<body>
+<section layout:fragment="content">
+    <div class="flex items-center mb-4">
+        <h1 class="text-2xl font-semibold text-slate-800 flex-1"
+            th:text="${(user.displayName != null and !user.displayName.isEmpty() ? user.displayName : user.email) + ' の差分スケジュール'}"></h1>
+        <a class="inline-flex items-center px-3 py-1.5 text-sm border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-md"
+           th:href="@{'/manager/users/' + ${user.id}}">ユーザー詳細に戻る</a>
+    </div>
+
+    <div class="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4 text-xs text-amber-900 max-w-3xl">
+        ⚠ 差分スケジュールは複数のユーザーへ同時にセットされている場合があります。ここで削除すると、
+        同じスケジュールの対象になっている他のユーザーからも同じ記録が削除されます（このユーザーだけを対象から外すことはできません）。
+    </div>
+
+    <form id="diffDelForm" method="post" th:action="@{'/manager/users/' + ${user.id} + '/diff-schedules/delete'}"></form>
+    <form id="diffDelAllForm" method="post" th:action="@{'/manager/users/' + ${user.id} + '/diff-schedules/delete-all'}"></form>
+
+    <div th:if="${steps == null or steps.empty}" class="bg-white rounded-lg shadow-sm border border-slate-100 p-8 text-center text-sm text-slate-400">
+        このユーザーに関連する差分スケジュールはありません
+    </div>
+
+    <div class="bg-white rounded-lg shadow-sm border border-slate-100 overflow-x-auto" th:if="${steps != null and !steps.empty}">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
+            <tr>
+                <th class="px-3 py-2 text-left" style="width:36px;"><input type="checkbox" id="diffCheckAll" title="全選択"/></th>
+                <th class="px-3 py-2 text-left">差分名</th>
+                <th class="px-3 py-2 text-left">ステップ</th>
+                <th class="px-3 py-2 text-left">セット日時</th>
+                <th class="px-3 py-2 text-left">実行/取消日時</th>
+                <th class="px-3 py-2 text-left">結果</th>
+            </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+            <tr th:each="s : ${steps}" class="hover:bg-slate-50" th:with="sched=${schedulesById.get(s.diffScheduleId)}">
+                <td class="px-3 py-2">
+                    <input type="checkbox" class="diff-row-item" name="ids" th:value="${s.id}" form="diffDelForm"/>
+                </td>
+                <td class="px-3 py-2 text-slate-700" th:text="${sched != null ? sched.diffNameSnapshot : '-'}"></td>
+                <td class="px-3 py-2 text-xs">
+                    <span th:if="${s.stepType == 'MESSAGE'}"
+                          class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                          th:classappend="${s.channel == 'SMS'} ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-700'"
+                          th:text="'送信(' + ${s.channel} + ')'"></span>
+                    <span th:if="${s.stepType == 'HTML_SWITCH'}" th:text="'HTML切替→スロット' + ${s.memoSlotSnapshot}"></span>
+                </td>
+                <td class="px-3 py-2 text-xs text-slate-500" th:text="${sched != null ? #temporals.format(sched.setAt, 'yyyy-MM-dd HH:mm') : '-'}"></td>
+                <td class="px-3 py-2 text-xs text-slate-500"
+                    th:text="${s.executedAt != null} ? ${#temporals.format(s.executedAt, 'yyyy-MM-dd HH:mm')} : (${s.cancelledAt != null} ? ${#temporals.format(s.cancelledAt, 'yyyy-MM-dd HH:mm')} : (${s.status == 'PENDING'} ? ('予定: ' + #temporals.format(s.scheduledFor, 'yyyy-MM-dd HH:mm')) : '-'))"></td>
+                <td class="px-3 py-2">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold"
+                          th:classappend="${s.status == 'EXECUTED'} ? 'bg-emerald-100 text-emerald-700' :
+                                          (${s.status == 'PENDING'} ? 'bg-amber-100 text-amber-800' :
+                                          (${s.status == 'CANCELLED'} ? 'bg-slate-100 text-slate-700' : 'bg-red-100 text-red-700'))"
+                          th:text="${s.status == 'EXECUTED'} ? '実行済み' : (${s.status == 'PENDING'} ? '保留中' : (${s.status == 'CANCELLED'} ? '取消済み' : '失敗'))"></span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="flex items-center gap-2 mt-4" th:if="${steps != null and !steps.empty}">
+        <span class="text-xs text-slate-500 selected-count" id="diffSelectedCount">0 件選択中</span>
+        <button type="submit" form="diffDelForm" id="diffDeleteBtn" disabled
+                class="px-4 py-2 text-sm font-bold rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                onclick="return confirm('選択した差分スケジュールを削除します。他の対象ユーザーからも削除されます。よろしいですか?');">選択削除</button>
+        <button type="submit" form="diffDelAllForm"
+                class="px-4 py-2 text-sm font-bold rounded-md text-white bg-rose-800 hover:bg-rose-900"
+                onclick="return confirm('このユーザーに関連する差分スケジュールを全件削除します。他の対象ユーザーからも削除されます。よろしいですか?');">全件削除</button>
+    </div>
+
+    <script>
+        (function () {
+            var checkAll = document.getElementById('diffCheckAll');
+            var items = document.querySelectorAll('.diff-row-item');
+            var countEl = document.getElementById('diffSelectedCount');
+            var deleteBtn = document.getElementById('diffDeleteBtn');
+            function refresh() {
+                var n = 0;
+                items.forEach(function (c) { if (c.checked) n++; });
+                if (countEl) countEl.textContent = n + ' 件選択中';
+                if (deleteBtn) deleteBtn.disabled = (n === 0);
+            }
+            if (checkAll) checkAll.addEventListener('change', function () {
+                items.forEach(function (c) { c.checked = checkAll.checked; });
+                refresh();
+            });
+            items.forEach(function (c) { c.addEventListener('change', refresh); });
+            refresh();
+        })();
+    </script>
+</section>
+</body>
+</html>

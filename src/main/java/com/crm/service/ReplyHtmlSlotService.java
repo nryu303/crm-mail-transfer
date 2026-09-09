@@ -25,6 +25,10 @@ public class ReplyHtmlSlotService {
 
     public static final int SLOT_COUNT = 10;
 
+    /** ①..⑩ in slot order (index 0 = slot 1) — shared by every template that needs to label
+     *  the 10 reply-HTML slots (user detail, memo-html-bulk). */
+    public static final List<String> CIRCLED_NUMBERS = List.of("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩");
+
     private final CrmSettingRepository settingRepository;
     private final CrmUserRepository userRepository;
 
@@ -72,21 +76,12 @@ public class ReplyHtmlSlotService {
 
     /** "① 返信HTML" style label used when a slot has no operator-supplied title. */
     private static String defaultTitle(int slotNo) {
-        String circled;
-        switch (slotNo) {
-            case 1: circled = "①"; break;
-            case 2: circled = "②"; break;
-            case 3: circled = "③"; break;
-            case 4: circled = "④"; break;
-            case 5: circled = "⑤"; break;
-            case 6: circled = "⑥"; break;
-            case 7: circled = "⑦"; break;
-            case 8: circled = "⑧"; break;
-            case 9: circled = "⑨"; break;
-            case 10: circled = "⑩"; break;
-            default: circled = String.valueOf(slotNo);
-        }
-        return circled + " 返信HTML";
+        return circled(slotNo) + " 返信HTML";
+    }
+
+    /** ①..⑩ for slotNo 1..10; falls back to the plain number outside that range. */
+    public static String circled(int slotNo) {
+        return (slotNo >= 1 && slotNo <= SLOT_COUNT) ? CIRCLED_NUMBERS.get(slotNo - 1) : String.valueOf(slotNo);
     }
 
     /**
