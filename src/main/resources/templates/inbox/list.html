@@ -50,6 +50,10 @@
         </div>
     </div>
 
+    <p class="text-xs text-slate-500 mb-3">
+        ※ユーザーを選択して一斉返信を行えます。メッセージスレッドから受信したメールの返信画面へ移動します。
+    </p>
+
     <!-- Filter toggle -->
     <div class="flex items-center gap-2 mb-4 text-sm">
         <a th:href="@{/manager/inbox}"
@@ -119,7 +123,7 @@
                 <td class="px-4 py-2 text-right">
                     <a class="inline-flex items-center px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
                        th:href="@{'/manager/users/' + ${r.userId} + '/thread'}" target="_blank">
-                        返信
+                        メッセージスレッド
                     </a>
                 </td>
             </tr>

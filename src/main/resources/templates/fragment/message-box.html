@@ -44,21 +44,14 @@
 
     <!-- ===== 受信履歴 (default tab): what the user received — direction=OUT ===== -->
     <div class="message-box-pane" data-mbpane="received">
-        <!-- Standalone compose — not tied to any specific past message, so it's always
-             available even when this user has never received anything yet. SMS removed
-             2026-09-09: SMS replies from users don't actually arrive, so offering to send
+        <!-- Standalone compose (admin only) — not tied to any specific past message, so it's
+             always available even when this user has never received anything yet. Public side
+             removed 2026-09-09: reply/page.html already has its own top-level compose form
+             above this fragment, so a second one here was a redundant duplicate. SMS removed
+             the same day — SMS replies from users don't actually arrive, so offering to send
              one from here was misleading. -->
-        <div class="message-box-compose">
-            <form th:if="${!isAdmin}" class="reply-form message-box-reply-form"
-                  th:action="@{'/reply/' + ${token} + '/send'}" method="post">
-                <div class="field">
-                    <textarea name="body" rows="4" placeholder="メッセージを送信..."></textarea>
-                </div>
-                <div class="actions">
-                    <button type="submit">送信</button>
-                </div>
-            </form>
-            <form th:if="${isAdmin}" class="reply-form message-box-reply-form"
+        <div class="message-box-compose" th:if="${isAdmin}">
+            <form class="reply-form message-box-reply-form"
                   th:action="@{'/manager/users/' + ${userId} + '/messages'}" method="post">
                 <input type="hidden" name="returnTo" value="message-box"/>
                 <div class="field">
